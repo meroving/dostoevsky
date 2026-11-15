@@ -1,0 +1,8 @@
+// CUT-1, CUT-7: ⌘X fades a sentence where it was; a right-click on it opens the trace's menu.
+{"action": "page::ToggleLayer"}
+{"select": "A week later you can’t remember what they were, only that one of them was better."}
+{"keys": "cmd-x"}
+{"wait": 600}
+{"click": {"text": "only that one"}, "button": "right"}
+{"wait": 400}
+{"shot": "$OUT/cut.png"}

@@ -1,0 +1,3 @@
+{"action": "page::ViewSource"}
+{"wait": 600}
+{"shot": "$OUT/source.png"}

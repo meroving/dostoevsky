@@ -1,0 +1,30 @@
+// PRD §7.7 Write a book. PROJ-1, PROJ-2, PROJ-4, PROJ-8, PROJ-13, PROJ-14: open a folder of
+// numbered chapters for the first time, confirm it's a book, flip through the chapters, add one
+// after the current chapter, read the whole book.
+{"wait": 300}
+{"shot": "$OUT/flow8-open.png"}
+{"first_open": "confirm"}
+{"wait": 200}
+{"expect": {"text_contains": "On an exceptionally hot evening"}}
+{"shot": "$OUT/flow8-a.png"}
+{"keys": "cmd-p down"}
+{"wait": 200}
+{"expect": {"text_contains": "Raskolnikov was not used to crowds"}}
+{"keys": "cmd-n"}
+{"keys": "t h e space v i s i t"}
+{"wait": 200}
+{"shot": "$OUT/flow8-b.png"}
+{"keys": "enter"}
+{"wait": 200}
+{"type": "A knock at the door."}
+{"action": "app::Save"}
+{"wait": 200}
+{"expect": {"text_contains": "A knock at the door."}}
+{"keys": "alt-cmd-u"}
+{"wait": 200}
+{"keys": "alt-cmd-u"}
+{"action": "page::FindInProject"}
+{"keys": "l a n d l a d y"}
+{"wait": 400}
+{"shot": "$OUT/flow8-c.png"}
+{"quit": true}

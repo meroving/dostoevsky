@@ -1,0 +1,20 @@
+// CUT-9, CUT-14: the whole book's cuts seen from chapter 3: a sentence cut in chapter 1 and
+// one cut without a trace in chapter 2, each under its chapter, this one first.
+{"wait": 300}
+{"first_open": "confirm"}
+{"wait": 300}
+{"select": "His garret was under the roof of a high, five-storied house and was more like a cupboard than a room."}
+{"keys": "cmd-/"}
+{"wait": 300}
+{"keys": "cmd-]"}
+{"wait": 300}
+{"select": "as we said before, "}
+{"keys": "cmd-shift-x"}
+{"wait": 300}
+{"keys": "cmd-]"}
+{"wait": 300}
+{"select": {"text": "and he had not", "at": "start"}}
+{"keys": "cmd-p"}
+{"cuts_scope": "book"}
+{"wait": 900}
+{"shot": "$OUT/project-cuts.png"}

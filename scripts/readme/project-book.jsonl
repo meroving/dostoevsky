@@ -1,0 +1,7 @@
+// A folder of numbered chapters opens as a book: the list, with word counts and the total.
+{"wait": 300}
+{"first_open": "confirm"}
+{"wait": 300}
+{"keys": "cmd-p down"}
+{"wait": 600}
+{"shot": "$OUT/project-book.png"}

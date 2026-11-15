@@ -1,0 +1,22 @@
+[workspace]
+resolver = "2"
+members = ["crates/english", "crates/prose", "crates/l10n", "crates/doc-model", "crates/doc-format", "crates/export", "crates/ai", "crates/app"]
+
+[workspace.package]
+version = "1.0.0"
+edition = "2021"
+license = "Apache-2.0"
+rust-version = "1.95"
+
+# Debug info, kept small (dev builds were ~29 GB, mostly debug info in loose .o files on macOS).
+# Line tables keep file:line in backtraces, including inside gpui; lldb can't show variables.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = "line-tables-only"
+
+# gpui-pre-macos 0.3.9 with its private AppKit selectors taken out, so Apple's binary checks
+# binary finds none (dsky-a8n.19). What changed and why: vendor/gpui-pre-macos/PATCHES.md.
+[patch.crates-io]
+gpui-pre-macos = { path = "vendor/gpui-pre-macos" }

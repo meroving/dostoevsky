@@ -1,0 +1,13 @@
+// COM: two comments in the margin, one being written; the words they're about washed.
+{"action": "page::ToggleLayer"}
+{"select": "history is the wrong shape"}
+{"keys": "alt-cmd-m"}
+{"comment": "This is the essay in five words. Open with it?"}
+{"keys": "escape"}
+{"select": "A good editor doesn’t erase your sentence."}
+{"keys": "alt-cmd-m"}
+{"comment": "Ask Anna if hers ever did."}
+{"keys": "escape"}
+{"select": {"text": "Most of the", "at": "start"}}
+{"wait": 600}
+{"shot": "$OUT/comments.png"}

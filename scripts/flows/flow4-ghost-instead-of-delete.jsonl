@@ -1,0 +1,17 @@
+// PRD §7.4 Cut instead of delete: select a sentence → ⌘/ → it fades in place → ⌘/ inside puts it back.
+{"keys": "cmd-d"}
+{"select": "A week later you can't remember what they were, only that one of them was better."}
+{"keys": "cmd-/"}
+{"expect": {"ghosts": 1}}
+{"wait": 400}
+{"shot": "$OUT/flow4-a.png"}
+{"select": {"text": "week", "at": "start"}}
+{"keys": "cmd-/"}
+{"expect": {"ghosts": 0}}
+{"wait": 400}
+{"shot": "$OUT/flow4-b.png"}
+{"select": "A week later you can't remember what they were, only that one of them was better."}
+{"keys": "cmd-/"}
+{"expect": {"ghosts": 1}}
+{"action": "app::Save"}
+{"wait": 200}

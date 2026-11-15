@@ -1,0 +1,4 @@
+# gpui-pre 0.3.9 (via gpui-kit 0.8) uses std::hint::cold_path, stable since 1.95.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]

@@ -1,0 +1,13 @@
+// PRD §7.6 Finish: ⌥⌘↩ settles a decided group → ⌘⇧C copies the final text.
+{"keys": "cmd-d"}
+{"alt": "friction", "scope": "word", "variants": ["tension"]}
+{"select": {"text": "friction", "at": "start"}}
+{"keys": "alt-cmd-down"}
+{"expect": {"text_contains": "Most of the tension in writing"}}
+{"keys": "alt-cmd-enter"}
+{"expect": {"groups": 0, "status": "Settled"}}
+{"keys": "cmd-shift-c"}
+{"expect": {"clipboard_contains": "Most of the tension in writing", "status": "Copied the final text"}}
+{"action": "app::Save"}
+{"wait": 200}
+{"shot": "$OUT/flow6.png"}

@@ -1,0 +1,4 @@
+// The Review tab: three passes and Trim, each with what it looks for; Fix mistakes chosen, with its Run.
+{"action": "page::ToggleLab"}
+{"wait": 600}
+{"shot": "$OUT/ai-menu.png"}

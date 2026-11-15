@@ -1,0 +1,6 @@
+// Review → Trim at −20% (its row, → once, ↩ runs it): the words that would go fade; the slider and the list say how much.
+{"action": "page::ToggleLab"}
+{"wait": 400}
+{"keys": "down down down right enter"}
+{"wait": 3000}
+{"shot": "$OUT/ai-trim.png"}

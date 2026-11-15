@@ -1,0 +1,13 @@
+Dostoevsky uses the following open-source software. Thank you to its authors.
+The fonts' licenses (SIL Open Font License 1.1) are in this folder as OFL-*.txt.
+{{#each licenses}}
+
+================================================================================
+{{name}}
+
+Used by:
+{{#each used_by}}  {{crate.name}} {{crate.version}}
+{{/each}}
+--------------------------------------------------------------------------------
+{{{text}}}
+{{/each}}

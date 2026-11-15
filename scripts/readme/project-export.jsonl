@@ -1,0 +1,8 @@
+{"wait": 300}
+{"first_open": "confirm"}
+{"wait": 300}
+{"keys": "cmd-shift-e"}
+{"export": {"format": "pdf", "style": "book", "whole_book": true, "paper": "a5", "title_page": false, "page": 1}}
+{"wait": 3000}
+{"shot": "$OUT/project-export.png"}
+{"quit": true}

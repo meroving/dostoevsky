@@ -1,0 +1,7 @@
+// Editing mode: a sentence picked up and held at the end of the next paragraph (ED-9). The text
+// stays faded where it was, a card follows the pointer, and a caret shows where it will land.
+{"action": "page::ToggleLayer"}
+{"select": "A week later you can’t remember what they were, only that one of them was better."}
+{"drag": {"text": "remember what"}, "to": [600, 588], "hold": true}
+{"wait": 500}
+{"shot": "$OUT/drag.png"}

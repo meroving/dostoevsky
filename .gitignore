@@ -1,0 +1,8 @@
+# Rust
+/target/
+
+# Agent worktrees
+.claude/worktrees/
+
+# The maintainers' private checkout: its own git repo
+/internal/

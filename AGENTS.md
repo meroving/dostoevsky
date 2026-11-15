@@ -1,0 +1,79 @@
+# Instructions for coding agents
+
+Context for AI coding agents (and people) working on Dostoevsky. `CLAUDE.md` is a link to this file.
+
+## Build & Test
+
+Rust is pinned by `rust-toolchain.toml` (1.99.1; gpui-pre needs ≥ 1.95).
+
+```bash
+cargo run -p dostoevsky [file.md…]           # the app
+cargo test --workspace                       # unit + behaviour + property tests (2,000 cases) + headless app tests
+cargo test -p dostoevsky ui_tests            # headless app tests only (crates/app/src/ui_tests, TECH-NOTES §8)
+PROPTEST_CASES=50000 cargo test --release -p doc-model --test properties   # soak run
+cargo clippy --all-targets -- -D warnings
+scripts/perf_check.sh                        # NFR-1 budgets (frames, open, cold start); PERF_SLACK=2 for CI
+cargo run --release -p doc-model --example bench_large                     # latency check
+cargo run --release -p doc-format --example bench_format                   # save/load at 100k words
+cargo run -p export --example sample                                   # every export format → target/export-sample
+OPENROUTER_API_KEY=… cargo run -p ai --example eval                        # real prompts against a real model (costs money)
+scripts/run_flows.sh [flow…]                 # PRD §7 flows against the real app → target/flows/*.png
+scripts/e2e_bundle.sh                        # bundled .app via LaunchServices: save, recent, folder, kill -9, FSEvents
+scripts/check_private_api.sh target/release/dostoevsky   # no private Apple API in the binary (vendor/gpui-pre-macos)
+DOSTOEVSKY_PERF=1 cargo run --release -p dostoevsky big.md                 # per-keystroke timings
+scripts/bundle.sh                            # universal Dostoevsky.app + .dmg (see docs/RELEASE.md)
+scripts/cask.sh --release vX.Y.Z > target/dostoevsky.rb   # Homebrew cask for a release .dmg (docs/RELEASE.md §5)
+cargo deny check                             # licenses, advisories, crate sources (deny.toml; CI runs it)
+scripts/shoot_readme.sh [shot…]              # README screenshots from the real app → docs/screens (AI via a local stub)
+scripts/make_icon.py [--look night|deep] [--sheet|--looks]   # the app icon (an axe) from numbers → packaging/icon.svg, .icns, About, README, favicons; LOOKS keeps the other colourings
+```
+
+Public docs: `docs/FILE-FORMAT.md`, `docs/TECH-NOTES.md`; releases: `docs/RELEASE.md`.
+The product spec and decision records are maintained separately and aren't published.
+
+## Architecture Overview
+
+- `crates/english`: word characters, word counts.
+- `crates/prose`: reading prose without a UI: the text's language (from its commonest words),
+  reading ease (one Flesch-family formula per language) for Statistics, and the one sentence
+  finder (REVIEW, ⇧⌘A's scope, the sentence keys).
+- `crates/l10n`: the UI's languages (TECH-NOTES §12): `tr!("English")`, `trn!` plurals, `trc!`
+  contexts; catalogs in `locales/<lang>.json`, checked against the source by `tests/catalogs.rs`.
+- `crates/doc-model`: the document tree (ADR-001): groups own their variants, display-offset
+  edits with string-splice semantics, snapshot undo, ghosts, Overflow notes. No UI.
+- `crates/doc-format`: FILE-FORMAT v1 parse/serialize, re-anchoring, detached groups,
+  atomic writes. No UI.
+- `crates/export`: the final text leaves the app (TECH-NOTES §13): Markdown → blocks with where
+  alternatives were, three styles and their Text settings, Markdown / plain text / HTML / Word
+  (.docx) / ePub writers, a small zip. No UI; PDF is the app's.
+- `crates/ai`: v2 AI with no UI (TECH-NOTES §11): one OpenAI-compatible Chat Completions client
+  (ureq, blocking, SSE), services and models, prompts for ideas / Lab passes / trims, anchoring
+  replies to numbered sentences, Keychain keys (`DOSTOEVSKY_SECRETS=memory` in tests), OpenRouter PKCE.
+- `crates/app` (binary `dostoevsky`, gpui-kit 0.8): `view.rs` is the custom text element
+  (`TextView` + `PageElement`) used for the page, Overflow notes and fields; `workspace.rs`
+  is the window; `sidebar.rs`, `overflow.rs` (the Drawer panel; `drawer.rs` keeps a project's drawer), `context_menu.rs`, `panel_foot.rs` (the left panel's foot: Open, Save, Finder, Settings; the Project tab with no project), `sheets.rs` (source view,
+  shortcuts, preferences, import, detached), `find.rs`, `external.rs` (FSEvents),
+  `effects.rs`, `sound.rs`, `spell.rs` (NSSpellChecker), `keymap.rs`, `memory.rs`,
+  `sentence_keys.rs` (walk, grow and move by sentence and paragraph, ED-10…12; no UI),
+  `export_ui.rs` (Copy Final Text, the Export sheet, Print), `pdf.rs` (TextKit pages into a PDF, the
+  preview's bitmaps, PDFKit printing),
+  `bookmarks.rs` (security-scoped bookmarks: the sandboxed build reopens files after a relaunch); `project.rs`
+  reads a folder from its file names and plans renames (no UI), `project_ui.rs` is a window on a
+  project (the list, parked documents; TECH-NOTES "Projects"); `welcome.rs` builds the welcome page (WIN-19) from `assets/welcome/<lang>.md`; `shots.rs` is a dev-only script runner
+  (`--features shots`, `DOSTOEVSKY_SCRIPT=steps.jsonl`) that renders windows offscreen.
+  AI in the app: `assist.rs` (keys, model lists, Connect OpenRouter, requests on their own
+  threads), `ai_prefs.rs` (Preferences → AI), `ideas.rs` (⌥⌘A, `??`), `lab.rs` (the AI button, once LAB; marks,
+  typos, trims; drawn by `view.rs` from `LabPaint`).
+  `updates.rs` is the .dmg build's opt-in update check (`--features updates`, which `scripts/bundle.sh`
+  turns on; the App Store build has none; TECH-NOTES §14).
+
+## Conventions & Patterns
+
+- Offsets in the model and the view are display `char`s; `text.rs::TextIndex` converts to
+  UTF-8 bytes (GPUI layout) and UTF-16 (macOS input).
+- Every model change goes through `DocModel` (bumps `version`; views refresh from it).
+- Every string a user sees or hears goes through `l10n::tr!`/`trn!` with a literal key (whole
+  phrases, not fragments); add the translations to every catalog in `crates/l10n/locales`.
+- In `crates/app` test modules, import items explicitly: `use super::*` brings in GPUI's
+  `test` macro and breaks `#[test]`.
+- `DOSTOEVSKY_SUPPORT_DIR` and `DOSTOEVSKY_KEYMAP` redirect app data for tests.

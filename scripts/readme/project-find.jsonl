@@ -1,0 +1,8 @@
+{"wait": 300}
+{"first_open": "confirm"}
+{"wait": 300}
+{"keys": "cmd-p"}
+{"action": "page::FindInProject"}
+{"keys": "l a n d l a d y"}
+{"wait": 800}
+{"shot": "$OUT/project-find.png"}

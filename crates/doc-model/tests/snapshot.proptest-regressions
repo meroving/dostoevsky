@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc fa8d39af25365365abbf7cfef4651ce814be71226d326f90e3716d5ce83a80bd # shrinks to session = Session { seed: " aaaa a\n..a\n\n\na\na\n.", ops: [Replace { a: 50656, b: 24801, text: "a\n\n" }, Comment { a: 1, b: 3162, text: "" }, CreateGroup { a: 0, b: 0, scope: 0 }, Replace { a: 599, b: 18511, text: "aaaaa" }, Replace { a: 2, b: 5995, text: "" }, Replace { a: 4123, b: 301, text: "" }, CreateGroup { a: 0, b: 1, scope: 0 }, Replace { a: 275, b: 15, text: "" }] }, a = 0, b = 0
+cc e0f4d603f60ef2041e1a7f203568df5a5b520b6b0d7ef70f32dd98a701848059 # shrinks to session = Session { seed: "a..a\naaa..a ", ops: [CreateGroup { a: 43413, b: 12143, scope: 0 }, Replace { a: 52948, b: 37292, text: "aaa" }, CreateGroup { a: 11989, b: 707, scope: 0 }, Cut { a: 55663, b: 20653, look: 2 }, Stash { a: 6634, b: 18794 }, Replace { a: 35042, b: 10399, text: "" }, Comment { a: 1856, b: 900, text: "x" }, Replace { a: 5669, b: 12023, text: "aaa " }, Comment { a: 39999, b: 38122, text: "" }] }, a = 0, b = 0

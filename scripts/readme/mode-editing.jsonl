@@ -1,0 +1,18 @@
+// The site's editing frame: the same page as mode-writing.png in editing mode, the Alternatives
+// panel open on “struggle”,
+// and two comments in the margin (as in comments.jsonl).
+{"action": "page::ToggleLayer"}
+{"select": "history is the wrong shape"}
+{"keys": "alt-cmd-m"}
+{"comment": "This is the essay in five words. Open with it?"}
+{"keys": "escape"}
+{"select": "A good editor doesn’t erase your sentence."}
+{"keys": "alt-cmd-m"}
+{"comment": "Ask Anna if hers ever did."}
+{"keys": "escape"}
+{"hover": {"group": 1}}
+{"keys": "down down"}
+{"select": "struggle"}
+{"action": "page::AlternativesForSelection"}
+{"wait": 700}
+{"shot": "$OUT/mode-editing.png"}

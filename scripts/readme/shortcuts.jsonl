@@ -1,0 +1,3 @@
+{"action": "page::ShowShortcuts"}
+{"wait": 600}
+{"shot": "$OUT/shortcuts.png"}

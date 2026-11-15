@@ -1,0 +1,5 @@
+{"action": "page::ToggleLayer"}
+{"hover": {"group": 4}}
+{"keys": "down"}
+{"wait": 600}
+{"shot": "$OUT/paragraph.png"}

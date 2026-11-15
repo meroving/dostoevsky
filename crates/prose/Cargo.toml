@@ -1,0 +1,11 @@
+[package]
+name = "prose"
+description = "Reading prose without a UI: the document's language, reading ease"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+english = { path = "../english" }
+unicode-segmentation = "1"

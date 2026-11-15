@@ -1,0 +1,16 @@
+[package]
+name = "doc-format"
+description = "Reads and writes the Dostoevsky file format (docs/FILE-FORMAT.md): Markdown body + trailer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+l10n = { path = "../l10n" }
+doc-model = { path = "../doc-model" }
+pulldown-cmark = { version = "0.13", default-features = false }
+serde_json = { version = "1", features = ["preserve_order"] }
+
+[dev-dependencies]
+proptest = "1"

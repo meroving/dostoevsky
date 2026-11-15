@@ -1,0 +1,9 @@
+// Review → Hard to read (key 2): tangled sentences in amber, with notes in the margin, listed in the tab.
+{"action": "page::ToggleLab"}
+{"wait": 400}
+{"keys": "2"}
+{"wait": 2500}
+{"keys": "alt-cmd-["}
+{"keys": "alt-cmd-["}
+{"wait": 700}
+{"shot": "$OUT/ai-lab-hard.png"}

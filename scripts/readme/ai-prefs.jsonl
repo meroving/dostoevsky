@@ -1,0 +1,8 @@
+// Preferences → AI: services (OpenRouter, a model on this Mac) and the Quick and Deep models.
+{"action": "app::ShowPreferences"}
+{"wait": 500}
+{"move": [186, 296]}
+{"wait": 200}
+{"click": [186, 296]}
+{"wait": 1200}
+{"shot": "$OUT/ai-prefs.png"}

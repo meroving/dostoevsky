@@ -1,0 +1,28 @@
+# cargo deny check (dsky-a8n.3): every dependency the macOS app links must be under a license
+# that allows Apache-2.0 source and closed-source binaries. No GPL/AGPL/LGPL-only crates.
+[graph]
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+all-features = false
+
+[licenses]
+confidence-threshold = 0.9
+allow = [
+  "Apache-2.0", "Apache-2.0 WITH LLVM-exception", "MIT", "BSD-2-Clause", "BSD-3-Clause",
+  "ISC", "Zlib", "0BSD", "Unlicense", "CC0-1.0", "BSL-1.0", "Unicode-3.0",
+  "CDLA-Permissive-2.0",
+  # File-level copyleft: changes to these crates' own files would have to stay MPL. Fine for us.
+  "MPL-2.0",
+]
+
+[bans]
+multiple-versions = "allow"
+wildcards = "allow"
+
+[advisories]
+# Security advisories are reported but don't fail CI on their own: unmaintained-crate notices
+# in GPUI's tree are not ours to fix.
+unmaintained = "none"
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

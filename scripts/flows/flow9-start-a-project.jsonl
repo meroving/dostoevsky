@@ -1,0 +1,11 @@
+// PRD §7.8 Start a project. PROJ-1: File → New Project…, a name, Book, Create. The folder,
+// its first chapter, notes/ and .dostoevsky are made, and the project opens in a window of its own.
+{"wait": 300}
+{"action": "app::NewProject"}
+{"new_project_place": "$OUT"}
+{"keys": "t h e space i d i o t"}
+{"wait": 200}
+{"shot": "$OUT/flow9.png"}
+{"keys": "enter"}
+{"wait": 600}
+{"quit": true}

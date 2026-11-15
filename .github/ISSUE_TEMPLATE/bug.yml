@@ -1,0 +1,48 @@
+name: Bug
+description: Something doesn't work, or a file didn't come back the way you left it
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: And what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps
+      placeholder: |
+        1. Open a file with a word group
+        2. Press ↓ on it
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Dostoevsky version
+      description: Dostoevsky → About Dostoevsky, or the commit if you built it.
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "macOS 15.3, Apple silicon"
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Where you got it
+      options:
+        - Mac App Store
+        - .dmg from the website or GitHub
+        - Built from source
+  - type: textarea
+    id: file
+    attributes:
+      label: The file, if it's about a file
+      description: Paste its source view (⌘U → As saved) or attach a copy. Remove anything private first.

@@ -1,0 +1,8 @@
+// Review → Fix mistakes (key 1): each fix becomes a word group showing the fix (the mistake stays as its original), listed in the tab.
+{"action": "page::ToggleLab"}
+{"wait": 400}
+{"keys": "1"}
+{"wait": 2500}
+{"hover": {"text": "the sentence moves"}}
+{"wait": 500}
+{"shot": "$OUT/ai-lab-mistakes.png"}

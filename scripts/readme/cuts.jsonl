@@ -1,0 +1,7 @@
+// CUT-9: the Cuts panel on this page: a faded cut at its paragraph, then the cuts with no trace.
+{"action": "page::ToggleLayer"}
+{"select": "A week later you can’t remember what they were, only that one of them was better."}
+{"keys": "cmd-/"}
+{"action": "page::ToggleOverflow"}
+{"wait": 700}
+{"shot": "$OUT/cuts.png"}

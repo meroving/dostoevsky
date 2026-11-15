@@ -1,0 +1,6 @@
+// ⌘⇧G on a word group: five ideas from the model arrive in its versions, marked with the robot glyph.
+{"action": "page::ToggleLayer"}
+{"select": "suggestion"}
+{"action": "page::AiAlternatives"}
+{"wait": 2500}
+{"shot": "$OUT/ai-ideas.png"}

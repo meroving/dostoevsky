@@ -1,0 +1,15 @@
+// PRD §7.5 Cut without a trace and bring back (CUT-5, CUT-10): select a paragraph → ⇧⌘X → it
+// flies into the Cuts panel → drag it back above ¶6. Its `from ¶n` chip names the paragraph now
+// in its place (¶3, the quote).
+{"keys": "cmd-d"}
+{"select": "Editors have always known this. A good editor doesn't erase your sentence. They write a suggestion in the margin and let you decide. The page holds both versions until you're ready, and you judge them the only way that works: in context, with the real sentence around them."}
+{"keys": "cmd-shift-x"}
+{"expect": {"drawer": true, "notes": 1, "text_lacks": "Editors have always", "origin": {"note": 0, "paragraph": 3}}}
+{"wait": 700}
+{"shot": "$OUT/flow5-a.png"}
+{"drag_note": 0, "to": {"text": "Software forgot this."}}
+{"wait": 300}
+{"expect": {"notes": 0, "text_contains": "the real sentence around them.\n\nSoftware forgot this."}}
+{"shot": "$OUT/flow5-b.png"}
+{"action": "app::Save"}
+{"wait": 200}

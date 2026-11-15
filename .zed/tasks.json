@@ -1,0 +1,208 @@
+// Project tasks for Zed (`task: spawn`, cmd-shift-r to rerun the last one).
+// Commands mirror the Build & Test section of CLAUDE.md.
+[
+  // ── Run ──────────────────────────────────────────────────────────────
+  {
+    "label": "run: app",
+    "command": "cargo run -p dostoevsky",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["run"]
+  },
+  {
+    "label": "run: app with current file",
+    "command": "cargo run -p dostoevsky -- \"$ZED_FILE\"",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["run"]
+  },
+  {
+    "label": "run: app (release)",
+    "command": "cargo run --release -p dostoevsky",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["run"]
+  },
+  {
+    "label": "run: app with current file, per-keystroke timings (release)",
+    "command": "cargo run --release -p dostoevsky -- \"$ZED_FILE\"",
+    "env": { "DOSTOEVSKY_PERF": "1" },
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["run", "perf"]
+  },
+  {
+    "label": "run: app with scratch support dir",
+    "command": "mkdir -p target/scratch-support && cargo run -p dostoevsky",
+    "env": { "DOSTOEVSKY_SUPPORT_DIR": "$ZED_WORKTREE_ROOT/target/scratch-support" },
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["run"]
+  },
+
+  // ── Build ────────────────────────────────────────────────────────────
+  {
+    "label": "build: workspace",
+    "command": "cargo build --workspace",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["build"]
+  },
+  {
+    "label": "build: workspace (release)",
+    "command": "cargo build --workspace --release",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["build"]
+  },
+  {
+    "label": "build: app with shots feature",
+    "command": "cargo build -p dostoevsky --features shots",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["build"]
+  },
+  {
+    "label": "check: workspace",
+    "command": "cargo check --workspace --all-targets",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["build"]
+  },
+  {
+    "label": "clean",
+    "command": "cargo clean",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["build"]
+  },
+
+  // ── Test ─────────────────────────────────────────────────────────────
+  {
+    "label": "test: workspace",
+    "command": "cargo test --workspace",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test"]
+  },
+  {
+    "label": "test: current package",
+    "command": "cargo test -p \"$ZED_CUSTOM_RUST_PACKAGE\"",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test"]
+  },
+  {
+    "label": "test: english",
+    "command": "cargo test -p english",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test"]
+  },
+  {
+    "label": "test: doc-model",
+    "command": "cargo test -p doc-model",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test"]
+  },
+  {
+    "label": "test: doc-format",
+    "command": "cargo test -p doc-format",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test"]
+  },
+  {
+    "label": "test: app",
+    "command": "cargo test -p dostoevsky",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test"]
+  },
+  {
+    "label": "test: doc-model property soak (50k cases, release)",
+    "command": "cargo test --release -p doc-model --test properties",
+    "env": { "PROPTEST_CASES": "50000" },
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test", "soak"]
+  },
+  {
+    "label": "test: doc-format round-trip soak (50k cases, release)",
+    "command": "cargo test --release -p doc-format --test round_trip",
+    "env": { "PROPTEST_CASES": "50000" },
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test", "soak"]
+  },
+  {
+    "label": "test: flows (all, real app → target/flows)",
+    "command": "scripts/run_flows.sh",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test", "flows"]
+  },
+  {
+    "label": "test: flows (pick by prefix)",
+    "command": "scripts/run_flows.sh ${ZED_SELECTED_TEXT:flow1}",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["test", "flows"]
+  },
+  {
+    "label": "flows: open screenshots",
+    "command": "open target/flows",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "hide": "on_success",
+    "tags": ["flows"]
+  },
+
+  // ── Lint / format ────────────────────────────────────────────────────
+  {
+    "label": "lint: clippy (deny warnings)",
+    "command": "cargo clippy --workspace --all-targets -- -D warnings",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["lint"]
+  },
+  {
+    "label": "lint: clippy --fix",
+    "command": "cargo clippy --workspace --all-targets --fix --allow-dirty --allow-staged",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["lint"]
+  },
+  {
+    "label": "fmt: check",
+    "command": "cargo fmt --all -- --check",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["lint"]
+  },
+  {
+    "label": "fmt: apply",
+    "command": "cargo fmt --all",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "hide": "on_success",
+    "tags": ["lint"]
+  },
+  {
+    "label": "ci: fmt + clippy + test",
+    "command": "cargo fmt --all -- --check && cargo clippy --workspace --all-targets -- -D warnings && cargo test --workspace",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["lint", "test"]
+  },
+
+  // ── Benchmarks ───────────────────────────────────────────────────────
+  {
+    "label": "bench: doc-model large-document latency",
+    "command": "cargo run --release -p doc-model --example bench_large",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["bench"]
+  },
+  {
+    "label": "bench: doc-format save/load at 100k words",
+    "command": "cargo run --release -p doc-format --example bench_format",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["bench"]
+  },
+
+  // ── Release / assets ─────────────────────────────────────────────────
+  {
+    "label": "release: bundle universal .app + .dmg (ad-hoc signed)",
+    "command": "scripts/bundle.sh",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["release"]
+  },
+  {
+    "label": "release: bundle native arch only (faster)",
+    "command": "ARCHS=\"$(uname -m | sed s/arm64/aarch64/)\" scripts/bundle.sh",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["release"]
+  },
+  {
+    "label": "release: open bundle folder",
+    "command": "open target/bundle",
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "hide": "on_success",
+    "tags": ["release"]
+  }
+]

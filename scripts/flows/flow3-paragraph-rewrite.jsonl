@@ -1,0 +1,19 @@
+// PRD §7.3 Paragraph rewrite: a paragraph group with a second version (made directly) →
+// caret in it → ⌘⇧A → ↑/↓ compare the two in place → Esc shows the list of every group.
+{"keys": "cmd-d"}
+{"alt": "Editors have always known this. A good editor doesn't erase your sentence. They write a suggestion in the margin and let you decide. The page holds both versions until you're ready, and you judge them the only way that works: in context, with the real sentence around them.", "scope": "paragraph", "variants": ["Every good editor knows this. They leave a note in the margin and let you choose, in context."]}
+{"select": {"text": "Editors", "at": "end"}}
+{"keys": "cmd-shift-a"}
+{"expect": {"sidebar": true, "group": {"index": 0, "scope": "paragraph", "active": 0}}}
+{"keys": "up"}
+{"wait": 250}
+{"expect": {"group": {"index": 0, "active": 1}, "text_contains": "Every good editor knows this.", "text_lacks": "Editors have always"}}
+{"shot": "$OUT/flow3.png"}
+{"keys": "down"}
+{"expect": {"group": {"index": 0, "active": 0}, "text_contains": "Editors have always known this."}}
+{"keys": "up escape"}
+{"wait": 250}
+{"expect": {"sidebar": true}}
+{"shot": "$OUT/flow3-b.png"}
+{"action": "app::Save"}
+{"wait": 200}

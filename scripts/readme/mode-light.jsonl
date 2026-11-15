@@ -1,0 +1,17 @@
+// The site's light frame: mode-editing.png in the light theme (mode-light.prefs.json), so the
+// landing can show the two side by side.
+{"action": "page::ToggleLayer"}
+{"select": "history is the wrong shape"}
+{"keys": "alt-cmd-m"}
+{"comment": "This is the essay in five words. Open with it?"}
+{"keys": "escape"}
+{"select": "A good editor doesn’t erase your sentence."}
+{"keys": "alt-cmd-m"}
+{"comment": "Ask Anna if hers ever did."}
+{"keys": "escape"}
+{"hover": {"group": 1}}
+{"keys": "down down"}
+{"select": "struggle"}
+{"action": "page::AlternativesForSelection"}
+{"wait": 700}
+{"shot": "$OUT/mode-light.png"}

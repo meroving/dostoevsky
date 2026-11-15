@@ -1,0 +1,19 @@
+Dostoevsky
+Copyright 2026 Dmitry Eibozhenko and the Dostoevsky contributors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes fonts under the SIL Open Font License 1.1. Each license, with its
+copyright notice, is in crates/app/assets/fonts/ and in the app bundle's
+Contents/Resources folder:
+
+  IBM Plex Mono         Copyright 2017 IBM Corp. (OFL-IBMPlexMono.txt)
+  JetBrains Mono        Copyright 2020 The JetBrains Mono Project Authors (OFL-JetBrainsMono.txt)
+  iA Writer Quattro     Copyright 2018 Information Architects Inc. (OFL-iAWriter.txt)
+  Literata              Copyright 2017 The Literata Project Authors (OFL-Literata.txt)
+  Caveat                Copyright 2014 The Caveat Project Authors (OFL-Caveat.txt)
+  Shantell Sans         Copyright 2022 The Shantell Sans Project Authors (OFL-ShantellSans.txt)
+  Bad Script            Copyright 2011 The Bad Script Project Authors (OFL-BadScript.txt)
+
+The ideas of alternatives flipped in place, ghosting and the overflow drawer come
+from Write_On by Jason Fried. No Write_On code or assets are included.

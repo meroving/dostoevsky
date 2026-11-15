@@ -1,0 +1,13 @@
+[package]
+name = "doc-model"
+description = "Document model for alternatives, ghosts and overflow (groups own their variants; see docs/TECH-NOTES.md §2)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+english = { path = "../english" }
+
+[dev-dependencies]
+proptest = "1"

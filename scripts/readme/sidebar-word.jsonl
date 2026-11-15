@@ -1,0 +1,7 @@
+{"action": "page::ToggleLayer"}
+{"hover": {"group": 1}}
+{"keys": "down down"}
+{"select": "struggle"}
+{"action": "page::AlternativesForSelection"}
+{"wait": 600}
+{"shot": "$OUT/sidebar-word.png"}

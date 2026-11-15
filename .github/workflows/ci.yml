@@ -1,0 +1,76 @@
+# Checks every push to main and every pull request on an Apple-silicon Mac (PRD NFR-8,
+# dsky-65y.14): clippy, all tests, the §7 flows against the real app, and
+# the NFR-1 performance budgets.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  deny:
+    # Licenses (Apache-2.0 source, closed-source binaries), advisories, crate sources (dsky-a8n.3).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+
+  macos:
+    runs-on: macos-15
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: |
+          cargo clippy --all-targets -- -D warnings
+          cargo clippy -p dostoevsky --features shots -- -D warnings
+
+      - name: Tests (unit, behaviour, property, headless app)
+        run: cargo test --workspace
+
+      - name: PRD §7 flows against the real app
+        run: scripts/run_flows.sh
+
+      - name: The bundled app opened through LaunchServices
+        env:
+          E2E_SCRATCH: target/e2e/scratch
+        run: scripts/e2e_bundle.sh
+
+      - name: E2E logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e
+          path: target/e2e/
+          if-no-files-found: ignore
+
+      - name: Flow screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flows
+          path: target/flows/
+          if-no-files-found: ignore
+
+      - name: NFR-1 performance budgets
+        # Shared runners are slower and noisier than a writer's Mac.
+        env:
+          PERF_SLACK: "2"
+        run: scripts/perf_check.sh

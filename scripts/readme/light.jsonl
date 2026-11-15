@@ -1,0 +1,5 @@
+{"action": "app::AppearanceLight"}
+{"action": "page::ToggleLayer"}
+{"action": "page::ToggleOverflow"}
+{"wait": 800}
+{"shot": "$OUT/light.png"}

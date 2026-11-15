@@ -1,0 +1,15 @@
+// PRD §7.2 Add your own options: double-click suggestion → ⌘⇧A → note ↩, comment ↩ →
+// "write a comment" → Esc (back to the list of every group) → Esc.
+{"keys": "cmd-d"}
+{"click": {"text": "suggestion"}, "count": 2}
+{"keys": "cmd-shift-a"}
+{"expect": {"sidebar": true, "group": {"index": 0, "variants": ["suggestion"], "scope": "word"}}}
+{"keys": "n o t e enter"}
+{"keys": "c o m m e n t enter"}
+{"wait": 250}
+{"expect": {"text_contains": "They write a comment in the margin", "group": {"index": 0, "active": 2, "variants": ["suggestion", "note", "comment"]}}}
+{"shot": "$OUT/flow2.png"}
+{"keys": "escape escape"}
+{"expect": {"sidebar": false}}
+{"action": "app::Save"}
+{"wait": 200}

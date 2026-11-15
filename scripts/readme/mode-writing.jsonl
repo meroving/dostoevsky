@@ -1,0 +1,14 @@
+// The site's writing frame: the same page as mode-editing.png (the same version of “struggle”)
+// in writing mode, the Project panel closed, Zen writing and typewriter scrolling on
+// (mode-writing.prefs.json): the caret's paragraph in full colour, its line mid-window.
+{"action": "app::ToggleProject"}
+{"action": "app::ToggleProject"}
+{"wait": 500}
+{"action": "page::ToggleLayer"}
+{"hover": {"group": 1}}
+{"keys": "down down"}
+{"action": "page::ToggleLayer"}
+{"select": {"text": "sentence around them.", "at": "end"}}
+{"move": [720, 880]}
+{"wait": 900}
+{"shot": "$OUT/mode-writing.png"}

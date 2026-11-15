@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleName</key><string>Dostoevsky</string>
+  <key>CFBundleDisplayName</key><string>Dostoevsky</string>
+  <key>CFBundleIdentifier</key><string>app.dostoevsky.Dostoevsky</string>
+  <key>CFBundleExecutable</key><string>dostoevsky</string>
+  <key>CFBundleIconFile</key><string>Dostoevsky</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <!-- The UI's languages (crates/l10n): with these and the .lproj folders bundle.sh makes,
+       macOS offers a per-app language and draws its own panels and menu items in it. -->
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleLocalizations</key>
+  <array>
+    <string>en</string><string>de</string><string>es</string><string>fr</string>
+    <string>it</string><string>pt-BR</string><string>ru</string>
+  </array>
+  <key>CFBundleShortVersionString</key><string>__VERSION__</string>
+  <key>CFBundleVersion</key><string>__BUILD__</string>
+  <key>LSMinimumSystemVersion</key><string>13.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.productivity</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+  <!-- AI requests use HTTPS only (standard encryption, exempt from export documentation). -->
+  <key>ITSAppUsesNonExemptEncryption</key><false/>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>Markdown document</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array>
+        <string>net.daringfireball.markdown</string>
+        <string>public.plain-text</string>
+      </array>
+      <key>CFBundleTypeExtensions</key>
+      <array><string>md</string><string>markdown</string><string>mdown</string><string>txt</string></array>
+    </dict>
+    <!-- A folder is a project (PROJ-1): without this the Dock refuses a dropped folder.
+         Alternate, so Finder keeps opening folders itself. -->
+    <dict>
+      <key>CFBundleTypeName</key><string>Folder</string>
+      <key>CFBundleTypeRole</key><string>Editor</string>
+      <key>LSHandlerRank</key><string>Alternate</string>
+      <key>LSItemContentTypes</key>
+      <array><string>public.folder</string></array>
+    </dict>
+  </array>
+</dict>
+</plist>

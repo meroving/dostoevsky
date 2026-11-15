@@ -1,0 +1,6 @@
+// The page with the alternatives layer on, the pointer on a word group: its hover label.
+{"action": "page::ToggleLayer"}
+{"hover": {"group": 1}}
+{"keys": "down down"}
+{"wait": 500}
+{"shot": "$OUT/hero.png"}

@@ -1,0 +1,10 @@
+[package]
+name = "l10n"
+description = "The UI's languages: English strings are the keys, locales/<lang>.json the translations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+serde_json = "1"

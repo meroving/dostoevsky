@@ -1,0 +1,13 @@
+[package]
+name = "export"
+description = "The final text leaves the app: Markdown, plain text, HTML, Word and ePub (no UI)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+english = { path = "../english" }
+pulldown-cmark = { version = "0.13", default-features = false }
+miniz_oxide = "0.8"
+crc32fast = "1"

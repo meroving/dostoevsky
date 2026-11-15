@@ -1,0 +1,62 @@
+[package]
+name = "dostoevsky"
+description = "The Dostoevsky app: windows, page element, sidebar, overflow, menus (gpui-kit)"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+default-run = "dostoevsky"
+
+[dependencies]
+l10n = { path = "../l10n" }
+doc-model = { path = "../doc-model" }
+doc-format = { path = "../doc-format" }
+export = { path = "../export" }
+ai = { path = "../ai" }
+english = { path = "../english" }
+prose = { path = "../prose" }
+gpui-kit = { version = "=0.8.0", default-features = false, features = ["assets"] }
+unicode-segmentation = "1"
+rodio = { version = "0.21", default-features = false, features = ["playback"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+directories = "6"
+notify = "8"
+smol = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Export's preview pages (RenderImage frames); PNG only for the dev screenshots.
+image = { version = "0.25", default-features = false }
+# The .dmg build's update check (updates.rs); the same ureq the AI client uses.
+ureq = { version = "3", default-features = false, features = ["rustls"], optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+block2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSSound", "NSAccessibility", "NSSpellChecker", "NSView", "NSResponder", "NSWindow", "NSPanel", "NSSavePanel", "NSOpenPanel", "NSApplication", "block2"] }
+objc2-foundation = { version = "0.3", features = ["NSUserDefaults", "NSValue", "NSString", "NSArray", "NSRange", "NSGeometry", "NSAttributedString", "NSFileManager", "NSURL", "NSData", "NSError", "NSPathUtilities", "NSTextCheckingResult", "NSOrthography", "NSDictionary"] }
+raw-window-handle = "0.6"
+# Export: TextKit pages into a PDF, its preview and Print (pdf.rs).
+objc2-core-foundation = "0.3"
+objc2-core-graphics = "0.3"
+objc2-core-text = "0.3"
+objc2-pdf-kit = "0.3"
+
+# Screenshot comparison for scripts/run_flows.sh (visual regression, dsky-65y.19).
+[[bin]]
+name = "imgdiff"
+path = "src/bin/imgdiff.rs"
+required-features = ["shots"]
+
+[features]
+# Scripted screenshots for development: DOSTOEVSKY_SCRIPT=steps.jsonl (see src/shots.rs).
+shots = ["gpui-kit/test-support", "image/png"]
+# The .dmg build checks dostoevsky.app/version.json (updates.rs); the App Store build leaves it out.
+updates = ["dep:ureq"]
+
+[dev-dependencies]
+gpui-kit = { version = "=0.8.0", default-features = false, features = ["assets", "test-support"] }
+
+# The CoreText text system on its own (the full Mac platform needs the main thread), so
+# headless UI tests shape text exactly like the app (src/ui_tests).
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+gpui-pre-apple = "=0.3.9"

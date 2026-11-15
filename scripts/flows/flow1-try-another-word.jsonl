@@ -1,0 +1,20 @@
+// PRD §7.1 Try another word: hover friction → ↓ → hesitation → ↓ ↓ → … → back on friction.
+{"keys": "cmd-d"}
+{"alt": "friction", "scope": "word", "variants": ["hesitation", "struggle", "tension"]}
+{"hover": {"group": 0}}
+{"expect": {"hover_label": "original · 1 of 4 ›"}}
+{"keys": "down"}
+{"expect": {"group": {"index": 0, "active": 1}, "text_contains": "Most of the hesitation in writing", "hover_label": "version 2 of 4 ›"}}
+{"wait": 300}
+{"shot": "$OUT/flow1-a.png"}
+{"keys": "down down down"}
+{"expect": {"group": {"index": 0, "active": 0}, "text_contains": "Most of the friction in writing", "hover_label": "original · 1 of 4 ›"}}
+{"wait": 300}
+{"shot": "$OUT/flow1-b.png"}
+// WIN-14: the same page in the light theme.
+{"action": "app::AppearanceLight"}
+{"wait": 300}
+{"shot": "$OUT/flow1-c.png"}
+{"action": "app::AppearanceDark"}
+{"action": "app::Save"}
+{"wait": 200}

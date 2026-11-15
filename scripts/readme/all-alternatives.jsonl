@@ -1,0 +1,6 @@
+{"action": "page::ToggleLayer"}
+{"action": "page::AllAlternatives"}
+{"wait": 400}
+{"keys": "down down down down"}
+{"wait": 600}
+{"shot": "$OUT/all-alternatives.png"}

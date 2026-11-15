@@ -1,0 +1,4 @@
+// Writing mode: a plain editor.
+{"select": {"text": "Nothing is lost.", "at": "end"}}
+{"wait": 400}
+{"shot": "$OUT/writing.png"}
