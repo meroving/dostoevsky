@@ -11,7 +11,7 @@ use crate::actions::*;
 use crate::context_menu::shortcut_label;
 use crate::format;
 use crate::markdown::{BlockKind, LineStyle, Span};
-use crate::prefs::{Alignment, Appearance, Autosave, CommentLook, CutLook, Effects, HandFont, ParagraphLook, Prefs, SpellCheck, WheelSwitch};
+use crate::prefs::{Alignment, Appearance, Autosave, CommentLook, CutLook, Effects, HandFont, HiddenLook, ParagraphLook, Prefs, SpellCheck, StaysVisible, WheelSwitch, ZenFade, ZenFocus};
 use crate::theme::{self, c, ca};
 use crate::workspace::Workspace;
 
@@ -52,8 +52,8 @@ pub(crate) fn set_prefs(cx: &mut App, f: impl FnOnce(&mut Prefs)) {
     f(&mut p);
     p.save();
     let old = Prefs::get(cx);
-    let menus_changed = (old.appearance, old.zen_writing, old.typewriter, old.alignment, old.hyphenation, old.paragraphs, old.ai.enabled, &old.language)
-        != (p.appearance, p.zen_writing, p.typewriter, p.alignment, p.hyphenation, p.paragraphs, p.ai.enabled, &p.language);
+    let menus_changed = (old.appearance, old.zen_writing, old.typewriter, old.private_mode, old.alignment, old.hyphenation, old.paragraphs, old.ai.enabled, &old.language)
+        != (p.appearance, p.zen_writing, p.typewriter, p.private_mode, p.alignment, p.hyphenation, p.paragraphs, p.ai.enabled, &p.language);
     if old.language != p.language {
         // Tests switch only their own thread, so tests running beside them stay in English.
         if cfg!(test) {
@@ -95,6 +95,26 @@ fn segmented_with<T: std::marker::Copy + PartialEq + 'static>(
     current: T,
     set: impl Fn(&mut Prefs, T) + 'static,
 ) -> impl IntoElement {
+    chips(id, options, current, set, false)
+}
+
+/// Chips that show only their pictures; the names are their tooltips.
+fn swatch_chips<T: std::marker::Copy + PartialEq + 'static>(
+    id: &'static str,
+    options: Vec<(T, String, AnyElement)>,
+    current: T,
+    set: impl Fn(&mut Prefs, T) + 'static,
+) -> impl IntoElement {
+    chips(id, options.into_iter().map(|(v, l, p)| (v, l, Some(p), None)).collect(), current, set, true)
+}
+
+fn chips<T: std::marker::Copy + PartialEq + 'static>(
+    id: &'static str,
+    options: Vec<(T, String, Option<AnyElement>, Face)>,
+    current: T,
+    set: impl Fn(&mut Prefs, T) + 'static,
+    pictures_only: bool,
+) -> impl IntoElement {
     let set = Rc::new(set);
     div()
         .flex()
@@ -123,9 +143,12 @@ fn segmented_with<T: std::marker::Copy + PartialEq + 'static>(
                 .items_center()
                 .gap_2()
                 .children(picture)
-                .child(match face {
-                    Some((family, size)) => div().font_family(family).text_size(size).child(label).into_any_element(),
-                    None => label.into_any_element(),
+                .when(pictures_only, |d| d.min_h(px(22.)).tooltip(crate::about::tip(label.clone())))
+                .when(!pictures_only, |d| {
+                    d.child(match face {
+                        Some((family, size)) => div().font_family(family).text_size(size).child(label).into_any_element(),
+                        None => label.into_any_element(),
+                    })
                 })
                 .test_support()
         }))
@@ -227,6 +250,29 @@ fn swatch(a: Appearance) -> AnyElement {
         .child(line(10., 2.5))
         .child(line(7., 6.))
         .into_any_element()
+}
+
+/// Private mode's looks, drawn as on the page: a few words' worth of each.
+fn hidden_swatch(look: HiddenLook) -> AnyElement {
+    let ink = theme::text();
+    let shape = |w: f32, h: f32, r: f32| div().w(px(w)).h(px(h)).rounded(px(r)).bg(c(ink));
+    let row = div().flex().items_center().justify_center().gap(px(3.)).min_w(px(30.)).h(px(14.));
+    match look {
+        HiddenLook::Dots => row.children((0..3).map(|_| shape(4., 4., 2.))),
+        HiddenLook::Bars => row.children((0..3).map(|_| shape(8., 4., 1.))),
+        HiddenLook::Solid => row.child(shape(26., 6., 1.)),
+        // No blur in a div: soft shadows stand in for blurred letters.
+        HiddenLook::Blur => row.children((0..3).map(|_| {
+            div().w(px(8.)).h(px(5.)).rounded(px(2.5)).bg(ca(ink, 0.45)).shadow(vec![BoxShadow {
+                color: ca(ink, 0.6),
+                offset: point(px(0.), px(0.)),
+                blur_radius: px(2.),
+                spread_radius: px(0.),
+                inset: false,
+            }])
+        })),
+    }
+    .into_any_element()
 }
 
 fn toggle(id: &'static str, on: bool, set: impl Fn(&mut Prefs, bool) + 'static) -> impl IntoElement {
@@ -662,8 +708,61 @@ impl Workspace {
             PrefSection::Page => self.page_rows(&p, cx),
             PrefSection::Writing => vec![
                 heading(tr!("IN WRITING MODE")),
-                row(tr!("Zen writing"), Some(tr!("dim other paragraphs")), toggle("zen", p.zen_writing, |p, v| p.zen_writing = v)).into_any_element(),
+                row(tr!("Zen writing"), Some(tr!("dim everything else")), toggle("zen", p.zen_writing, |p, v| p.zen_writing = v)).into_any_element(),
+                // Like Private mode's rows, these stay set with zen off.
+                row(
+                    tr!("Stays bright"),
+                    None,
+                    segmented(
+                        "zen-focus",
+                        [(ZenFocus::Sentence, tr!("Sentence")), (ZenFocus::Line, trc!("a row of text", "Line")), (ZenFocus::Paragraph, tr!("Paragraph"))]
+                            .into_iter()
+                            .map(|(v, l)| (v, l.to_string()))
+                            .collect(),
+                        p.zen_focus,
+                        |p, v| p.zen_focus = v,
+                    ),
+                )
+                .into_any_element(),
+                row(
+                    tr!("Distance fade"),
+                    None,
+                    segmented(
+                        "zen-fade",
+                        [(ZenFade::Off, tr!("Off")), (ZenFade::Near, trc!("distance fade", "Near")), (ZenFade::WholePage, tr!("Whole page"))]
+                            .into_iter()
+                            .map(|(v, l)| (v, l.to_string()))
+                            .collect(),
+                        p.zen_fade,
+                        |p, v| p.zen_fade = v,
+                    ),
+                )
+                .into_any_element(),
                 row(tr!("Typewriter scrolling"), Some(tr!("keep the line centred")), toggle("typewriter", p.typewriter, |p, v| p.typewriter = v)).into_any_element(),
+                row(tr!("Private mode"), Some(tr!("hide the page’s text")), toggle("private", p.private_mode, |p, v| p.private_mode = v)).into_any_element(),
+                // Both choices stay set with the mode off: they say what it does when it goes on.
+                row(
+                    tr!("Hidden text looks"),
+                    None,
+                    swatch_chips("hidden-look", HiddenLook::ALL.iter().map(|&l| (l, l.name().to_string(), hidden_swatch(l))).collect(), p.hidden_look, |p, v| {
+                        p.hidden_look = v
+                    }),
+                )
+                .into_any_element(),
+                row(
+                    tr!("Stays visible"),
+                    None,
+                    segmented(
+                        "stays-visible",
+                        [(StaysVisible::Word, tr!("Live word")), (StaysVisible::Sentence, tr!("Live sentence")), (StaysVisible::Nothing, tr!("Nothing"))]
+                            .into_iter()
+                            .map(|(v, l)| (v, l.to_string()))
+                            .collect(),
+                        p.stays_visible,
+                        |p, v| p.stays_visible = v,
+                    ),
+                )
+                .into_any_element(),
                 heading(tr!("AS YOU TYPE")),
                 row(tr!("Smart quotes and dashes"), Some(tr!("“ ” and —")), toggle("smart", p.smart_punctuation, |p, v| p.smart_punctuation = v)).into_any_element(),
                 row(

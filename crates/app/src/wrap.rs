@@ -22,6 +22,10 @@ const MIN_SIDE: usize = 3;
 const MAX_RUN: usize = 2;
 /// A mono face's space: in Plex every space may double, as it always could.
 const MAX_STRETCH: f32 = 0.6;
+/// Glyph x is summed in f32 thousands of pixels into a paragraph, and comes out a little
+/// differently when the line is shaped in pieces (a ghost, Zen writing's ink): a row that fits
+/// the column exactly (a mono face, `column_chars` wide) must fit however it was shaped.
+const SLACK: Pixels = px(0.05);
 
 /// The first row is `indent` shorter. Returns, per boundary, whether its row ends hyphenated.
 pub fn rewrap(line: &mut WrappedLine, wrap_width: Pixels, hyphens: Option<&Hyphens>, indent: Pixels) -> Vec<bool> {
@@ -141,7 +145,7 @@ fn boundaries(layout: &LineLayout, text: &str, full_width: Pixels, hyphens: Opti
         }
         let next_x = glyphs.get(i + 1).map_or(layout.width, |g| g.x);
         let wrap_width = if boundaries.is_empty() { full_width - indent } else { full_width };
-        if next_x - last_boundary_x > wrap_width && boundary > last_boundary {
+        if next_x - last_boundary_x > wrap_width + SLACK && boundary > last_boundary {
             let broken = hyphens
                 .filter(|_| run_of_hyphens < MAX_RUN)
                 .and_then(|h| hyphen_break(&glyphs, text, i, last_boundary_ix, last_boundary_x, wrap_width, h));
@@ -208,7 +212,7 @@ fn hyphen_break(glyphs: &[Glyph], text: &str, i: usize, row: usize, row_x: Pixel
         .rev()
         .filter(|&&p| p >= MIN_SIDE && n - p >= MIN_SIDE)
         .map(|&p| ws + p)
-        .find(|&k| glyphs[k].x - row_x + h.width <= width && k > row)
+        .find(|&k| glyphs[k].x - row_x + h.width <= width + SLACK && k > row)
 }
 
 /// GPUI's word characters (`LineWrapper::is_word_char`) and the closing marks it lets a row start with.

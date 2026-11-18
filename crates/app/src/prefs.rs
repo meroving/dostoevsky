@@ -143,6 +143,66 @@ impl CounterShows {
     }
 }
 
+/// What Zen writing keeps at full ink.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ZenFocus {
+    /// The caret's sentence (`prose::sentences`, as ⇧⌘A and the sentence keys).
+    Sentence,
+    /// The wrapped row the caret is on.
+    Line,
+    #[default]
+    Paragraph,
+}
+
+/// How Zen writing dims the rest: flat, or fainter step by step away from what stays bright.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum ZenFade {
+    #[default]
+    Off,
+    Near,
+    WholePage,
+}
+
+/// How Private mode draws the text it hides.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum HiddenLook {
+    /// One dot per character.
+    #[default]
+    Dots,
+    /// One x-height bar per word.
+    Bars,
+    /// One full-height bar per word.
+    Solid,
+    /// The text itself, blurred.
+    Blur,
+}
+
+impl HiddenLook {
+    pub const ALL: [HiddenLook; 4] = [HiddenLook::Dots, HiddenLook::Bars, HiddenLook::Solid, HiddenLook::Blur];
+
+    pub fn name(self) -> &'static str {
+        match self {
+            HiddenLook::Dots => tr!("Dots"),
+            HiddenLook::Bars => tr!("Bars"),
+            HiddenLook::Solid => tr!("Solid"),
+            HiddenLook::Blur => tr!("Blurred ink"),
+        }
+    }
+}
+
+/// What Private mode leaves readable around the caret.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum StaysVisible {
+    #[default]
+    Word,
+    Sentence,
+    Nothing,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Appearance {
@@ -217,7 +277,13 @@ pub struct Prefs {
     pub tap_shift: bool,
     pub spell_check: SpellCheck,
     pub zen_writing: bool,
+    pub zen_focus: ZenFocus,
+    pub zen_fade: ZenFade,
     pub typewriter: bool,
+    /// Writing mode hides the page's text (paint only; the document is untouched).
+    pub private_mode: bool,
+    pub hidden_look: HiddenLook,
+    pub stays_visible: StaysVisible,
     pub sounds: bool,
     pub volume: f32,
     pub hover_label: bool,
@@ -344,7 +410,12 @@ impl Default for Prefs {
             tap_shift: false,
             spell_check: SpellCheck::Always,
             zen_writing: true,
+            zen_focus: ZenFocus::Paragraph,
+            zen_fade: ZenFade::Off,
             typewriter: true,
+            private_mode: false,
+            hidden_look: HiddenLook::Dots,
+            stays_visible: StaysVisible::Word,
             sounds: true,
             volume: 0.5,
             hover_label: true,

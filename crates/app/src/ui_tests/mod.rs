@@ -15,12 +15,14 @@ mod panel_foot;
 mod paragraphs;
 mod perf;
 mod prefs;
+mod private;
 mod project;
 mod sentences;
 mod smoke;
 mod spelling;
 mod welcome;
 mod window;
+mod zen;
 
 use std::ops::Range;
 use std::sync::Arc;

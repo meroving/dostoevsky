@@ -13,7 +13,7 @@ use crate::actions::*;
 use crate::markdown::{self, BlockKind, LineStyle, Span};
 use crate::drag::TextDrag;
 use crate::model::DocModel;
-use crate::prefs::{Alignment, ParagraphLook, Prefs, WheelSwitch};
+use crate::prefs::{Alignment, HiddenLook, ParagraphLook, Prefs, StaysVisible, WheelSwitch, ZenFade, ZenFocus};
 use crate::sentence_keys;
 use crate::text::TextIndex;
 use crate::theme::{self, c, ca};
@@ -99,6 +99,12 @@ const WHEEL_REST: Duration = Duration::from_millis(250);
 const WHEEL_STEP: Pixels = px(48.);
 pub const ZEN_DIM: f32 = 0.3;
 const ZEN_FADE: Duration = Duration::from_millis(200);
+/// Distance fade's ink by step (1, 2, …; the last holds): Near settles at `ZEN_DIM`, Whole page
+/// keeps falling to a trace that Find and the selection can still show.
+const ZEN_NEAR: [f32; 3] = [0.55, 0.42, ZEN_DIM];
+const ZEN_WHOLE: [f32; 5] = [0.42, 0.24, 0.12, 0.06, 0.03];
+/// Distance fade's step is this many rows, eased row by row: about a paragraph's worth.
+const ZEN_ROWS_PER_STEP: f32 = 4.;
 const GLIDE: Duration = Duration::from_millis(150);
 const CARET_SLIDE: Duration = Duration::from_millis(90);
 
@@ -141,9 +147,120 @@ struct ShapedLine {
     rows: Vec<Row>,
     /// (row, x within it, the shaped `-`).
     hyphens: Vec<(usize, Pixels, gpui_kit::ShapedLine)>,
+    /// The runs' colours, (bytes, colour): Private mode draws its shapes in them.
+    colors: Vec<(usize, Hsla)>,
+}
+
+/// What Zen writing keeps bright, before layout places it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ZenTarget {
+    /// The source lines of the blocks holding it: every block a selection touches.
+    pub lines: Range<usize>,
+    unit: ZenUnit,
+    /// `None` with a selection.
+    caret: Option<usize>,
+    fade: ZenFade,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+enum ZenUnit {
+    /// The whole blocks.
+    Blocks,
+    /// A sentence of the caret's block, in display chars; the rest of the block is one step out.
+    Sentence(Range<usize>),
+    /// The caret's wrapped row (with a selection, every row of its blocks); steps count rows.
+    Rows,
+}
+
+/// Zen writing placed on a layout. Blocks and rows are numbered by position: the n-th (from 0)
+/// is 2n + 1 and blank lines after it 2n + 2, so a caret on a blank line sits between two
+/// neighbours, each one step away.
+#[derive(Clone, Debug, PartialEq)]
+struct ZenLit {
+    unit: ZenUnit,
+    /// The bright blocks, first and last position.
+    blocks: (usize, usize),
+    /// The rows the bright unit is on, first and last position: Distance fade counts from them.
+    rows: (usize, usize),
+    fade: ZenFade,
+}
+
+impl ZenLit {
+    fn alpha(&self, block: usize, row: usize, c: usize) -> f32 {
+        let inside = |x: usize, r: (usize, usize)| r.0 <= x && x <= r.1;
+        let bright = match &self.unit {
+            ZenUnit::Rows => inside(row, self.rows),
+            ZenUnit::Blocks => inside(block, self.blocks),
+            ZenUnit::Sentence(s) => inside(block, self.blocks) && s.contains(&c),
+        };
+        let table: &[f32] = match self.fade {
+            _ if bright => return 1.,
+            ZenFade::Off => return ZEN_DIM,
+            ZenFade::Near => &ZEN_NEAR,
+            ZenFade::WholePage => &ZEN_WHOLE,
+        };
+        // Whatever stays bright, the rest fades by rows: the row next to it (or the rest of its
+        // own row) is step one, then the ink eases a step every `ZEN_ROWS_PER_STEP` rows.
+        let gap = if row < self.rows.0 { self.rows.0 - row } else { row.saturating_sub(self.rows.1) };
+        let i = (gap.div_ceil(2).max(1) - 1) as f32 / ZEN_ROWS_PER_STEP;
+        let at = |i: usize| table[i.min(table.len() - 1)];
+        let (lo, t) = (i.floor() as usize, i.fract());
+        if t == 0. { at(lo) } else { at(lo) + (at(lo + 1) - at(lo)) * t }
+    }
+
+    /// Whether going from `a` to `b` moves the light (and fades), rather than what's lit growing
+    /// as it is typed (a sentence's end, a paragraph's last row).
+    fn moved(a: &Option<ZenLit>, b: &Option<ZenLit>) -> bool {
+        match (a, b) {
+            (Some(a), Some(b)) => {
+                let (unit, rows) = match (&a.unit, &b.unit) {
+                    (ZenUnit::Sentence(x), ZenUnit::Sentence(y)) => (x.start == y.start, a.rows.0 == b.rows.0),
+                    (ZenUnit::Blocks, ZenUnit::Blocks) => (true, a.rows.0 == b.rows.0),
+                    (x, y) => (x == y, a.rows == b.rows),
+                };
+                !(unit && rows && a.blocks == b.blocks && a.fade == b.fade)
+            }
+            (a, b) => a.is_some() != b.is_some(),
+        }
+    }
+}
+
+/// What Private mode draws in place of hidden text.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum MaskShape {
+    /// A dot or a bar, in window coordinates.
+    Quad { bounds: Bounds<Pixels>, radius: Pixels, color: Hsla },
+    /// A character drawn as blurred ink: its ink box, softened. `origin` is on the baseline.
+    Ink { origin: Point<Pixels>, font_id: FontId, ch: char, size: Pixels, color: Hsla },
+}
+
+/// The middle of the x-height above the baseline, as a share of the font size.
+const MASK_MID: f32 = 0.27;
+
+/// (font, char, size bits).
+type InkKey = (FontId, char, u32);
+
+thread_local! {
+    /// Ink boxes by font, char and size: asking the font for each glyph every frame is slow.
+    static INK_BOXES: RefCell<HashMap<InkKey, Option<Bounds<Pixels>>>> = RefCell::new(HashMap::new());
+}
+
+/// A glyph, or a hyphen at a break, as Private mode sees it.
+struct MaskCell<'a> {
+    row: usize,
+    /// From the row's start.
+    x: Pixels,
+    advance: Pixels,
+    byte: usize,
+    /// `None` for a hyphen.
+    glyph: Option<(FontId, &'a ShapedGlyph)>,
 }
 
 impl LineBox {
+    fn alpha_at(&self, byte: usize) -> f32 {
+        self.alphas.iter().rev().find(|z| z.0 <= byte).map_or(1., |z| z.1)
+    }
+
     fn shift(&self, row: usize) -> Pixels {
         if row == 0 { self.x_shift } else { px(0.) }
     }
@@ -158,7 +275,8 @@ struct LineBox {
     /// Negative when a heading's `# ` sits left of the column (first row only).
     x_shift: Pixels,
     kind: BlockKind,
-    alpha: f32,
+    /// Zen writing's ink: (byte where it starts, alpha), the first at 0.
+    alphas: Vec<(usize, f32)>,
     gap: bool,
 }
 
@@ -239,7 +357,9 @@ impl Layout {
     }
 
     pub fn alpha_at(&self, c: usize) -> f32 {
-        self.line_box(self.index.line_of(c)).map_or(1., |b| b.alpha)
+        let line = self.index.line_of(c);
+        let byte = self.index.byte_in_line(line, c);
+        self.line_box(line).map_or(1., |b| b.alpha_at(byte))
     }
 
     /// Top-left of the caret slot for `c`, in window coordinates.
@@ -375,6 +495,173 @@ impl Layout {
         let bz = self.line_box(z)?;
         Some((self.origin.y + ba.y, self.origin.y + bz.y + bz.height))
     }
+
+    /// Private mode's shapes for every line, `live` left out.
+    #[cfg(test)]
+    pub fn mask(&self, look: HiddenLook, live: &Range<usize>) -> Vec<MaskShape> {
+        self.lines.iter().flat_map(|b| self.mask_shapes(b, look, live)).collect()
+    }
+
+    /// The part of `live` on line box `b`, for painting it as text.
+    fn live_rects(&self, b: &LineBox, live: &Range<usize>) -> Vec<Bounds<Pixels>> {
+        let info = self.index.lines[b.line];
+        let r = live.start.max(info.char_start)..live.end.min(info.char_start + info.char_len);
+        if b.gap || r.is_empty() { Vec::new() } else { self.rects(r, false) }
+    }
+
+    /// Private mode's shapes for line box `b`: a glyph's advance becomes a dot, a word's a bar,
+    /// or the glyph is kept to be blurred. Nothing moves: the shapes sit where the glyphs were.
+    /// Spaces, the chars in `live` and what the line hides anyway (a `# ` off the caret line) get none.
+    fn mask_shapes(&self, b: &LineBox, look: HiddenLook, live: &Range<usize>) -> Vec<MaskShape> {
+        let mut out = Vec::new();
+        if b.gap {
+            return out;
+        }
+        let idx = &self.index;
+        let info = idx.lines[b.line];
+        let s = idx.line_str(b.line);
+        let live_bytes = if live.start < info.char_start + info.char_len && live.end > info.char_start {
+            idx.byte_in_line(b.line, live.start.max(info.char_start))..idx.byte_in_line(b.line, live.end.min(info.char_start + info.char_len))
+        } else {
+            0..0
+        };
+        let sh = &b.shaped;
+        let ul = &sh.wrapped.unwrapped_layout;
+        let fs = ul.font_size;
+        let lh = self.line_height;
+        let baseline = (lh - ul.ascent - ul.descent) / 2. + ul.ascent;
+        // Where each run ends; right-to-left glyphs come out of byte order, so look each one up.
+        let ends: Vec<usize> = sh.colors.iter().scan(0, |end, (len, _)| {
+            *end += len;
+            Some(*end)
+        }).collect();
+        let color_at = |byte: usize| sh.colors.get(ends.partition_point(|e| *e <= byte)).or(sh.colors.last()).map_or(Hsla::default(), |(_, c)| *c);
+        // Every glyph and every hyphen at a break, in order.
+        let glyphs: Vec<(FontId, &ShapedGlyph)> = ul.runs.iter().flat_map(|r| r.glyphs.iter().map(move |g| (r.font_id, g))).collect();
+        let mut cells: Vec<MaskCell> = Vec::with_capacity(glyphs.len());
+        let hyphen = |row: usize| {
+            let (_, x, h) = sh.hyphens.iter().find(|(r, ..)| *r == row)?;
+            Some(MaskCell { row, x: *x, advance: h.width, byte: sh.rows[row].end.saturating_sub(1), glyph: None })
+        };
+        let mut r = 0;
+        for (i, &(font_id, g)) in glyphs.iter().enumerate() {
+            while r + 1 < sh.rows.len() && g.index >= sh.rows[r + 1].start {
+                cells.extend(hyphen(r));
+                r += 1;
+            }
+            let next = glyphs.get(i + 1).map_or(ul.width, |(_, n)| n.position.x);
+            let advance = (next - g.position.x).max(px(0.)).min(fs * 2.);
+            cells.push(MaskCell { row: r, x: g.position.x - sh.rows[r].x0, advance, byte: g.index, glyph: Some((font_id, g)) });
+        }
+        cells.extend(hyphen(r));
+        let char_at = |byte: usize| s.get(byte..).and_then(|t| t.chars().next()).unwrap_or(' ');
+        // One dot size a line, small enough for its average glyph: a hand-font heading's are narrow.
+        let ink: Vec<Pixels> = cells.iter().filter(|c| !char_at(c.byte).is_whitespace()).map(|c| c.advance).collect();
+        let average = if ink.is_empty() { fs } else { ink.iter().fold(px(0.), |a, b| a + *b) / ink.len() as f32 };
+        let dot_r = (fs * 0.13).min(average * 0.24);
+        // A bar being drawn: (row, x0, x1, colour).
+        let mut word: Option<(usize, Pixels, Pixels, Hsla)> = None;
+        let bar = |(row, x0, x1, color): (usize, Pixels, Pixels, Hsla), out: &mut Vec<MaskShape>| {
+            let top = self.origin.y + b.y + lh * row as f32;
+            let (h, mid) = match look {
+                HiddenLook::Solid => ((fs * 1.16).min(lh - px(4.)), baseline - fs * 0.3),
+                _ => (fs * 0.47, baseline - fs * MASK_MID),
+            };
+            let left = self.origin.x + b.shift(row);
+            out.push(MaskShape::Quad {
+                bounds: Bounds::from_corners(point(left + x0, top + mid - h / 2.), point(left + x1, top + mid + h / 2.)),
+                radius: fs * (2.5 / 19.),
+                color,
+            });
+        };
+        for MaskCell { row, x, advance, byte, glyph } in cells {
+            let ch = char_at(byte);
+            let color = color_at(byte);
+            let hidden = !ch.is_whitespace() && color.a > 0. && !live_bytes.contains(&byte);
+            if matches!(look, HiddenLook::Bars | HiddenLook::Solid) {
+                match &mut word {
+                    Some(w) if hidden && w.0 == row && w.3 == color => w.2 = x + advance,
+                    _ => {
+                        if let Some(w) = word.take() {
+                            bar(w, &mut out);
+                        }
+                        if hidden {
+                            word = Some((row, x, x + advance, color));
+                        }
+                    }
+                }
+                continue;
+            }
+            if !hidden {
+                continue;
+            }
+            let left = self.origin.x + b.shift(row) + x;
+            let top = self.origin.y + b.y + lh * row as f32;
+            match (look, glyph) {
+                (HiddenLook::Blur, Some((font_id, g))) if !g.is_emoji => {
+                    out.push(MaskShape::Ink { origin: point(left, top + baseline), font_id, ch, size: fs, color });
+                }
+                _ => {
+                    let r = dot_r;
+                    let centre = point(left + advance / 2., top + baseline - fs * MASK_MID);
+                    out.push(MaskShape::Quad { bounds: Bounds::new(centre - point(r, r), size(r * 2., r * 2.)), radius: r, color });
+                }
+            }
+        }
+        if let Some(w) = word {
+            bar(w, &mut out);
+        }
+        out
+    }
+}
+
+/// A line's text as laid out: rows after the first start at the column when the first is shifted.
+fn paint_line_text(layout: &Layout, b: &LineBox, window: &mut Window, cx: &mut App) {
+    let lh = layout.line_height;
+    let origin = point(layout.origin.x + b.x_shift, layout.origin.y + b.y);
+    if b.x_shift != px(0.) && b.shaped.rows.len() > 1 {
+        // Only the first row is shifted: paint it, then the rest from the column.
+        let first = Bounds::from_corners(point(px(-1e5), px(-1e5)), point(px(1e5), origin.y + lh));
+        let rest = Bounds::from_corners(point(px(-1e5), origin.y + lh), point(px(1e5), px(1e7)));
+        window.with_content_mask(Some(ContentMask { bounds: first }), |window| {
+            let _ = b.shaped.wrapped.paint(origin, lh, TextAlign::Left, None, window, cx);
+        });
+        window.with_content_mask(Some(ContentMask { bounds: rest }), |window| {
+            let _ = b.shaped.wrapped.paint(point(layout.origin.x, origin.y), lh, TextAlign::Left, None, window, cx);
+        });
+        for (r, x, hyphen) in &b.shaped.hyphens {
+            let at = point(layout.origin.x + b.shift(*r) + *x, origin.y + lh * *r as f32);
+            let _ = hyphen.paint(at, lh, TextAlign::Left, None, window, cx);
+        }
+        return;
+    }
+    let _ = b.shaped.wrapped.paint(origin, lh, TextAlign::Left, None, window, cx);
+    for (r, x, hyphen) in &b.shaped.hyphens {
+        let _ = hyphen.paint(point(origin.x + *x, origin.y + lh * *r as f32), lh, TextAlign::Left, None, window, cx);
+    }
+}
+
+fn paint_mask(shapes: &[MaskShape], window: &mut Window) {
+    for shape in shapes {
+        match shape {
+            MaskShape::Quad { bounds, radius, color } => window.paint_quad(fill(*bounds, *color).corner_radii(*radius)),
+            MaskShape::Ink { origin, font_id, ch, size, color } => {
+                let key = (*font_id, *ch, f32::from(*size).to_bits());
+                let ink = INK_BOXES.with(|m| *m.borrow_mut().entry(key).or_insert_with(|| window.text_system().typographic_bounds(*font_id, *size, *ch).ok()));
+                // The font's box is y-up from the baseline.
+                let Some(ink) = ink.filter(|b| b.size.width > px(0.) && b.size.height > px(0.)) else { continue };
+                let bounds = Bounds::new(point(origin.x + ink.origin.x, origin.y - ink.origin.y - ink.size.height), ink.size);
+                let shadow = BoxShadow {
+                    color: Hsla { a: color.a * 0.5, ..*color },
+                    offset: point(px(0.), px(0.)),
+                    blur_radius: *size * 0.16,
+                    spread_radius: px(0.),
+                    inset: false,
+                };
+                window.paint_drop_shadows(bounds, Corners::all(ink.size.width.min(ink.size.height) / 2.), &[shadow]);
+            }
+        }
+    }
 }
 
 pub struct TextView {
@@ -441,8 +728,8 @@ pub struct TextView {
     pub focus_range: Option<Range<usize>>,
     pub spotlight: Option<GroupId>,
     centre_request: Option<Range<usize>>,
-    zen: Option<Range<usize>>,
-    zen_prev: Option<Range<usize>>,
+    zen: Option<ZenLit>,
+    zen_prev: Option<ZenLit>,
     zen_since: Option<Instant>,
     pub highlights: Rc<Vec<Range<usize>>>,
     pub misspelled: Rc<Vec<Range<usize>>>,
@@ -924,9 +1211,10 @@ impl TextView {
         self.mode == Mode::Page && self.model.read(cx).layer
     }
 
-    /// The source lines that stay bright, or `None` when nothing is dimmed.
-    pub fn zen_lines(&self, cx: &App) -> Option<Range<usize>> {
-        if self.mode != Mode::Page || !Prefs::get(cx).zen_writing || self.layer_on(cx) || self.focus_range.is_some() {
+    /// What Zen writing keeps bright, or `None` when nothing is dimmed.
+    pub fn zen_target(&self, cx: &App) -> Option<ZenTarget> {
+        let p = Prefs::get(cx);
+        if self.mode != Mode::Page || !p.zen_writing || self.layer_on(cx) || self.focus_range.is_some() {
             return None;
         }
         let idx = &self.index;
@@ -945,7 +1233,60 @@ impl TextView {
         while b + 1 < idx.lines.len() && para(b) && para(b + 1) {
             b += 1;
         }
-        Some(a..b + 1)
+        let caret = self.sel.is_empty().then(|| self.caret());
+        // A selection lights every block it touches, whatever the unit: you see what you change.
+        let unit = match (p.zen_focus, caret) {
+            (ZenFocus::Line, _) => ZenUnit::Rows,
+            (ZenFocus::Sentence, Some(c)) => {
+                let all = sentence_keys::sentences_in(idx, &idx.paragraph_at(c));
+                // Between two sentences, the one just written stays lit until the next begins.
+                let at = all.iter().rev().find(|s| s.start <= c).or(all.first()).cloned();
+                at.map_or(ZenUnit::Blocks, ZenUnit::Sentence)
+            }
+            _ => ZenUnit::Blocks,
+        };
+        Some(ZenTarget { lines: a..b + 1, unit, caret, fade: p.zen_fade })
+    }
+
+    /// Private mode on this page: how hidden text looks, and the chars left readable (empty for
+    /// none). Writing mode only: editing shows the text.
+    pub fn private_mask(&self, cx: &App) -> Option<(HiddenLook, Range<usize>)> {
+        let p = Prefs::get(cx);
+        if self.mode != Mode::Page || !p.private_mode || self.layer_on(cx) {
+            return None;
+        }
+        let caret = self.caret();
+        let idx = &self.index;
+        let line = idx.line_of(caret);
+        let start = idx.lines[line].char_start;
+        let s = idx.line_str(line);
+        let at = caret - start;
+        let live = match p.stays_visible {
+            StaysVisible::Nothing => 0..0,
+            // The run of non-spaces the caret touches: the word being typed, with its punctuation.
+            StaysVisible::Word => {
+                let chars: Vec<char> = s.chars().collect();
+                let a = chars[..at.min(chars.len())].iter().rev().take_while(|c| !c.is_whitespace()).count();
+                let z = chars[at.min(chars.len())..].iter().take_while(|c| !c.is_whitespace()).count();
+                at - a..at + z
+            }
+            StaysVisible::Sentence => prose::sentences(s, 0..s.chars().count())
+                .into_iter()
+                .find(|x| x.range.start <= at && at <= x.range.end)
+                .map_or(0..0, |x| x.range),
+        };
+        let live = if live.is_empty() { caret..caret } else { start + live.start..start + live.end };
+        Some((p.hidden_look, live))
+    }
+
+    /// An empty page shows its title and hint, unless Private mode hides the page.
+    pub fn shows_prompt(&self, cx: &App) -> bool {
+        self.index.len() == 0 && self.mode == Mode::Page && !self.quiet_when_empty && self.private_mask(cx).is_none()
+    }
+
+    /// Misspelled words to underline: none while Private mode hides the page.
+    pub fn spelling_to_draw(&self, cx: &App) -> Rc<Vec<Range<usize>>> {
+        if self.private_mask(cx).is_some() { Rc::default() } else { self.misspelled.clone() }
     }
 
     pub fn typewriter(&self, cx: &App) -> bool {
@@ -2785,25 +3126,14 @@ impl TextView {
         let now = Instant::now();
         self.fades.retain(|(_, t, _, _)| now.duration_since(*t) < Duration::from_millis(350));
         let fades = self.fades.clone();
-        let zen = self.zen_lines(cx);
-        if zen != self.zen {
-            self.zen_prev = std::mem::replace(&mut self.zen, zen);
-            self.zen_since = (Prefs::get(cx).motion() != crate::prefs::Effects::Off).then_some(now);
-        }
-        let zen_k = match self.zen_since {
-            Some(t) if now.duration_since(t) < ZEN_FADE => {
-                let k = now.duration_since(t).as_secs_f32() / ZEN_FADE.as_secs_f32();
-                1. - (1. - k) * (1. - k)
-            }
-            _ => {
-                self.zen_since = None;
-                1.
-            }
-        };
-        let zen_alpha = |lit: &Option<Range<usize>>, li: usize| match lit {
-            Some(r) if !r.contains(&li) => ZEN_DIM,
-            _ => 1.,
-        };
+        let zen_target = self.zen_target(cx);
+        let zen_motion = Prefs::get(cx).motion() != crate::prefs::Effects::Off;
+        // Line focus and Distance fade need every line's rows before they know what to dim: a
+        // first pass lays out the lines undimmed (cached, as the caret moving doesn't change it).
+        let by_rows = |unit: &ZenUnit, fade: ZenFade| *unit == ZenUnit::Rows || fade != ZenFade::Off;
+        let need_rows = zen_target.as_ref().is_some_and(|t| by_rows(&t.unit, t.fade))
+            || self.zen.as_ref().is_some_and(|z| by_rows(&z.unit, z.fade))
+            || (self.zen_since.is_some() && self.zen_prev.as_ref().is_some_and(|z| by_rows(&z.unit, z.fade)));
         let kind_of = |l: usize| {
             styles.get(l).map(|s| s.kind).unwrap_or(if idx.line_str(l).trim().is_empty() { BlockKind::Blank } else { BlockKind::Paragraph })
         };
@@ -2840,11 +3170,10 @@ impl TextView {
             }
             px(0.)
         };
-        let mut lines = Vec::with_capacity(idx.lines.len());
-        let mut y = px(0.);
         let mut used = HashMap::new();
         let mut cache = self.cache.borrow_mut();
-        for li in 0..idx.lines.len() {
+        // One source line laid out, Zen writing's ink given as (byte where it starts, alpha).
+        let mut lay = |li: usize, zen: &[(usize, f32)]| -> LineBox {
             let s = idx.line_str(li);
             let info = idx.lines[li];
             let style = styles.get(li).cloned().unwrap_or(LineStyle {
@@ -2865,8 +3194,6 @@ impl TextView {
                 .fold(px(0.), |a, b| a + b);
             // Shown, the `# ` hangs left of the column so the title doesn't move.
             let hang = style.hidden_prefix > 0 && self.mode == Mode::Page && prefix_w <= margin;
-            let (from, to) = (zen_alpha(&self.zen_prev, li), zen_alpha(&self.zen, li));
-            let line_alpha = if zen_k < 1. { from + (to - from) * zen_k } else { to };
             let line_range = info.char_start..info.char_start + info.char_len;
             // Attribute boundaries, in bytes within the line.
             let mut cuts = vec![0, s.len()];
@@ -2874,6 +3201,7 @@ impl TextView {
                 cuts.push(r.start);
                 cuts.push(r.end);
             }
+            cuts.extend(zen.iter().map(|z| z.0));
             let to_b = |c: usize| idx.byte_in_line(li, c.clamp(line_range.start, line_range.end));
             let ghost_cuts = |r: &Range<usize>, cuts: &mut Vec<usize>| {
                 if r.start < line_range.end && r.end > line_range.start {
@@ -2961,6 +3289,7 @@ impl TextView {
                     let k = 1. - (1. - k) * (1. - k);
                     ghost_factor = from + (to - from) * k;
                 }
+                let line_alpha = zen.iter().rev().find(|z| z.0 <= a).map_or(1., |z| z.1);
                 color.a *= ghost_factor * line_alpha;
                 if let Some(u) = underline.as_mut().and_then(|u| u.color.as_mut()) {
                     u.a *= line_alpha;
@@ -3038,15 +3367,103 @@ impl TextView {
                         Some((i, ul.x_for_index(r.end) - r.x0, line))
                     })
                     .collect();
-                Rc::new(ShapedLine { wrapped, rows, hyphens })
+                let colors = runs.iter().map(|r| (r.len, r.color)).collect();
+                Rc::new(ShapedLine { wrapped, rows, hyphens, colors })
             };
             used.insert(k, shaped.clone());
             let rows = shaped.rows.len().max(1);
             let gap = is_gap(li);
             let height = if gap { gap_height(li) } else { m.line_height * rows as f32 };
             let x_shift = if indent > px(0.) { indent } else { -shift_px };
-            lines.push(LineBox { line: li, shaped, y, height, x_shift, kind: style.kind, alpha: line_alpha, gap });
-            y += height;
+            LineBox { line: li, shaped, y: px(0.), height, x_shift, kind: style.kind, alphas: zen.to_vec(), gap }
+        };
+        let n = idx.lines.len();
+        let mut base: Vec<Option<LineBox>> = if need_rows { (0..n).map(|li| Some(lay(li, &[(0, 1.)]))).collect() } else { Vec::new() };
+        let rows_of = |base: &[Option<LineBox>], l: usize, byte: usize| base.get(l).and_then(Option::as_ref).map_or(0, |b| Layout::row_of(&b.shaped, byte));
+        // Where each line sits for Zen writing's steps (see `ZenLit`): its block, its first row.
+        let blank = |l: usize| idx.line_str(l).trim().is_empty();
+        let para = |l: usize| styles.get(l).is_some_and(|s| s.kind == BlockKind::Paragraph);
+        let (mut block_at, mut row_at) = (Vec::with_capacity(n), Vec::with_capacity(n));
+        let (mut blocks, mut rows) = (0, 0);
+        for l in 0..n {
+            if blank(l) {
+                block_at.push(2 * blocks);
+                row_at.push(2 * rows);
+                continue;
+            }
+            if !(l > 0 && para(l) && para(l - 1)) {
+                blocks += 1;
+            }
+            block_at.push(2 * blocks - 1);
+            row_at.push(2 * rows + 1);
+            rows += base.get(l).and_then(Option::as_ref).map_or(1, |b| b.shaped.rows.len().max(1));
+        }
+        let row_pos = |base: &[Option<LineBox>], l: usize, byte: usize| row_at[l] + if blank(l) { 0 } else { 2 * rows_of(base, l, byte) };
+        let row_of_char = |c: usize| {
+            let l = idx.line_of(c);
+            row_pos(&base, l, idx.byte_in_line(l, c))
+        };
+        let lit = zen_target.map(|t| {
+            let rows = match (&t.unit, t.caret) {
+                (ZenUnit::Rows, Some(c)) => (row_of_char(c), row_of_char(c)),
+                (ZenUnit::Sentence(r), _) => (row_of_char(r.start), row_of_char(r.end.saturating_sub(1).max(r.start))),
+                _ => (row_at[t.lines.start], row_pos(&base, t.lines.end - 1, usize::MAX)),
+            };
+            ZenLit { unit: t.unit, blocks: (block_at[t.lines.start], block_at[t.lines.end - 1]), rows, fade: t.fade }
+        });
+        if ZenLit::moved(&self.zen, &lit) {
+            self.zen_prev = std::mem::replace(&mut self.zen, lit);
+            self.zen_since = zen_motion.then_some(now);
+        } else {
+            self.zen = lit;
+        }
+        let zen_k = match self.zen_since {
+            Some(t) if now.duration_since(t) < ZEN_FADE => {
+                let k = now.duration_since(t).as_secs_f32() / ZEN_FADE.as_secs_f32();
+                1. - (1. - k) * (1. - k)
+            }
+            _ => {
+                self.zen_since = None;
+                1.
+            }
+        };
+        let (zen_now, zen_was) = (&self.zen, if zen_k < 1. { &self.zen_prev } else { &None });
+        let mut lines = Vec::with_capacity(n);
+        let mut y = px(0.);
+        for (li, &block) in block_at.iter().enumerate() {
+            // Where the ink changes in this line: a sentence's ends, or every row with Line focus.
+            let (s, start) = (idx.line_str(li), idx.lines[li].char_start);
+            let mut cuts = vec![0];
+            for z in [zen_now, zen_was].into_iter().flatten() {
+                if let ZenUnit::Sentence(r) = &z.unit {
+                    for c in [r.start, r.end] {
+                        if start < c && c < start + idx.lines[li].char_len {
+                            cuts.push(idx.byte_in_line(li, c));
+                        }
+                    }
+                }
+            }
+            // The ink can change at every row: every row was laid out once for that.
+            cuts.extend(base.get(li).and_then(Option::as_ref).into_iter().flat_map(|b| b.shaped.rows.iter().map(|r| r.start)));
+            cuts.sort_unstable();
+            cuts.dedup();
+            let mut zen: Vec<(usize, f32)> = Vec::with_capacity(cuts.len());
+            for b in cuts {
+                let (c, row) = (start + s[..b].chars().count(), row_pos(&base, li, b));
+                let alpha = |z: &Option<ZenLit>| z.as_ref().map_or(1., |z| z.alpha(block, row, c));
+                let to = alpha(zen_now);
+                let a = if zen_k < 1. { alpha(&self.zen_prev) + (to - alpha(&self.zen_prev)) * zen_k } else { to };
+                if zen.last().is_none_or(|z| z.1 != a) {
+                    zen.push((b, a));
+                }
+            }
+            let mut b = match base.get_mut(li).and_then(Option::take) {
+                Some(b) if zen == [(0, 1.)] => b,
+                _ => lay(li, &zen),
+            };
+            b.y = y;
+            y += b.height;
+            lines.push(b);
         }
         *cache = used;
         let top_pad = match self.mode {
@@ -3228,7 +3645,7 @@ impl Element for PageElement {
         let caret_slide = view.caret_slide;
         let placeholder = view.placeholder.clone();
         let hint_after = view.hint_after.clone();
-        let quiet_when_empty = view.quiet_when_empty;
+        let prompt = view.shows_prompt(cx);
         let animating = view.wash_active()
             || !view.fades.is_empty()
             || view.zen_fading()
@@ -3242,8 +3659,9 @@ impl Element for PageElement {
         let current_highlight = view.current_highlight;
         let chip = view.hover_chip(cx);
         let chip_rect = view.chip_rect.clone();
-        let misspelled = view.misspelled.clone();
+        let misspelled = view.spelling_to_draw(cx);
         let lab = view.lab.clone();
+        let private = view.private_mask(cx);
         let carrying = view.carrying.clone();
         let drop_mark = view.drop_mark;
         let in_cut = view.cut_being_edited(window);
@@ -3337,7 +3755,7 @@ impl Element for PageElement {
                 }
             }
 
-            for mk in lab.marks.iter().filter(|m| !m.word) {
+            for mk in lab.marks.iter().filter(|m| !m.word && private.is_none()) {
                 let alpha = if mk.current { 0.2 } else { 0.11 };
                 for r in layout.rects(mk.range.clone(), false) {
                     window.paint_quad(fill(r, ca(theme::mark(), alpha)).corner_radii(px(3.)));
@@ -3372,32 +3790,23 @@ impl Element for PageElement {
                     let y = origin.y + lh / 2.;
                     window.paint_quad(fill(
                         Bounds::new(point(layout.origin.x, y), size(layout.column_width, px(1.))),
-                        ca(theme::line(), b.alpha),
+                        ca(theme::line(), b.alpha_at(0)),
                     ));
                     if caret_line_is(&layout, caret, b.line) {
                         let _ = b.shaped.wrapped.paint(origin, lh, TextAlign::Left, None, window, cx);
                     }
                     continue;
                 }
-                if b.x_shift != px(0.) && b.shaped.rows.len() > 1 {
-                    // Only the first row is shifted: paint it, then the rest from the column.
-                    let first = Bounds::from_corners(point(px(-1e5), px(-1e5)), point(px(1e5), origin.y + lh));
-                    let rest = Bounds::from_corners(point(px(-1e5), origin.y + lh), point(px(1e5), px(1e7)));
-                    window.with_content_mask(Some(ContentMask { bounds: first }), |window| {
-                        let _ = b.shaped.wrapped.paint(origin, lh, TextAlign::Left, None, window, cx);
-                    });
-                    window.with_content_mask(Some(ContentMask { bounds: rest }), |window| {
-                        let _ = b.shaped.wrapped.paint(point(layout.origin.x, origin.y), lh, TextAlign::Left, None, window, cx);
-                    });
-                    for (r, x, hyphen) in &b.shaped.hyphens {
-                        let at = point(layout.origin.x + b.shift(*r) + *x, origin.y + lh * *r as f32);
-                        let _ = hyphen.paint(at, lh, TextAlign::Left, None, window, cx);
+                match &private {
+                    // Private mode: the live chars as text, clipped to them; the rest as shapes.
+                    Some((look, live)) => {
+                        for r in layout.live_rects(b, live) {
+                            let clip = Bounds::from_corners(point(r.left() - px(2.), r.top()), point(r.right() + px(2.), r.bottom()));
+                            window.with_content_mask(Some(ContentMask { bounds: clip }), |window| paint_line_text(&layout, b, window, cx));
+                        }
+                        paint_mask(&layout.mask_shapes(b, *look, live), window);
                     }
-                    continue;
-                }
-                let _ = b.shaped.wrapped.paint(origin, lh, TextAlign::Left, None, window, cx);
-                for (r, x, hyphen) in &b.shaped.hyphens {
-                    let _ = hyphen.paint(point(origin.x + *x, origin.y + lh * *r as f32), lh, TextAlign::Left, None, window, cx);
+                    None => paint_line_text(&layout, b, window, cx),
                 }
             }
 
@@ -3425,7 +3834,7 @@ impl Element for PageElement {
                     let line = window.text_system().shape_line(hint_after.clone(), m.font_size, &[run], None);
                     let _ = line.paint(point(p.x + px(2.), p.y), lh, TextAlign::Left, None, window, cx);
                 }
-            } else if layout.index.len() == 0 && mode == Mode::Page && !quiet_when_empty {
+            } else if layout.index.len() == 0 && prompt {
                 let run = |text: &str, weight: FontWeight| TextRun {
                     len: text.len(),
                     font: Font { weight, ..font(m.family.clone()) },
@@ -3446,7 +3855,7 @@ impl Element for PageElement {
                 }
             }
 
-            if layer {
+            if layer && private.is_none() {
                 for g in groups.iter() {
                     // A version without the words shows as a cut (faded text or a mark): only
                     // the group's dots say it is one of the group's versions.
@@ -3466,7 +3875,7 @@ impl Element for PageElement {
                 }
             }
 
-            for (r, current) in lab.cuts.iter() {
+            for (r, current) in lab.cuts.iter().filter(|_| private.is_none()) {
                 for rect in layout.rects(r.clone(), false) {
                     let mid = rect.top() + lh / 2. + px(1.);
                     if *current {
@@ -3480,7 +3889,7 @@ impl Element for PageElement {
             }
 
             // The current mark also gets Walk through's wash, so the bar's quote and the page agree.
-            for mk in lab.marks.iter().filter(|m| m.word) {
+            for mk in lab.marks.iter().filter(|m| m.word && private.is_none()) {
                 let alpha = if mk.current { 1. } else { 0.75 };
                 for rect in layout.rects(mk.range.clone(), false) {
                     if mk.current {
@@ -3500,7 +3909,7 @@ impl Element for PageElement {
             let note_x = layout.origin.x + layout.column_width + px(30.);
             let room = bounds.right() - note_x - px(16.);
             let mut review: Vec<(Pixels, &PaintMark)> = Vec::new();
-            for mk in lab.marks.iter().filter(|m| m.note.is_some()) {
+            for mk in lab.marks.iter().filter(|m| m.note.is_some() && private.is_none()) {
                 let Some(first) = layout.rects(mk.range.clone(), false).into_iter().next() else { continue };
                 review.push((first.top(), mk));
             }

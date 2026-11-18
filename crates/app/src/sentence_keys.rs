@@ -5,7 +5,7 @@ use doc_model::Place;
 use crate::markdown::{self, BlockKind};
 use crate::text::TextIndex;
 
-fn sentences_in(idx: &TextIndex, p: &Range<usize>) -> Vec<Range<usize>> {
+pub fn sentences_in(idx: &TextIndex, p: &Range<usize>) -> Vec<Range<usize>> {
     if p.is_empty() {
         return Vec::new();
     }

@@ -402,6 +402,7 @@ fn register_actions(cx: &mut App) {
     cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
     cx.on_action(|_: &ToggleZenWriting, cx| crate::sheets::set_prefs(cx, |p| p.zen_writing = !p.zen_writing));
     cx.on_action(|_: &ToggleTypewriter, cx| crate::sheets::set_prefs(cx, |p| p.typewriter = !p.typewriter));
+    cx.on_action(|_: &TogglePrivate, cx| crate::sheets::set_prefs(cx, |p| p.private_mode = !p.private_mode));
     cx.on_action(|_: &AlignLeft, cx| crate::sheets::set_prefs(cx, |p| p.alignment = prefs::Alignment::Left));
     cx.on_action(|_: &AlignJustified, cx| crate::sheets::set_prefs(cx, |p| p.alignment = prefs::Alignment::Justified));
     cx.on_action(|_: &ToggleHyphenation, cx| crate::sheets::set_prefs(cx, |p| p.hyphenation = !p.hyphenation));
