@@ -3,10 +3,10 @@
 # the NFR-1 performance budgets.
 name: CI
 
+# Manual-only until the repo goes public (dsky-a8n): macOS runners bill at 10× on a
+# private repo (~$2–6 a run). Re-enable push/pull_request once public — runners are
+# free there. The coreutils fix for the flow scripts' `timeout` landed in 002a88d.
 on:
-  push:
-    branches: [main]
-  pull_request:
   workflow_dispatch:
 
 concurrency:
