@@ -30,6 +30,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: GNU coreutils (the flow scripts run the app under `timeout`)
+        run: |
+          brew install coreutils
+          echo "/opt/homebrew/opt/coreutils/libexec/gnubin" >> "$GITHUB_PATH"
+
       - name: Rust toolchain (rust-toolchain.toml)
         run: |
           rustup toolchain install
