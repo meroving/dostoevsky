@@ -1272,5 +1272,11 @@
   "Line#a row of text": "Riga",
   "Distance fade": "Dissolvenza con la distanza",
   "Near#distance fade": "Vicino",
-  "Whole page": "Tutta la pagina"
+  "Whole page": "Tutta la pagina",
+  "Bigger": "Più grande",
+  "Smaller": "Più piccolo",
+  "Default Size": "Dimensione predefinita",
+  "Bigger text": "Testo più grande",
+  "Smaller text": "Testo più piccolo",
+  "Default text size": "Dimensione del testo predefinita"
 }

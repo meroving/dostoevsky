@@ -111,6 +111,7 @@ cx.bind_keys([
 
 - The bare ↑/↓ binding is conditional: `PageView` adds the `hovering_group` identifier to its `KeyContext` only while the pointer is over a group **and** the layer is on (PRD ALT-7). Otherwise the arrows fall through to caret movement.
 - User overrides: load `~/.config/dostoevsky/keymap.json` with `KeyBinding::load` (fallible) and report bad entries in a toast instead of panicking.
+- Text size: ⌘= / ⌘− / ⌘0 (`TextBigger` / `TextSmaller` / `TextDefaultSize`) step the four sizes Preferences → Page offers, so the keys and the chips move one `prefs.font_size`. macOS reports ⌘⇧= as the key "+" with no shift, so TextBigger binds both `cmd-+` and `cmd-=`: the native menu bar shows a binding's *first* match (⌘+, as Pages and Safari draw Bigger) while the shortcuts sheet's lookup takes the *last* (⌘=) — each by design of those surfaces.
 - Note for later ports: some Linux desktops intercept Ctrl+Alt+↑/↓.
 
 ## 6. Effects and sound

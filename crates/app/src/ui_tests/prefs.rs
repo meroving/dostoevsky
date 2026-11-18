@@ -374,3 +374,106 @@ fn background_opacity_makes_the_window_glass() {
     let old: Prefs = serde_json::from_str(r#"{"font_size": 17.0}"#).unwrap();
     assert_eq!(old.background_opacity, 1.);
 }
+
+/// dsky-nke1.1: ⌘= and ⌘− step the same four sizes Preferences → Page offers, and ⌘0 is the default.
+#[test]
+fn text_size_keys() {
+    let mut ui = Ui::open(DOC);
+    let size = |ui: &Ui| prefs(ui).font_size;
+    let laid_out = |ui: &Ui| ui.read(|ws, cx| ws.page.read(cx).layout.as_ref().expect("laid out").font_size_of(0));
+
+    ui.keys("cmd-= cmd-=");
+    assert_eq!((size(&ui), laid_out(&ui)), (21., Some(px(21.))), "19 → 21 in two steps, and the page re-lays out");
+    ui.keys("cmd-=");
+    assert_eq!(size(&ui), 21., "the top of the four");
+
+    ui.keys("cmd-0");
+    assert_eq!(size(&ui), 19., "⌘0 returns to the default");
+
+    ui.keys("cmd-- cmd-- cmd--");
+    assert_eq!(size(&ui), 15.);
+    ui.keys("cmd--");
+    assert_eq!(size(&ui), 15., "the bottom of the four");
+
+    // ⇧⌘= reaches the app as ⌘+.
+    ui.keys("cmd-+");
+    assert_eq!(size(&ui), 17.);
+}
+
+/// dsky-nke1.1: View → Text carries the three items, greyed out at the ends.
+#[test]
+fn text_size_menu_items() {
+    fn with_text_menu(p: &Prefs, f: impl FnOnce(&[MenuItem])) {
+        let menus = crate::actions::menus(&[], p, None, false);
+        let m = menus
+            .iter()
+            .find(|m| m.name.as_ref() == "View")
+            .expect("View menu")
+            .items
+            .iter()
+            .find_map(|it| match it {
+                MenuItem::Submenu(m) if m.name.as_ref() == "Text" => Some(m),
+                _ => None,
+            })
+            .expect("View → Text");
+        f(&m.items)
+    }
+    let state = |items: &[MenuItem], name: &str| {
+        items.iter().find_map(|it| match it {
+            MenuItem::Action { name: n, disabled, .. } if n.as_ref() == name => Some(*disabled),
+            _ => None,
+        })
+    };
+
+    with_text_menu(&Prefs::default(), |items| {
+        let names: Vec<_> = items.iter().filter_map(|it| match it {
+            MenuItem::Action { name, .. } => Some(name.as_ref().to_string()),
+            _ => None,
+        }).collect();
+        assert_eq!(
+            names.iter().take(3).map(String::as_str).collect::<Vec<_>>(),
+            ["Bigger", "Smaller", "Default Size"],
+            "the size items sit above alignment"
+        );
+        assert_eq!((state(items, "Bigger"), state(items, "Smaller")), (Some(false), Some(false)));
+    });
+
+    with_text_menu(&Prefs { font_size: 21., ..Prefs::default() }, |items| {
+        assert_eq!((state(items, "Bigger"), state(items, "Smaller")), (Some(true), Some(false)), "21 is the top");
+    });
+
+    with_text_menu(&Prefs { font_size: 15., ..Prefs::default() }, |items| {
+        assert_eq!((state(items, "Bigger"), state(items, "Smaller")), (Some(false), Some(true)), "15 is the bottom");
+    });
+
+    // A hand-edited size outside the four still steps back in.
+    let mut p = Prefs { font_size: 18., ..Prefs::default() };
+    assert!(p.step_text_size(1) && p.font_size == 19.);
+    assert!(p.step_text_size(-1) && p.step_text_size(-1) && p.font_size == 15.);
+    assert!(!p.step_text_size(-1));
+}
+
+/// dsky-nke1.1: the shortcuts sheet lists the three, with ⌘= as the label (the last binding).
+#[test]
+fn text_size_shortcut_rows() {
+    let ui = Ui::open(DOC);
+    let (bigger, smaller, default) = ui.read(|_, cx| {
+        (
+            crate::context_menu::shortcut_label(&crate::actions::TextBigger, cx),
+            crate::context_menu::shortcut_label(&crate::actions::TextSmaller, cx),
+            crate::context_menu::shortcut_label(&crate::actions::TextDefaultSize, cx),
+        )
+    });
+    assert_eq!(bigger.as_deref(), Some("⌘="));
+    assert_eq!(smaller.as_deref(), Some("⌘−"));
+    assert_eq!(default.as_deref(), Some("⌘0"));
+
+    let app = crate::actions::shortcut_groups()
+        .into_iter()
+        .find(|(name, _)| *name == "App")
+        .expect("the App group");
+    let labels: Vec<&str> = app.1.iter().map(|(l, _)| l.as_ref()).collect();
+    for wanted in ["Bigger text", "Smaller text", "Default text size"] {
+        assert!(labels.contains(&wanted), "{labels:?} is missing {wanted}");
+    }
+}

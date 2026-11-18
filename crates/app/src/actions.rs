@@ -148,6 +148,9 @@ actions!(
         AlignLeft,
         AlignJustified,
         ToggleHyphenation,
+        TextBigger,
+        TextSmaller,
+        TextDefaultSize,
         ParagraphsSpaced,
         ParagraphsIndented,
         AppearanceDark,
@@ -346,6 +349,12 @@ pub fn default_bindings_spec() -> Vec<(&'static str, Option<&'static str>, Box<d
         // ⌘H stays Hide.
         ("cmd-shift-h", None, Box::new(TogglePrivate) as Box<dyn Action>),
         ("ctrl-cmd-l", None, Box::new(ToggleAppearance) as Box<dyn Action>),
+        // ⌘+ is how macOS reports ⌘⇧=; listed first, so the menu bar shows ⌘+ (as Pages and
+        // Safari do) and the shortcuts sheet's last-wins shows ⌘=.
+        ("cmd-+", None, Box::new(TextBigger) as Box<dyn Action>),
+        ("cmd-=", None, Box::new(TextBigger) as Box<dyn Action>),
+        ("cmd--", None, Box::new(TextSmaller) as Box<dyn Action>),
+        ("cmd-0", None, Box::new(TextDefaultSize) as Box<dyn Action>),
         ("cmd-p", None, Box::new(ToggleProject) as Box<dyn Action>),
         ("cmd-[", None, Box::new(PreviousFile) as Box<dyn Action>),
         ("cmd-]", None, Box::new(NextFile) as Box<dyn Action>),
@@ -474,6 +483,9 @@ pub fn shortcut_groups() -> Vec<ShortcutGroup> {
                 (tr!("Typewriter scrolling"), Box::new(ToggleTypewriter)),
                 (tr!("Private mode"), Box::new(TogglePrivate)),
                 (tr!("Dark / light"), Box::new(ToggleAppearance)),
+                (tr!("Bigger text"), Box::new(TextBigger)),
+                (tr!("Smaller text"), Box::new(TextSmaller)),
+                (tr!("Default text size"), Box::new(TextDefaultSize)),
             ],
         ),
     ]
@@ -548,15 +560,25 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
             MenuItem::separator(),
             MenuItem::action(tr!("Toggle Dark / Light"), ToggleAppearance),
         ])),
-        MenuItem::submenu(Menu::new(tr!("Text")).items([
-            MenuItem::action(trc!("alignment", "Left"), AlignLeft).checked(prefs.alignment == Alignment::Left),
-            MenuItem::action(tr!("Justified"), AlignJustified).checked(prefs.alignment == Alignment::Justified),
-            MenuItem::separator(),
-            MenuItem::action(tr!("Hyphenate"), ToggleHyphenation).checked(prefs.hyphenation),
-            MenuItem::separator(),
-            MenuItem::action(tr!("Spaced Paragraphs"), ParagraphsSpaced).checked(prefs.paragraphs == ParagraphLook::Spaced),
-            MenuItem::action(tr!("Indented Paragraphs"), ParagraphsIndented).checked(prefs.paragraphs == ParagraphLook::Indented),
-        ])),
+        MenuItem::submenu(Menu::new(tr!("Text")).items({
+            let mut text_items = vec![
+                MenuItem::action(tr!("Bigger"), TextBigger).disabled(prefs.font_size >= Prefs::TEXT_SIZES[3]),
+                MenuItem::action(tr!("Smaller"), TextSmaller).disabled(prefs.font_size <= Prefs::TEXT_SIZES[0]),
+                MenuItem::separator(),
+                MenuItem::action(tr!("Default Size"), TextDefaultSize),
+                MenuItem::separator(),
+            ];
+            text_items.extend([
+                MenuItem::action(trc!("alignment", "Left"), AlignLeft).checked(prefs.alignment == Alignment::Left),
+                MenuItem::action(tr!("Justified"), AlignJustified).checked(prefs.alignment == Alignment::Justified),
+                MenuItem::separator(),
+                MenuItem::action(tr!("Hyphenate"), ToggleHyphenation).checked(prefs.hyphenation),
+                MenuItem::separator(),
+                MenuItem::action(tr!("Spaced Paragraphs"), ParagraphsSpaced).checked(prefs.paragraphs == ParagraphLook::Spaced),
+                MenuItem::action(tr!("Indented Paragraphs"), ParagraphsIndented).checked(prefs.paragraphs == ParagraphLook::Indented),
+            ]);
+            text_items
+        })),
         MenuItem::separator(),
         MenuItem::action(tr!("Keyboard Shortcuts"), ShowShortcuts),
         MenuItem::separator(),

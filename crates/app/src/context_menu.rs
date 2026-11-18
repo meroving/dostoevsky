@@ -421,6 +421,7 @@ pub fn format_keystroke(m: &Modifiers, key: &str) -> String {
         "space" => "space".into(),
         "pageup" => "⇞".into(),
         "pagedown" => "⇟".into(),
+        "-" => "−".into(),
         k if k.chars().count() == 1 => k.to_uppercase(),
         k => k.to_string(),
     };

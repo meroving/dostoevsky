@@ -415,6 +415,16 @@ fn register_actions(cx: &mut App) {
         let to = if theme::is_light() { prefs::Appearance::Dark } else { prefs::Appearance::Light };
         crate::sheets::set_prefs(cx, |p| p.appearance = to);
     });
+    // The same four sizes Preferences → Page offers (dsky-nke1.1); ⌘0 is the default, 19.
+    cx.on_action(|_: &TextBigger, cx| crate::sheets::set_prefs(cx, |p| {
+        p.step_text_size(1);
+    }));
+    cx.on_action(|_: &TextSmaller, cx| crate::sheets::set_prefs(cx, |p| {
+        p.step_text_size(-1);
+    }));
+    cx.on_action(|_: &TextDefaultSize, cx| crate::sheets::set_prefs(cx, |p| {
+        p.font_size = Prefs::TEXT_SIZES[2];
+    }));
     cx.on_action(|_: &NewDocument, cx| {
         open_model(DocModel::new(doc_model::Document::new()), cx);
     });

@@ -1272,5 +1272,11 @@
   "Line#a row of text": "Zeile",
   "Distance fade": "Verblassen nach Abstand",
   "Near#distance fade": "Nah",
-  "Whole page": "Ganze Seite"
+  "Whole page": "Ganze Seite",
+  "Bigger": "Größer",
+  "Smaller": "Kleiner",
+  "Default Size": "Standardgröße",
+  "Bigger text": "Text vergrößern",
+  "Smaller text": "Text verkleinern",
+  "Default text size": "Standardtextgröße"
 }

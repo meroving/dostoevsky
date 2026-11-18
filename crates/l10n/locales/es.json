@@ -1272,5 +1272,11 @@
   "Line#a row of text": "Línea",
   "Distance fade": "Desvanecer con la distancia",
   "Near#distance fade": "Cerca",
-  "Whole page": "Toda la página"
+  "Whole page": "Toda la página",
+  "Bigger": "Más grande",
+  "Smaller": "Más pequeño",
+  "Default Size": "Tamaño predeterminado",
+  "Bigger text": "Texto más grande",
+  "Smaller text": "Texto más pequeño",
+  "Default text size": "Tamaño de texto predeterminado"
 }

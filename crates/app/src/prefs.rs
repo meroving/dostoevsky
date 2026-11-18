@@ -448,6 +448,26 @@ impl Prefs {
         crate::files::support_dir().map(|d| d.join("prefs.json"))
     }
 
+    /// The page's four sizes, smallest first. ⌘= and ⌘− (View → Text) step the same set
+    /// Preferences → Page offers; ⌘0 returns to the default, 19.
+    pub const TEXT_SIZES: [f32; 4] = [15., 17., 19., 21.];
+
+    /// The next size up (`dir` positive) or down, stopping at the ends. Returns whether it moved.
+    pub fn step_text_size(&mut self, dir: i32) -> bool {
+        let next = if dir > 0 {
+            Self::TEXT_SIZES.iter().copied().find(|&s| s > self.font_size)
+        } else {
+            Self::TEXT_SIZES.iter().copied().rev().find(|&s| s < self.font_size)
+        };
+        match next {
+            Some(s) => {
+                self.font_size = s;
+                true
+            }
+            None => false,
+        }
+    }
+
     pub fn load() -> Prefs {
         Self::path()
             .and_then(|p| std::fs::read(p).ok())

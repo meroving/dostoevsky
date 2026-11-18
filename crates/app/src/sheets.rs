@@ -52,8 +52,8 @@ pub(crate) fn set_prefs(cx: &mut App, f: impl FnOnce(&mut Prefs)) {
     f(&mut p);
     p.save();
     let old = Prefs::get(cx);
-    let menus_changed = (old.appearance, old.zen_writing, old.typewriter, old.private_mode, old.alignment, old.hyphenation, old.paragraphs, old.ai.enabled, &old.language)
-        != (p.appearance, p.zen_writing, p.typewriter, p.private_mode, p.alignment, p.hyphenation, p.paragraphs, p.ai.enabled, &p.language);
+    let menus_changed = (old.appearance, old.zen_writing, old.typewriter, old.private_mode, old.alignment, old.hyphenation, old.paragraphs, old.font_size, old.ai.enabled, &old.language)
+        != (p.appearance, p.zen_writing, p.typewriter, p.private_mode, p.alignment, p.hyphenation, p.paragraphs, p.font_size, p.ai.enabled, &p.language);
     if old.language != p.language {
         // Tests switch only their own thread, so tests running beside them stay in English.
         if cfg!(test) {
@@ -1017,7 +1017,7 @@ impl Workspace {
                 ),
             )
             .into_any_element(),
-            row(tr!("Text size"), None, segmented("size", [15, 17, 19, 21].map(|s| (s, s.to_string())).to_vec(), p.font_size.round() as i32, |p, v| p.font_size = v as f32))
+            row(tr!("Text size"), None, segmented("size", Prefs::TEXT_SIZES.iter().map(|&s| (s as i32, s.to_string())).collect(), p.font_size.round() as i32, |p, v| p.font_size = v as f32))
                 .into_any_element(),
             row(
                 tr!("Column width"),

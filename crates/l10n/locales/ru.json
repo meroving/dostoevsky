@@ -1358,5 +1358,11 @@
   "Line#a row of text": "Строка",
   "Distance fade": "Затухание по расстоянию",
   "Near#distance fade": "Рядом",
-  "Whole page": "Вся страница"
+  "Whole page": "Вся страница",
+  "Bigger": "Больше",
+  "Smaller": "Меньше",
+  "Default Size": "Обычный размер",
+  "Bigger text": "Больше",
+  "Smaller text": "Меньше",
+  "Default text size": "Обычный размер текста"
 }
