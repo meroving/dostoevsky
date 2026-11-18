@@ -56,6 +56,7 @@ pub struct Workspace {
     pub(crate) overlay: crate::effects::Overlay,
     pub(crate) sheet: Option<crate::sheets::Sheet>,
     pub(crate) sheet_focus: FocusHandle,
+    pub(crate) detached_dragging: bool,
     /// The search field of an open model menu in Preferences → AI.
     pub(crate) model_search: Option<crate::ai_prefs::ModelSearch>,
     pub(crate) watcher: Option<crate::external::Watch>,
@@ -155,6 +156,7 @@ impl Workspace {
             overlay: Default::default(),
             sheet: None,
             sheet_focus: cx.focus_handle(),
+            detached_dragging: false,
             model_search: None,
             watcher: None,
             watched: None,
@@ -1713,6 +1715,7 @@ impl Render for Workspace {
             self.resolve_disk_change(window, cx);
         }
         self.close_drawer_after_drag(cx);
+        self.finish_drags(window, cx);
         let m = self.model.read(cx);
         let layer = m.layer;
         let dirty = m.dirty();
@@ -1905,6 +1908,11 @@ impl Render for Workspace {
                     .right(px(right))
                     .on_drop(cx.listener(|this, d: &crate::overflow::NoteDrag, window, cx| this.drop_note(d, window, cx)))
                     .on_drop(cx.listener(|this, d: &crate::drag::TextDrag, window, cx| this.drop_text(d, window, cx)))
+                    .on_drop(cx.listener(|this, d: &crate::drag::DetachedDrag, window, cx| this.drop_detached(d, window, cx)))
+                    .on_drag_move(cx.listener(|this, e: &DragMoveEvent<crate::drag::DetachedDrag>, _, cx| {
+                        let scope = e.drag(cx).scope;
+                        this.drag_over_detached(e.event.position, e.bounds, scope, cx);
+                    }))
                     .on_drag_move(cx.listener(|this, e: &DragMoveEvent<crate::drag::TextDrag>, _, cx| {
                         let block = e.drag(cx).block;
                         this.drag_over_page(e.event.position, e.bounds, block, cx);

@@ -426,6 +426,59 @@ fn make_original_keeps_the_active_variant() {
     d.check_invariants().unwrap();
 }
 
+/// ALT-23
+#[test]
+fn moving_a_variant_reorders_the_rest() {
+    let mut d = Document::from_text("a friction here");
+    let id = d.create_group(2..10, Scope::Word).unwrap();
+    d.add_variant(id, "tension", Source::Me).unwrap();
+    d.add_variant(id, "unease", Source::Me).unwrap();
+    d.set_active(id, 1).unwrap();
+    d.move_variant(id, 1, 2).unwrap();
+    let g = d.group(id).unwrap();
+    let texts: Vec<_> = g.variants.iter().map(|v| v.text.as_str()).collect();
+    assert_eq!(texts, ["friction", "unease", "tension"]);
+    assert_eq!(g.active, 2, "the same variant stays active");
+    assert_eq!(d.text(), "a tension here");
+    d.move_variant(id, 2, 1).unwrap();
+    assert_eq!(d.group(id).unwrap().active, 1);
+    d.undo();
+    let g = d.group(id).unwrap();
+    let texts: Vec<_> = g.variants.iter().map(|v| v.text.as_str()).collect();
+    assert_eq!(texts, ["friction", "unease", "tension"]);
+    assert_eq!(g.active, 2);
+    d.undo();
+    assert_eq!(d.group(id).unwrap().variants[1].text, "tension");
+    d.check_invariants().unwrap();
+}
+
+/// ALT-23
+#[test]
+fn a_move_onto_itself_leaves_no_step() {
+    let mut d = Document::from_text("a friction here");
+    let g = d.create_group(2..10, Scope::Word).unwrap();
+    d.add_variant(g, "tension", Source::Me).unwrap();
+    d.move_variant(g, 1, 1).unwrap();
+    // The first undo takes the added variant, not an empty step; the second, the group.
+    d.undo();
+    assert_eq!(d.group(g).unwrap().variants.len(), 1);
+    d.undo();
+    assert!(!d.can_undo());
+    assert_eq!(d.text(), "a friction here");
+    ok(&d);
+}
+
+/// ALT-23
+#[test]
+fn moving_never_changes_the_original() {
+    let (mut d, g) = friction_doc();
+    assert_eq!(d.move_variant(g, 0, 1), Err(EditError::NoSuchVariant));
+    assert_eq!(d.move_variant(g, 1, 0), Err(EditError::NoSuchVariant));
+    assert_eq!(d.move_variant(g, 1, 99), Err(EditError::NoSuchVariant));
+    assert_eq!(d.group(g).unwrap().variants[0].text, "friction");
+    d.check_invariants().unwrap();
+}
+
 /// ALT-26
 #[test]
 fn edit_variant_rewrites_shown_and_hidden_variants() {

@@ -719,6 +719,7 @@ pub struct TextView {
     over_sel: bool,
     pub carrying: Option<Range<usize>>,
     pub drop_mark: Option<Place>,
+    pub drop_span: Option<Range<usize>>,
     last_typing: Option<Instant>,
     caret_on: bool,
     blink_epoch: Instant,
@@ -818,6 +819,7 @@ impl TextView {
             over_sel: false,
             carrying: None,
             drop_mark: None,
+            drop_span: None,
             last_typing: None,
             caret_on: true,
             blink_epoch: Instant::now(),
@@ -2031,6 +2033,7 @@ impl TextView {
             cx.stop_active_drag(window);
             self.carrying = None;
             self.drop_mark = None;
+            self.drop_span = None;
             cx.notify();
             return;
         }
@@ -2231,6 +2234,24 @@ impl TextView {
             version: m.version,
             grip: Point::default(),
         }
+    }
+
+    pub fn drop_span_at(&self, p: Point<Pixels>, scope: Scope) -> Option<Range<usize>> {
+        let layout = self.layout.as_ref()?;
+        let c = layout.index_for(p);
+        let idx = &self.index;
+        let range = match scope {
+            Scope::Word => {
+                let r = idx.word_at(c);
+                if !idx.slice(r.clone()).chars().any(english::is_word_char) {
+                    return None;
+                }
+                r
+            }
+            Scope::Sentence => crate::sentence_keys::sentence_around(idx, &(c..c))?,
+            Scope::Paragraph => idx.paragraph_at(c),
+        };
+        (!range.is_empty() && !idx.slice(range.clone()).trim().is_empty()).then_some(range)
     }
 
     pub fn drop_place(&self, p: Point<Pixels>, block: bool) -> Option<Place> {
@@ -2940,10 +2961,11 @@ impl Render for TextView {
         if self.mode != Mode::Page {
             return el.child(PageElement { view: cx.entity() });
         }
-        if !cx.has_active_drag() && (self.carrying.is_some() || self.drop_mark.is_some()) {
+        if !cx.has_active_drag() && (self.carrying.is_some() || self.drop_mark.is_some() || self.drop_span.is_some()) {
             // The drag ended somewhere that didn't take it (or Esc).
             self.carrying = None;
             self.drop_mark = None;
+            self.drop_span = None;
         }
         // GPUI drags start from `on_drag`: the empty click handler makes the grip track presses,
         // and it offers a drag only after a press in the selection, so other presses still select.
@@ -3664,6 +3686,7 @@ impl Element for PageElement {
         let private = view.private_mask(cx);
         let carrying = view.carrying.clone();
         let drop_mark = view.drop_mark;
+        let drop_span = view.drop_span.clone();
         let in_cut = view.cut_being_edited(window);
         let hovered_mark = view.hovered_mark;
         let comments = view.comments.clone();
@@ -4032,6 +4055,11 @@ impl Element for PageElement {
                 for rect in layout.rects(r.clone(), false) {
                     window.paint_quad(fill(rect, ca(theme::bg(), 0.6)));
                     window.paint_quad(outline(rect.dilate(px(1.)), ca(theme::accent(), 0.7), BorderStyle::Dashed).corner_radii(px(2.)));
+                }
+            }
+            if let Some(r) = &drop_span {
+                for rect in layout.rects(r.clone(), false) {
+                    window.paint_quad(fill(rect, ca(theme::accent(), 0.16)).corner_radii(px(2.)));
                 }
             }
             match drop_mark {

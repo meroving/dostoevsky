@@ -436,10 +436,14 @@ impl Workspace {
             self.flash_status(tr!("Select the text this group belongs to, then Attach"), cx);
             return;
         }
+        self.reattach_detached_at(i, sel, cx);
+    }
+
+    pub(crate) fn reattach_detached_at(&mut self, i: usize, range: std::ops::Range<usize>, cx: &mut Context<Self>) {
         let Some(g) = self.model.read(cx).kept.detached.get(i).cloned() else { return };
-        let selected = self.page.read(cx).index().slice(sel.clone()).to_string();
+        let selected = self.page.read(cx).index().slice(range.clone()).to_string();
         let r = self.model.update(cx, |m, cx| {
-            let id = m.create_group(cx, sel.clone(), g.scope)?;
+            let id = m.create_group(cx, range, g.scope)?;
             for v in &g.variants {
                 if v.text != selected {
                     let _ = m.edit(cx, |d| d.add_variant(id, &v.text, v.by));
@@ -1190,6 +1194,7 @@ impl Workspace {
     fn render_detached(&mut self, cx: &mut Context<Self>) -> (AnyElement, AnyElement) {
         let title = div().child(Self::hand_tab("detached", tr!("Detached"), true)).into_any_element();
         let groups = self.model.read(cx).kept.detached.clone();
+        let workspace = cx.entity();
         let rows: Vec<AnyElement> = groups
             .iter()
             .enumerate()
@@ -1204,7 +1209,11 @@ impl Workspace {
                 let link = |id: (&'static str, usize), label: &'static str| {
                     div().id(id).cursor_pointer().text_color(c(theme::muted())).hover(|d| d.text_color(c(theme::accent()))).child(label)
                 };
+                let preview = g.variants.get(g.active).or_else(|| g.variants.first()).map(|v| crate::drag::preview(&v.text)).unwrap_or_default();
+                let drag = crate::drag::DetachedDrag { index: i, scope: g.scope, preview, variants: n };
+                let workspace = workspace.clone();
                 div()
+                    .id(("detached", i))
                     .flex()
                     .flex_col()
                     .gap_1()
@@ -1212,6 +1221,11 @@ impl Workspace {
                     .rounded_md()
                     .border_1()
                     .border_color(c(theme::line()))
+                    .on_drag(drag, move |d, _, w, cx| {
+                        workspace.update(cx, |this, cx| this.begin_detached_drag(w, cx));
+                        cx.new(|_| d.clone())
+                    })
+                    .test_support()
                     .child(div().text_size(px(11.)).text_color(c(theme::para_bar())).child(scope))
                     .children(g.variants.iter().enumerate().map(|(j, v)| {
                         div()

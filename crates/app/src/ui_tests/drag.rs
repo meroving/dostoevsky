@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use doc_model::Place;
+use doc_model::{Place, Scope};
 use gpui_kit::{point, px, Modifiers, MouseButton, MouseMoveEvent};
 
-use crate::ui_tests::Ui;
+use crate::ui_tests::{TempDir, Ui};
 
 const DOC: &str = "Most of the friction in writing comes from choosing too early. You pick a word and move on.\n\n\
 Editors have always known this. They write a suggestion in the margin.\n\n\
@@ -239,4 +239,147 @@ fn a_drop_keeps_the_chrome() {
     ui.drag_selection(to, false);
     assert!(!ui.read(|ws, _| ws.chrome_dimmed()));
     assert!(ui.dirty());
+}
+
+/// ALT-23
+#[test]
+fn dragging_a_variant_reorders_it_and_keeps_the_active_variant() {
+    let mut ui = Ui::open_editing(DOC);
+    let g = ui.make_group("friction", &["tension", "unease"]);
+    ui.caret_at(ui.visible_group(g).range.start);
+    ui.keys("cmd-shift-a");
+    assert_eq!(ui.variants(g), ["friction", "tension", "unease"]);
+    assert_eq!(ui.active(g), 2);
+
+    let from = ui.element(("variant-text", 1usize)).bounds().center();
+    let row = ui.element(("variant-text", 2usize)).bounds();
+    let to = point(row.center().x, row.bottom() - px(2.));
+    ui.drag_path(from, &[to], false, |ui| {
+        assert_eq!(ui.read(|ws, _| ws.sidebar.as_ref().and_then(|s| s.drop_at)), Some(3));
+        assert!(ui.has_element(("variant-drop", 3usize)));
+    });
+    assert_eq!(ui.variants(g), ["friction", "unease", "tension"]);
+    assert_eq!(ui.active(g), 1);
+    assert!(ui.text().starts_with("Most of the unease"), "the same variant stays active");
+    assert!(!ui.has_element(("variant-drop", 3usize)));
+
+    ui.undo();
+    assert_eq!(ui.variants(g), ["friction", "tension", "unease"]);
+    assert_eq!(ui.active(g), 2);
+}
+
+/// ALT-23
+#[test]
+fn the_original_and_a_cancelled_variant_drag_change_nothing() {
+    let mut ui = Ui::open_editing(DOC);
+    let g = ui.make_group("friction", &["tension", "unease"]);
+    ui.caret_at(ui.visible_group(g).range.start);
+    ui.keys("cmd-shift-a");
+    let before = ui.variants(g);
+
+    let original = ui.element(("variant-text", 0usize)).bounds().center();
+    let last = ui.element(("variant-text", 2usize)).bounds();
+    let below = point(last.center().x, last.bottom() - px(2.));
+    ui.drag_path(original, &[below], false, |_| {});
+    assert_eq!(ui.variants(g), before);
+    assert_eq!(ui.active(g), 2);
+
+    let from = ui.element(("variant-text", 1usize)).bounds().center();
+    ui.drag_path(from, &[below], false, |ui| {
+        assert!(ui.has_element(("variant-drop", 3usize)));
+        ui.keys("escape");
+        assert_eq!(ui.read(|ws, _| ws.sidebar.as_ref().and_then(|s| s.drop_at)), None);
+    });
+    assert_eq!(ui.variants(g), before);
+    assert_eq!(ui.active(g), 2);
+
+    let from = ui.element(("variant-text", 1usize)).bounds().center();
+    let elsewhere = ui.point_for(ui.find("Software").start);
+    ui.drag_path(from, &[elsewhere], false, |_| {});
+    assert_eq!(ui.variants(g), before, "a drop outside the list does nothing");
+    assert_eq!(ui.active(g), 2);
+}
+
+/// FILE-6
+#[test]
+fn a_detached_drop_targets_the_groups_scope() {
+    let ui = Ui::open_editing(DOC);
+    let at = ui.point_for(ui.find("suggestion").start + 2);
+    let target = |scope| ui.read(|ws, cx| ws.page.read(cx).drop_span_at(at, scope));
+    assert_eq!(target(Scope::Word), Some(ui.find("suggestion")));
+    assert_eq!(target(Scope::Sentence), Some(ui.find(SENTENCE)));
+    assert_eq!(target(Scope::Paragraph), Some(ui.find("Editors have always known this. They write a suggestion in the margin.")));
+}
+
+fn detached_ui(name: &str) -> (TempDir, Ui) {
+    let saved = {
+        let mut ui = Ui::open(DOC);
+        ui.make_group("friction", &["tension"]);
+        ui.saved()
+    };
+    let edited = saved.replacen("Most of the tension in writing comes from choosing too early.", "A different opening line entirely.", 1);
+    let dir = TempDir::new(name);
+    let mut ui = Ui::open_file(&dir.file("essay.md", &edited));
+    ui.click_id("detached-banner");
+    assert_eq!(ui.sheet(), Some("detached"));
+    (dir, ui)
+}
+
+/// FILE-6
+#[test]
+fn dragging_a_detached_group_onto_text_attaches_it() {
+    let (_dir, mut ui) = detached_ui("drag-detached");
+    let from = ui.element(("detached", 0usize)).bounds().center();
+    let target = ui.find("different");
+    let to = ui.point_for(target.start + 2);
+    ui.drag_path(from, &[to], false, |ui| {
+        assert_eq!(ui.sheet(), None, "picking the group up closes the sheet");
+        assert_eq!(ui.read(|ws, cx| ws.page.read(cx).drop_span.clone()), Some(target.clone()));
+    });
+    assert_eq!(ui.groups().len(), 1);
+    let g = ui.only_group();
+    assert_eq!(ui.group(g).scope, Scope::Word);
+    assert_eq!(ui.variants(g), ["different", "friction", "tension"]);
+    assert_eq!(ui.read(|ws, cx| ws.model.read(cx).kept.detached.len()), 0);
+    assert_eq!(ui.sheet(), None, "the last attached group leaves the page open");
+}
+
+/// FILE-6
+#[test]
+fn cancelling_a_detached_drag_brings_the_sheet_back() {
+    let (_dir, mut ui) = detached_ui("cancel-detached-drag");
+    let from = ui.element(("detached", 0usize)).bounds().center();
+    let to = ui.point_for(ui.find("different").start + 2);
+    ui.drag_path(from, &[to], false, |ui| {
+        assert!(ui.read(|ws, cx| ws.page.read(cx).drop_span.is_some()));
+        ui.keys("escape");
+        assert_eq!(ui.sheet(), Some("detached"));
+        assert!(ui.read(|ws, cx| ws.page.read(cx).drop_span.is_none()));
+    });
+    assert!(ui.groups().is_empty());
+    assert_eq!(ui.read(|ws, cx| ws.model.read(cx).kept.detached.len()), 1);
+    assert_eq!(ui.sheet(), Some("detached"));
+}
+
+/// FILE-6
+#[test]
+fn a_detached_drop_returns_to_the_remaining_groups() {
+    let saved = {
+        let mut ui = Ui::open(DOC);
+        ui.make_group("friction", &["tension"]);
+        ui.make_group("writing", &["editing"]);
+        ui.saved()
+    };
+    let edited = saved.replacen("Most of the tension in editing comes from choosing too early.", "A different opening line entirely.", 1);
+    let dir = TempDir::new("drag-detached-remaining");
+    let mut ui = Ui::open_file(&dir.file("essay.md", &edited));
+    assert_eq!(ui.read(|ws, cx| ws.model.read(cx).kept.detached.len()), 2);
+    ui.click_id("detached-banner");
+    let from = ui.element(("detached", 0usize)).bounds().center();
+    let to = ui.point_for(ui.find("different").start + 2);
+    ui.drag_path(from, &[to], false, |_| {});
+    assert_eq!(ui.groups().len(), 1);
+    assert_eq!(ui.read(|ws, cx| ws.model.read(cx).kept.detached.len()), 1);
+    assert_eq!(ui.sheet(), Some("detached"));
+    assert!(ui.has_element(("detached", 0usize)));
 }

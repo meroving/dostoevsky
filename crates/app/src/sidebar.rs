@@ -33,6 +33,8 @@ pub struct Sidebar {
     pub note: Option<SharedString>,
     pub editing: Option<VariantEdit>,
     pub found: Option<(GroupId, usize)>,
+    /// ALT-23: the gap a dragged variant would land in, between rows; never above the original.
+    pub drop_at: Option<usize>,
 }
 
 /// Follows the variant, not its row, so removing or reordering others doesn't move the edit.
@@ -225,6 +227,7 @@ impl Workspace {
             note: None,
             editing: None,
             found: None,
+            drop_at: None,
         });
     }
 
@@ -980,6 +983,8 @@ impl Workspace {
         });
 
         let found = self.sidebar.as_ref().and_then(|s| s.found);
+        let drop_at = self.sidebar.as_ref().and_then(|s| s.drop_at);
+        let n = info.as_ref().map(|g| g.variants.len()).unwrap_or(0);
         let list: AnyElement = match &info {
             Some(g) => {
                 let gid = g.id;
@@ -989,6 +994,24 @@ impl Workspace {
                     .flex()
                     .flex_col()
                     .on_children_prepainted(move |b, _, _| *rows.borrow_mut() = b)
+                    .on_drag_move(cx.listener(move |this, e: &DragMoveEvent<crate::drag::VariantDrag>, _, cx| {
+                        let d = e.drag(cx);
+                        let gap = e.bounds.contains(&e.event.position).then(|| {
+                            let bounds = this.sidebar.as_ref().map(|s| s.rows.borrow().clone()).unwrap_or_default();
+                            let n = bounds.len().max(1);
+                            bounds.iter().filter(|b| e.event.position.y > b.center().y).count().clamp(1, n)
+                        });
+                        let same = this.sidebar.as_ref().is_some_and(|s| s.group == Some(d.group));
+                        if let Some(s) = &mut this.sidebar {
+                            if same && s.drop_at != gap {
+                                s.drop_at = gap;
+                                cx.notify();
+                            } else if !same {
+                                s.drop_at = None;
+                            }
+                        }
+                    }))
+                    .on_drop(cx.listener(|this, d: &crate::drag::VariantDrag, w, cx| this.drop_variant(d, w, cx)))
                     .children(g.variants.iter().enumerate().map(|(i, v)| {
                         let is_active = i == active;
                         let field = editing.as_ref().filter(|(g, vid, _)| *g == gid && *vid == v.id).map(|(.., f)| f.clone());
@@ -1005,18 +1028,61 @@ impl Workspace {
                         let row = div()
                             .id(("variant", i))
                             .flex()
+                            .relative()
                             .items_start()
                             .gap(px(5.))
                             .py(px(4.8))
                             .px(px(4.))
                             .rounded_md()
                             .when(found == Some((gid, i)), |d| d.bg(ca(theme::line(), 0.9)));
+                        // ALT-23: the landing gap shows as an accent line on the row below it.
+                        let row = row.when(drop_at == Some(i), |d| {
+                            d.child(
+                                div()
+                                    .id(("variant-drop", i))
+                                    .absolute()
+                                    .left(px(2.))
+                                    .right(px(2.))
+                                    .top(px(-1.))
+                                    .h(px(2.))
+                                    .rounded(px(1.))
+                                    .bg(c(theme::accent()))
+                                    .test_support(),
+                            )
+                        });
+                        let last_gap = i == n - 1 && drop_at == Some(n);
+                        let row = row.when(last_gap, |d| {
+                            d.child(
+                                div()
+                                    .id(("variant-drop", n))
+                                    .absolute()
+                                    .left(px(2.))
+                                    .right(px(2.))
+                                    .bottom(px(-1.))
+                                    .h(px(2.))
+                                    .rounded(px(1.))
+                                    .bg(c(theme::accent()))
+                                    .test_support(),
+                            )
+                        });
+                        // The original keeps its slot; the menu's Make original changes it.
+                        let drag = (i > 0)
+                            .then(|| crate::drag::VariantDrag {
+                                group: gid,
+                                from: i,
+                                preview: crate::drag::preview(&v.text),
+                                words: english::word_count(&v.text),
+                            })
+                            .filter(|_| field.is_none());
                         let row = match field {
                             // The field takes the clicks: they place its caret.
                             Some(_) => row.bg(ca(theme::line(), 0.8)),
                             None => row
                                 .cursor_pointer()
                                 .hover(|d| d.bg(ca(theme::line(), 0.8)))
+                                .when_some(drag, |d, drag| {
+                                    d.on_drag(drag, |d: &crate::drag::VariantDrag, _, _, cx| cx.new(|_| d.clone()))
+                                })
                                 .on_click(cx.listener(move |this, e: &ClickEvent, w, cx| {
                                     if e.click_count() >= 2 {
                                         this.edit_variant_in_sidebar(gid, i, w, cx);

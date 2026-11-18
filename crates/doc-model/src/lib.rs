@@ -1406,6 +1406,36 @@ impl Document {
         })
     }
 
+    /// Reorders the variants that follow the original; the same variant stays active and it is
+    /// one undo step. A move onto itself leaves no step. Slot 0 is the original's: use
+    /// [`Self::make_original`] to change who that is (a version without the words can't take it).
+    pub fn move_variant(&mut self, id: GroupId, from: usize, to: usize) -> Result<(), EditError> {
+        let g = self.find_group(id).ok_or(EditError::NoSuchGroup)?;
+        let n = g.variants.len();
+        if from == 0 || to == 0 || from >= n || to >= n {
+            return Err(EditError::NoSuchVariant);
+        }
+        if from == to {
+            return Ok(());
+        }
+        self.transact(None, |d| {
+            d.modify_group(id, &mut |g| {
+                let v = g.variants.remove(from);
+                g.variants.insert(to, v);
+                let a = g.active;
+                g.active = if a == from {
+                    to
+                } else if from < a && a <= to {
+                    a - 1
+                } else if to <= a && a < from {
+                    a + 1
+                } else {
+                    a
+                };
+            })
+        })
+    }
+
     /// Only the stretch that changed is replaced, so nested groups and cuts outside it stay.
     pub fn edit_variant(&mut self, id: GroupId, index: usize, text: &str) -> Result<(), EditError> {
         if text.is_empty() {
