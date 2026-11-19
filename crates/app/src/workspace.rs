@@ -1835,6 +1835,8 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::view_source))
             .on_action(cx.listener(Self::show_shortcuts))
             .on_action(cx.listener(Self::show_preferences))
+            .on_action(cx.listener(Self::create_theme_sheet))
+            .on_action(cx.listener(Self::select_theme))
             .on_action(cx.listener(Self::copy_final_markdown))
             .on_action(cx.listener(Self::export))
             .on_action(cx.listener(Self::print))

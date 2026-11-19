@@ -60,7 +60,14 @@ fn the_menu_bar_speaks_every_language() {
         assert!(titles(&menus).contains(&l10n::tr("Window").to_string()), "{lang:?}");
         let names = all(&menus);
         assert_eq!(names.len(), english.len());
-        let same: Vec<_> = english.iter().zip(&names).filter(|(a, b)| a == b && a.chars().any(char::is_alphabetic)).map(|(a, _)| a).collect();
+        // Theme names (View → Theme) are names, the same in every language.
+        let theme_names: Vec<String> = crate::theme::all().into_iter().map(|(_, t, _)| t.name).collect();
+        let same: Vec<_> = english
+            .iter()
+            .zip(&names)
+            .filter(|(a, b)| a == b && a.chars().any(char::is_alphabetic) && !theme_names.contains(a))
+            .map(|(a, _)| a)
+            .collect();
         // Some words match in a few languages ("Zoom", "File"); a missing catalog leaves them all.
         assert!(same.len() <= 3, "{lang:?}: untranslated {same:?}");
     }

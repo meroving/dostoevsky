@@ -20,6 +20,7 @@ mod project;
 mod sentences;
 mod smoke;
 mod spelling;
+mod themes;
 mod welcome;
 mod window;
 mod zen;
@@ -804,6 +805,12 @@ impl Ui {
         })
     }
 
+    pub fn update_window<R>(&mut self, f: impl FnOnce(&mut Workspace, &mut gpui_kit::Window, &mut gpui_kit::Context<Workspace>) -> R) -> R {
+        let r = self.win.update(f);
+        self.draw();
+        r
+    }
+
     pub fn with_app<R>(&mut self, f: impl FnOnce(&mut gpui_kit::App) -> R) -> R {
         let r = self.app.update(f);
         self.draw();
@@ -832,6 +839,7 @@ impl Ui {
                 Sheet::Export(_) => "export",
                 Sheet::Shortcuts => "shortcuts",
                 Sheet::Prefs { .. } => "prefs",
+                Sheet::ThemeEditor(_) => "theme-editor",
                 Sheet::Detached => "detached",
                 Sheet::NewProject(_) => "new-project",
                 Sheet::ProjectType(_) => "project-type",

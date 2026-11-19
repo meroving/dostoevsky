@@ -37,6 +37,8 @@ pub enum Command {
     Cut(crate::cuts_panel::CutRef, crate::cuts_panel::CutOp),
     Trace(doc_model::CutId, crate::cuts::TraceOp),
     Comment(doc_model::CommentId, crate::comments::CommentOp),
+    /// A theme tile's menu in Preferences, by theme id.
+    Theme(String, crate::theme_ui::ThemeOp),
 }
 
 pub struct GroupTarget {
@@ -686,6 +688,7 @@ impl Workspace {
             Some(Command::Cut(at, op)) => self.cut_op(at, op, window, cx),
             Some(Command::Trace(id, op)) => self.trace_op(id, op, window, cx),
             Some(Command::Comment(id, op)) => self.comment_op(id, op, window, cx),
+            Some(Command::Theme(id, op)) => self.theme_op(&id, op, window, cx),
             None => {}
         }
     }

@@ -11,6 +11,19 @@ fn prefs(ui: &Ui) -> Prefs {
     ui.read(|_, cx| Prefs::get(cx).clone())
 }
 
+/// Wheels Preferences' rows down until `id` sits wholly inside them.
+fn scroll_to(ui: &mut Ui, id: &'static str) {
+    for _ in 0..40 {
+        let rows = ui.element("pref-rows").bounds();
+        let b = ui.element(id).bounds();
+        if b.top() >= rows.top() && b.bottom() <= rows.bottom() {
+            return;
+        }
+        ui.wheel_notch(rows.center(), 1.);
+    }
+    panic!("{id} never scrolled into view");
+}
+
 #[test]
 fn pref_1_every_setting_can_be_changed() {
     let mut ui = Ui::open(DOC);
@@ -19,6 +32,7 @@ fn pref_1_every_setting_can_be_changed() {
 
     // General: the window, the files, the keys.
     ui.click_id(("effects", 2usize));
+    scroll_to(&mut ui, "tap-shift");
     assert_eq!(ui.element("tap-shift").checked(), Some(false), "Tap ⇧ starts off");
     ui.click_id("tap-shift");
     assert_eq!(ui.element("tap-shift").checked(), Some(true));
@@ -118,6 +132,10 @@ fn prefs_fit_a_narrow_window() {
         for id in [("appearance", 2usize), ("hand-font", 2usize), ("effects", 2usize)] {
             let b = ui.element(id).bounds();
             assert!(b.right() <= sheet.right() && b.left() >= sheet.left(), "{id:?} outside the sheet at {w}px: {b:?} vs {sheet:?}");
+        }
+        for id in ["theme-aurora", "new-theme"] {
+            let b = ui.element(id).bounds();
+            assert!(b.right() <= sheet.right() && b.left() >= sheet.left(), "{id} outside the sheet at {w}px: {b:?} vs {sheet:?}");
         }
         for id in ["choose-folder", "open-keymap"] {
             let b = ui.element(id).bounds();
@@ -310,6 +328,28 @@ fn view_menu_checks_the_current_settings() {
         })
         .expect("View → Appearance");
     let marks: Vec<_> = ["Dark", "Light", "Match macOS"].iter().map(|n| checked(&appearance.items, n)).collect();
+    assert_eq!(marks, [Some(false), Some(true), Some(false)]);
+    let themes = view
+        .items
+        .iter()
+        .find_map(|it| match it {
+            MenuItem::Submenu(m) if m.name.as_ref() == "Theme" => Some(m),
+            _ => None,
+        })
+        .expect("View → Theme");
+    let marks: Vec<_> = ["Dostoevsky", "Petersburg", "Aurora"].iter().map(|n| checked(&themes.items, n)).collect();
+    assert_eq!(marks, [Some(true), Some(false), Some(false)]);
+    let p = Prefs { theme: "petersburg".into(), ..p };
+    let view = crate::actions::menus(&[], &p, None, false).into_iter().find(|m| m.name.as_ref() == "View").unwrap();
+    let themes = view
+        .items
+        .iter()
+        .find_map(|it| match it {
+            MenuItem::Submenu(m) if m.name.as_ref() == "Theme" => Some(m),
+            _ => None,
+        })
+        .unwrap();
+    let marks: Vec<_> = ["Dostoevsky", "Petersburg", "Aurora"].iter().map(|n| checked(&themes.items, n)).collect();
     assert_eq!(marks, [Some(false), Some(true), Some(false)]);
 }
 

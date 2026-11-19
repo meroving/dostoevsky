@@ -199,3 +199,78 @@ pub fn preferred_languages() -> Vec<String> {
 pub fn preferred_languages() -> Vec<String> {
     std::env::var("LANG").map(|l| vec![l.split('.').next().unwrap_or("").to_string()]).unwrap_or_default()
 }
+
+/// Opens the system colour panel on `hex` (sRGB, no alpha). Its choice is read back with
+/// [`colour_panel_colour`] while it stays open.
+#[cfg(all(target_os = "macos", not(test)))]
+pub fn show_colour_panel(hex: u32) {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSColor, NSColorPanel};
+    let Some(mtm) = MainThreadMarker::new() else { return };
+    let channel = |shift: u32| ((hex >> shift) & 0xff) as f64 / 255.;
+    let panel = NSColorPanel::sharedColorPanel(mtm);
+    panel.setShowsAlpha(false);
+    panel.setColor(&NSColor::colorWithSRGBRed_green_blue_alpha(channel(16), channel(8), channel(0), 1.));
+    panel.orderFront(None);
+}
+
+/// The panel's colour in sRGB; `None` once the writer has closed it.
+#[cfg(all(target_os = "macos", not(test)))]
+pub fn colour_panel_colour() -> Option<u32> {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::{NSColorPanel, NSColorSpace};
+    let mtm = MainThreadMarker::new()?;
+    if !NSColorPanel::sharedColorPanelExists(mtm) {
+        return None;
+    }
+    let panel = NSColorPanel::sharedColorPanel(mtm);
+    if !panel.isVisible() {
+        return None;
+    }
+    let colour = panel.color().colorUsingColorSpace(&NSColorSpace::sRGBColorSpace())?;
+    let channel = |v: f64| ((v.clamp(0., 1.) * 255.).round() as u32) & 0xff;
+    Some(channel(colour.redComponent()) << 16 | channel(colour.greenComponent()) << 8 | channel(colour.blueComponent()))
+}
+
+#[cfg(all(target_os = "macos", not(test)))]
+pub fn close_colour_panel() {
+    use objc2::MainThreadMarker;
+    use objc2_app_kit::NSColorPanel;
+    if let Some(mtm) = MainThreadMarker::new() {
+        if NSColorPanel::sharedColorPanelExists(mtm) {
+            NSColorPanel::sharedColorPanel(mtm).close();
+        }
+    }
+}
+
+#[cfg(all(not(target_os = "macos"), not(test)))]
+pub fn show_colour_panel(_: u32) {}
+
+#[cfg(all(not(target_os = "macos"), not(test)))]
+pub fn colour_panel_colour() -> Option<u32> {
+    None
+}
+
+#[cfg(all(not(target_os = "macos"), not(test)))]
+pub fn close_colour_panel() {}
+
+#[cfg(test)]
+thread_local! {
+    /// Tests stand in for the writer at the colour panel: `Some` while it is open.
+    pub static TEST_COLOUR_PANEL: std::cell::Cell<Option<u32>> = const { std::cell::Cell::new(None) };
+}
+
+#[cfg(test)]
+pub fn show_colour_panel(hex: u32) {
+    TEST_COLOUR_PANEL.with(|p| p.set(Some(hex)));
+}
+
+#[cfg(test)]
+pub fn colour_panel_colour() -> Option<u32> {
+    TEST_COLOUR_PANEL.with(|p| p.get())
+}
+
+#[cfg(test)]
+pub fn close_colour_panel() {
+    TEST_COLOUR_PANEL.with(|p| p.set(None));
+}

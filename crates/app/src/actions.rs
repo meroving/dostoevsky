@@ -3,6 +3,12 @@ use l10n::{tr, trc};
 
 use crate::prefs::{Alignment, Appearance, ParagraphLook, Prefs};
 
+#[derive(Clone, PartialEq, Debug, Action)]
+#[action(namespace = app, no_json)]
+pub struct SelectTheme {
+    pub id: String,
+}
+
 actions!(
     editor,
     [
@@ -137,6 +143,7 @@ actions!(
         HideOthers,
         ShowAll,
         ShowPreferences,
+        CreateThemeSheet,
         About,
         CheckForUpdates,
         Minimize,
@@ -542,6 +549,11 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
     } else {
         view_items.extend([MenuItem::action(tr!("Left Panel"), ToggleProject), MenuItem::separator()]);
     }
+    let mut theme_items: Vec<MenuItem> = crate::theme::all()
+        .into_iter()
+        .map(|(id, theme, _)| MenuItem::action(theme.name, SelectTheme { id: id.clone() }).checked(prefs.theme == id))
+        .collect();
+    theme_items.extend([MenuItem::separator(), MenuItem::action(tr!("New Theme…"), CreateThemeSheet)]);
     view_items.extend([
         MenuItem::action(tr!("Writing"), WritingMode).checked(!editing),
         MenuItem::action(tr!("Editing"), EditingMode).checked(editing),
@@ -553,6 +565,7 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
         MenuItem::action(tr!("Cuts"), ToggleOverflow),
         MenuItem::action(tr!("Markdown Source"), ViewSource),
         MenuItem::separator(),
+        MenuItem::submenu(Menu::new(tr!("Theme")).items(theme_items)),
         MenuItem::submenu(Menu::new(tr!("Appearance")).items([
             MenuItem::action(tr!("Dark"), AppearanceDark).checked(prefs.appearance == Appearance::Dark),
             MenuItem::action(tr!("Light"), AppearanceLight).checked(prefs.appearance == Appearance::Light),

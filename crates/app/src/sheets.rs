@@ -31,6 +31,7 @@ pub enum Sheet {
     Export(Box<crate::export_ui::ExportForm>),
     Shortcuts,
     Prefs { section: PrefSection },
+    ThemeEditor(Box<crate::theme_ui::ThemeEditor>),
     Detached,
     NewProject(Box<crate::project_sheets::NewProjectForm>),
     ProjectType(crate::project_sheets::FirstOpen),
@@ -52,8 +53,8 @@ pub(crate) fn set_prefs(cx: &mut App, f: impl FnOnce(&mut Prefs)) {
     f(&mut p);
     p.save();
     let old = Prefs::get(cx);
-    let menus_changed = (old.appearance, old.zen_writing, old.typewriter, old.private_mode, old.alignment, old.hyphenation, old.paragraphs, old.font_size, old.ai.enabled, &old.language)
-        != (p.appearance, p.zen_writing, p.typewriter, p.private_mode, p.alignment, p.hyphenation, p.paragraphs, p.font_size, p.ai.enabled, &p.language);
+    let menus_changed = (old.appearance, old.zen_writing, old.typewriter, old.private_mode, old.alignment, old.hyphenation, old.paragraphs, old.font_size, old.ai.enabled, &old.language, &old.theme)
+        != (p.appearance, p.zen_writing, p.typewriter, p.private_mode, p.alignment, p.hyphenation, p.paragraphs, p.font_size, p.ai.enabled, &p.language, &p.theme);
     if old.language != p.language {
         // Tests switch only their own thread, so tests running beside them stay in English.
         if cfg!(test) {
@@ -231,11 +232,12 @@ fn language_picker(p: &Prefs, open: bool) -> impl IntoElement {
 }
 
 fn swatch(a: Appearance) -> AnyElement {
+    let (light, dark) = theme::resolved();
     let (bg, ink) = match a {
-        Appearance::Dark => (theme::DARK.bg, theme::DARK.text),
-        Appearance::Light | Appearance::System => (theme::LIGHT.bg, theme::LIGHT.text),
+        Appearance::Dark => (dark.bg, dark.text),
+        Appearance::Light | Appearance::System => (light.bg, light.text),
     };
-    let ink = if a == Appearance::System { theme::DARK.accent } else { ink };
+    let ink = if a == Appearance::System { dark.accent } else { ink };
     let line = move |w: f32, top: f32| div().absolute().left(px(3.)).top(px(top)).w(px(w)).h(px(1.5)).rounded(px(1.)).bg(c(ink));
     div()
         .relative()
@@ -246,7 +248,7 @@ fn swatch(a: Appearance) -> AnyElement {
         .border_1()
         .border_color(ca(theme::muted(), 0.5))
         .bg(c(bg))
-        .when(a == Appearance::System, |d| d.child(div().absolute().right_0().top_0().w(px(9.)).h_full().bg(c(theme::DARK.bg))))
+        .when(a == Appearance::System, |d| d.child(div().absolute().right_0().top_0().w(px(9.)).h_full().bg(c(dark.bg))))
         .child(line(10., 2.5))
         .child(line(7., 6.))
         .into_any_element()
@@ -473,6 +475,7 @@ impl Workspace {
             Sheet::Export(_) => self.render_export(window, cx),
             Sheet::Shortcuts => self.render_shortcuts(window, cx),
             Sheet::Prefs { section } => self.render_prefs(*section, window, cx),
+            Sheet::ThemeEditor(_) => self.render_theme_editor(window, cx),
             Sheet::Detached => self.render_detached(cx),
             Sheet::NewProject(_) => self.render_new_project(window, cx),
             Sheet::ProjectType(form) => {
@@ -794,7 +797,7 @@ impl Workspace {
             .when(!stacked, |d| d.gap_6())
             .size_full()
             .child(nav)
-            .child(div().id("pref-rows").flex_1().min_w_0().min_h_0().overflow_y_scroll().flex().flex_col().children(rows))
+            .child(div().id("pref-rows").flex_1().min_w_0().min_h_0().overflow_y_scroll().flex().flex_col().children(rows).test_support())
             .into_any_element();
         (title, body)
     }
@@ -819,6 +822,7 @@ impl Workspace {
                 ),
             )
             .into_any_element(),
+            row(tr!("Theme"), Some(tr!("light and dark together")), crate::theme_ui::tiles(p, cx)).into_any_element(),
             row(
                 tr!("Background opacity"),
                 None,

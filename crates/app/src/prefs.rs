@@ -218,6 +218,11 @@ impl Appearance {
     }
 }
 
+/// Prefs saved before themes have none: they keep the palettes they were built with.
+fn saved_before_themes() -> String {
+    "dostoevsky".into()
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HandFont {
@@ -261,6 +266,9 @@ impl HandFont {
 pub struct Prefs {
     #[serde(default = "Appearance::saved_before_light")]
     pub appearance: Appearance,
+    /// A theme id: a built-in, or a file in `Themes/` (theme.rs).
+    #[serde(default = "saved_before_themes")]
+    pub theme: String,
     /// 1 is opaque.
     pub background_opacity: f32,
     pub font_family: String,
@@ -396,6 +404,7 @@ impl Default for Prefs {
     fn default() -> Self {
         Prefs {
             appearance: Appearance::System,
+            theme: saved_before_themes(),
             background_opacity: 1.,
             font_family: crate::theme::PLEX.into(),
             hand_font: HandFont::BadScript,
@@ -514,6 +523,12 @@ impl Prefs {
 #[cfg(test)]
 mod tests {
     use super::{Prefs, SpellCheck};
+
+    #[test]
+    fn prefs_saved_before_themes_keep_the_original_look() {
+        let old: Prefs = serde_json::from_str(r#"{"font_size":17.0}"#).unwrap();
+        assert_eq!(old.theme, "dostoevsky");
+    }
 
     #[test]
     fn spell_check_reads_the_old_switch() {

@@ -319,3 +319,42 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
 - **Kept in** `prefs.json` (`check_updates`: unset until answered) and `updates.json` (launches,
   whether the question was asked, the last check, the skipped version). `DOSTOEVSKY_UPDATES_URL`
   points the check elsewhere for testing.
+
+
+## 15. Themes (dsky-1vey)
+
+Full reference, file format and VS Code mapping: [THEMES.md](THEMES.md).
+
+- **A theme is a pair** (`theme.rs` `Theme { name, light, dark }`). `prefs.theme` holds its id,
+  `prefs.appearance` picks the half. `theme::apply_for` resolves both halves into `Palette`s once
+  (thread-local `RESOLVED`), so `palette()` and every token accessor stay cheap; `palette()` now
+  returns a `Palette` by value.
+- **Three seeds per half** (paper, ink, accent); the rest derives by sRGB mixing (`derived`).
+  Fixed roles move toward the ink only below a minimum contrast (`legible`). `Variant::colors`
+  overrides single tokens by kebab-case name (`Palette::NAMES/get/set`). The `dostoevsky`
+  built-in pins every token to the original `LIGHT`/`DARK`, so old preferences look the same;
+  a unit test checks it field by field.
+- **Files:** `Themes/<id>.json` under the support dir, read at launch and after the app saves or
+  deletes one (`theme::reload`), never on a preference change. `save`/`delete` refuse built-in and
+  unsafe ids; `unique_id` slugs a name past built-ins and installed files.
+- **UI** (`theme_ui.rs`, dsky-dbbp): Preferences → General holds Appearance and, under it, the
+  Theme row: one tile per theme, the light half left of a slant and the dark half right of it,
+  painted on a `canvas` (`paint_split`) so each line of the little page changes colour as it
+  crosses. A click takes the pair (never the half); double-click edits a theme of the writer's
+  own; right-click opens a `ContextMenu` with `Command::Theme(id, ThemeOp)` (built-ins: Edit a
+  Copy… only). The last tile, New, opens the editor.
+- **Editor** (`Sheet::ThemeEditor`): a sample page in the page font, Light/Dark, and three seeds
+  per half, each a colour well and a `#rrggbb` field. Each field's subscription lives in the sheet
+  and copies what parses into `draft`. Token overrides are not edited here, but a theme's
+  `colors` stay in `draft` and are saved back. Ink or accent under 4.5 : 1 shows "hard to read".
+  A copy of a built-in starts from its seeds only.
+- **Colour panel:** a well opens `NSColorPanel` (`platform::show_colour_panel`). AppKit's
+  target/action isn't wired, so the sheet asks the panel every 120 ms while it is visible and the
+  sheet is open (`ThemeEditor::picking` holds the seed and the colour last seen, so a typed hex
+  is never overwritten by a panel that didn't move). Closing the sheet closes the panel. Tests
+  stand in for the panel with `platform::TEST_COLOUR_PANEL`.
+- **Import:** "Import a theme file…" in the editor reads Dostoevsky or VS Code `.json`
+  (`theme_import.rs`, no network); the file is saved under a unique id and taken. There is no
+  theme search: the app makes no request for themes.
+- **Menus:** View → Theme lists built-ins and the writer's themes with the current one ticked,
+  then New Theme…. `set_prefs` rebuilds the menus when `theme` changes.

@@ -30,7 +30,7 @@ pub fn path() -> Option<PathBuf> {
     directories::BaseDirs::new().map(|b| b.home_dir().join(".config").join("dostoevsky").join("keymap.json"))
 }
 
-fn strip_jsonc(s: &str) -> String {
+pub(crate) fn strip_jsonc(s: &str) -> String {
     let mut out = String::with_capacity(s.len());
     let mut in_str = false;
     let mut esc = false;

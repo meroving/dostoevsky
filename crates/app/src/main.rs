@@ -47,6 +47,8 @@ mod sheets;
 mod sentence_keys;
 mod sidebar;
 mod theme;
+mod theme_import;
+mod theme_ui;
 #[cfg(test)]
 mod ui_tests;
 mod updates;
@@ -379,6 +381,14 @@ fn watch_keymap(cx: &mut App) {
     .detach();
 }
 
+/// The front window's workspace, or any, for actions the menu bar sends with nothing focused.
+fn in_active_workspace(cx: &mut App, f: impl FnOnce(&mut Workspace, &mut Window, &mut Context<Workspace>)) {
+    let all = workspaces(cx);
+    let active = cx.active_window();
+    let Some((handle, ws)) = all.iter().find(|(h, _)| Some(*h) == active).or(all.first()).cloned() else { return };
+    let _ = handle.update(cx, |_, window, cx| ws.update(cx, |ws, cx| f(ws, window, cx)));
+}
+
 fn register_actions(cx: &mut App) {
     cx.on_action(|_: &OpenKeymapFile, _| {
         if let Some(p) = keymap::ensure_file() {
@@ -386,12 +396,8 @@ fn register_actions(cx: &mut App) {
         }
     });
     // Runs only when nothing in a window has focus, so Settings… in the menu bar never greys out.
-    cx.on_action(|_: &ShowPreferences, cx| {
-        let all = workspaces(cx);
-        let active = cx.active_window();
-        let Some((handle, ws)) = all.iter().find(|(h, _)| Some(*h) == active).or(all.first()).cloned() else { return };
-        let _ = handle.update(cx, |_, window, cx| ws.update(cx, |ws, cx| ws.show_preferences(&ShowPreferences, window, cx)));
-    });
+    cx.on_action(|a: &ShowPreferences, cx| in_active_workspace(cx, |ws, window, cx| ws.show_preferences(a, window, cx)));
+    cx.on_action(|a: &CreateThemeSheet, cx| in_active_workspace(cx, |ws, window, cx| ws.create_theme_sheet(a, window, cx)));
     cx.on_action(|_: &About, cx| about::show(cx));
     cx.on_action(|_: &ShowWelcome, cx| welcome::open(cx));
     #[cfg(feature = "updates")]
@@ -531,6 +537,7 @@ fn main() {
         crate::prefs::publish(&prefs);
         cx.set_global(prefs);
         l10n::set(Prefs::get(cx).ui_language());
+        theme::reload();
         theme::apply(cx);
         sound::Sounds::init(cx);
         // Saves still on the writer thread finish before the process goes.

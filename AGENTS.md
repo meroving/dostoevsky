@@ -28,7 +28,7 @@ scripts/shoot_readme.sh [shot…]              # README screenshots from the rea
 scripts/make_icon.py [--look night|deep] [--sheet|--looks]   # the app icon (an axe) from numbers → packaging/icon.svg, .icns, About, README, favicons; LOOKS keeps the other colourings
 ```
 
-Public docs: `docs/FILE-FORMAT.md`, `docs/TECH-NOTES.md`; releases: `docs/RELEASE.md`.
+Public docs: `docs/FILE-FORMAT.md`, `docs/TECH-NOTES.md`, `docs/THEMES.md`; releases: `docs/RELEASE.md`.
 The product spec and decision records are maintained separately and aren't published.
 
 ## Architecture Overview
@@ -64,6 +64,9 @@ The product spec and decision records are maintained separately and aren't publi
   AI in the app: `assist.rs` (keys, model lists, Connect OpenRouter, requests on their own
   threads), `ai_prefs.rs` (Preferences → AI), `ideas.rs` (⌥⌘A, `??`), `lab.rs` (the AI button, once LAB; marks,
   typos, trims; drawn by `view.rs` from `LabPaint`).
+  Themes (TECH-NOTES §15, docs/THEMES.md): `theme.rs` (tokens, theme pairs, seed derivation,
+  `Themes/` files), `theme_ui.rs` (the Theme row in Preferences → General, the New / Edit theme
+  sheet), `theme_import.rs` (Dostoevsky and VS Code theme files; no UI).
   `updates.rs` is the .dmg build's opt-in update check (`--features updates`, which `scripts/bundle.sh`
   turns on; the App Store build has none; TECH-NOTES §14).
 
