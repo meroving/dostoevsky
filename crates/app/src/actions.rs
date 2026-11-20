@@ -94,6 +94,7 @@ actions!(
         RemoveAllGhosted,
         StashToOverflow,
         ToggleOverflow,
+        ResetPanelLayout,
         InsertOverflowNote,
         ViewSource,
         // The old name stays, so keymaps that bind it keep working.
@@ -547,7 +548,11 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
             MenuItem::separator(),
         ]);
     } else {
-        view_items.extend([MenuItem::action(tr!("Left Panel"), ToggleProject), MenuItem::separator()]);
+        let side = match prefs.panel_tabs.side_of(crate::panels::PanelTab::Project) {
+            crate::panels::Side::Left => tr!("Left Panel"),
+            crate::panels::Side::Right => tr!("Right Panel"),
+        };
+        view_items.extend([MenuItem::action(side, ToggleProject), MenuItem::separator()]);
     }
     let mut theme_items: Vec<MenuItem> = crate::theme::all()
         .into_iter()
@@ -563,6 +568,7 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
         MenuItem::action(tr!("Typewriter Scrolling"), ToggleTypewriter).checked(prefs.typewriter),
         MenuItem::action(tr!("Private Mode"), TogglePrivate).checked(prefs.private_mode),
         MenuItem::action(tr!("Cuts"), ToggleOverflow),
+        MenuItem::action(tr!("Reset Panel Layout"), ResetPanelLayout),
         MenuItem::action(tr!("Markdown Source"), ViewSource),
         MenuItem::separator(),
         MenuItem::submenu(Menu::new(tr!("Theme")).items(theme_items)),

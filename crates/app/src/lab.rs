@@ -488,9 +488,7 @@ impl Workspace {
     /// Writing has no Review: it goes to editing first.
     pub(crate) fn open_review(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         self.enter_editing(cx);
-        if self.sidebar.is_some() {
-            self.close_sidebar(window, cx);
-        }
+        self.make_room_for(crate::panels::PanelTab::Review, window, cx);
         self.lab.open = true;
         self.lab.error = self.lab.error.take().filter(|_| self.lab.results);
         if !self.lab.results {

@@ -319,13 +319,6 @@ impl Workspace {
     }
 
     /// Counted without building the list: the header draws on every keystroke.
-    pub(crate) fn panel_count(&self, cx: &App) -> usize {
-        match self.right_tab {
-            crate::comments::RightTab::Comments => self.comments_count(cx),
-            crate::comments::RightTab::Cuts => self.cuts_count_for_tab(cx),
-        }
-    }
-
     pub(crate) fn cuts_count_for_tab(&self, cx: &App) -> usize {
         let page = self.model.read(cx).doc.listed_cuts().len();
         let Some(p) = &self.project else { return page };
@@ -597,17 +590,11 @@ impl Workspace {
         cx.notify();
     }
 
-    pub fn render_drawer(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub fn render_drawer(&mut self, side: crate::panels::Side, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !cx.has_active_drag() {
             if let Some(d) = &mut self.drawer {
                 d.hot = false;
             }
-        }
-        self.drawer.as_ref()?;
-        // Text carried from the page goes to Cuts; dragging the panel's edge keeps the tab.
-        let carrying = cx.has_active_drag() && self.page.read(cx).carrying.is_some();
-        if self.right_tab == crate::comments::RightTab::Comments && !carrying {
-            return Some(self.render_comments_panel(cx));
         }
         let d = self.drawer.as_ref()?;
         let hot = d.hot;
@@ -709,21 +696,12 @@ impl Workspace {
             }
         }
         let empty = total == 0;
-        let tabs = self.render_right_tabs(cx);
+        let tabs = crate::panels::strip_at_top(self.tab_strip(side, cx));
+        let foot = self.foot_here(side, cx).then(|| self.render_panel_foot(cx));
         Some(
-            div()
-                .id("overflow")
-                .test_support()
-                .absolute()
-                .top(px(crate::workspace::HEADER_H))
-                .bottom_0()
-                .right_0()
-                .w(px(crate::workspace::overflow_width(cx)))
+            crate::panels::frame(div().id("overflow").test_support(), side, cx)
                 .flex()
                 .flex_col()
-                .bg(theme::surface(theme::bg_panel()))
-                .border_l_1()
-                .border_color(c(theme::line()))
                 // The panel starts under the header; its content stays level with the page.
                 .pt(px(160. - crate::workspace::HEADER_H))
                 .px(px(13.))
@@ -742,7 +720,7 @@ impl Workspace {
                         }
                     }
                 }))
-                .child(crate::workspace::resize_handle(crate::workspace::PanelEdge::Overflow))
+                .child(crate::workspace::resize_handle(side.edge()))
                 // Zero-size, so a click in the panel doesn't take the keyboard from a selected cut.
                 .child(
                     div()
@@ -825,6 +803,7 @@ impl Workspace {
                         .text_color(if hot { c(theme::accent()) } else { c(theme::faint()) })
                         .child(if hot { tr!("release to cut it here · ⌥ keeps it on the page") } else { tr!("⌘V or drag to use · ⌘/ puts back") }),
                 )
+                .children(foot)
                 .into_any_element(),
         )
     }

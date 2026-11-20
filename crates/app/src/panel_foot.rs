@@ -6,7 +6,7 @@ use l10n::{tr, trn};
 
 use crate::actions::*;
 use crate::theme::{self, c, ca};
-use crate::workspace::{self, PanelEdge, Tip, Workspace};
+use crate::workspace::{self, Tip, Workspace};
 
 pub const FOOT_H: f32 = 46.;
 pub const PANEL_PB: f32 = FOOT_H + 12.;
@@ -151,25 +151,24 @@ impl Workspace {
         let skip: Vec<&Path> = path.as_deref().into_iter().chain(self.project_root()).collect();
         let recent = recent_entries(&skip);
         let enclosing = self.project.is_none() && path.is_some();
-        let at = point(px(14.), window.viewport_size().height - px(FOOT_H - 4.));
+        let side = crate::panels::side_of(crate::panels::PanelTab::Project, cx);
+        let x = self.side_x(side, f32::from(window.viewport_size().width), cx) + 14.;
+        let at = point(px(x), window.viewport_size().height - px(FOOT_H - 4.));
         self.count_open = false;
         self.context_menu = Some(crate::context_menu::ContextMenu::open_menu(at, recent, enclosing));
         cx.notify();
     }
 
     pub(crate) fn open_file_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        self.lab.open = false;
-        if self.sidebar.is_some() {
-            self.close_sidebar(window, cx);
-        }
+        self.make_room_for(crate::panels::PanelTab::Project, window, cx);
         let path = self.model.read(cx).path.clone();
         let skip: Vec<&Path> = path.as_deref().into_iter().collect();
         self.file_panel = Some(FilePanel { recent: recent_entries(&skip) });
         cx.notify();
     }
 
-    pub fn render_file_panel(&mut self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.sidebar.is_some() || self.project.is_some() || self.lab.open {
+    pub fn render_file_panel(&mut self, side: crate::panels::Side, cx: &mut Context<Self>) -> Option<AnyElement> {
+        if self.project.is_some() {
             return None;
         }
         let recent = self.file_panel.as_ref()?.recent.clone();
@@ -249,28 +248,18 @@ impl Workspace {
         );
 
         let summary = trn!("{count} word", "{count} words", words, count = crate::sheets::group_thousands(words));
-        let switch = self.left_switch(cx);
+        let strip = crate::panels::strip_at_top(self.tab_strip(side, cx));
         let foot = self.render_panel_foot(cx);
-        let el = div()
-            .id("file-panel")
-            .test_support()
-            .absolute()
-            .top(px(workspace::HEADER_H))
-            .bottom_0()
-            .left_0()
-            .w(px(workspace::sidebar_width(cx)))
+        let el = crate::panels::frame(div().id("file-panel").test_support(), side, cx)
             .flex()
             .flex_col()
-            .bg(theme::surface(theme::bg_panel()))
-            .border_r_1()
-            .border_color(c(theme::line()))
             .pt(px(160. - workspace::HEADER_H))
             .px(px(20.))
             .pb(px(PANEL_PB))
             .gap_3()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(workspace::resize_handle(PanelEdge::Sidebar))
-            .children(switch.map(|s| div().absolute().top(px(12.)).left(px(20.)).child(s)))
+            .child(workspace::resize_handle(side.edge()))
+            .child(strip)
             .child(div().id("file-panel-title").absolute().top(px(76.)).left(px(24.)).right(px(18.)).truncate().font_family(theme::hand()).text_size(theme::hand_px(23.)).text_color(c(theme::text_2())).child(title).test_support())
             .child(div().absolute().top(px(106.)).left(px(24.)).right(px(18.)).truncate().text_size(px(10.5)).text_color(c(theme::faint())).child(subtitle))
             .child(list)

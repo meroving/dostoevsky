@@ -175,7 +175,7 @@ fn fits(cx: &App, verb: &str, labels: &[&str]) -> bool {
     let chars: usize = verb.chars().count() + labels.iter().map(|l| l.chars().count()).sum::<usize>();
     // Plex Mono at 12 px is 7.2 px a character; a button adds 22 and the gap 6; the row is the
     // panel less 41.
-    chars as f32 * 7.2 + labels.len() as f32 * 28. <= crate::workspace::sidebar_width(cx) - 42.
+    chars as f32 * 7.2 + labels.len() as f32 * 28. <= crate::panels::side_width(crate::panels::side_of(crate::panels::PanelTab::Review, cx), cx) - 42.
 }
 
 fn in_quotes(t: &str) -> String {
@@ -212,29 +212,19 @@ fn kind(pass: Pass, found: ai::lab::Found) -> Option<&'static str> {
 }
 
 impl Workspace {
-    pub(crate) fn render_review(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub(crate) fn render_review(&mut self, side: crate::panels::Side, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         if !self.lab.open || !self.model.read(cx).layer {
             return None;
         }
-        let switch = self.left_switch(cx);
+        let switch = self.tab_strip(side, cx);
         let (body, keys) = if self.lab.showing_results() { self.review_results(window, cx) } else { self.review_passes(cx) };
-        let foot = self.render_panel_foot(cx);
-        let el = div()
-            .id("review")
-            .test_support()
-            .absolute()
-            .top(px(crate::workspace::HEADER_H))
-            .bottom_0()
-            .left_0()
-            .w(px(crate::workspace::sidebar_width(cx)))
+        let foot = self.foot_here(side, cx).then(|| self.render_panel_foot(cx));
+        let el = crate::panels::frame(div().id("review").test_support(), side, cx)
             .flex()
             .flex_col()
-            .bg(theme::surface(theme::bg_panel()))
-            .border_r_1()
-            .border_color(c(theme::line()))
             .pt(px(12.))
             .px(px(20.))
-            .pb(px(crate::panel_foot::PANEL_PB))
+            .pb(px(if foot.is_some() { crate::panel_foot::PANEL_PB } else { 20. }))
             .gap_3()
             .track_focus(&self.lab.focus)
             .key_context("Review")
@@ -263,11 +253,11 @@ impl Workspace {
                     w.focus(&this.lab.focus, cx);
                 }),
             )
-            .child(crate::workspace::resize_handle(crate::workspace::PanelEdge::Sidebar))
-            .children(switch)
+            .child(crate::workspace::resize_handle(side.edge()))
+            .child(switch)
             .child(body)
             .child(keys_footer(keys))
-            .child(foot);
+            .children(foot);
         Some(el.into_any_element())
     }
 

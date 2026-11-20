@@ -29,6 +29,7 @@ mod memory;
 mod model;
 mod overflow;
 mod panel_foot;
+mod panels;
 mod pdf;
 mod platform;
 mod prefs;

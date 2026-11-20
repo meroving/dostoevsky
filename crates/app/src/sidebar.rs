@@ -185,7 +185,7 @@ pub(crate) fn keys_footer(keys: Vec<FooterKey>) -> impl IntoElement {
 }
 
 impl Workspace {
-    fn page_groups(&self, cx: &App) -> Vec<VisibleGroup> {
+    pub(crate) fn page_groups(&self, cx: &App) -> Vec<VisibleGroup> {
         self.model.read(cx).doc.visible_groups()
     }
 
@@ -207,7 +207,7 @@ impl Workspace {
     fn ensure_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         // Writing hides groups, so opening the panel goes to editing.
         self.enter_editing(cx);
-        self.lab.open = false;
+        self.make_room_for(crate::panels::PanelTab::Alternatives, window, cx);
         if self.sidebar.is_some() {
             self.end_variant_edit(true, cx);
             return;
@@ -289,7 +289,9 @@ impl Workspace {
             p.spotlight = None;
             cx.notify();
         });
-        match self.project.as_ref().filter(|p| p.open) {
+        // The project list under it on its side takes the keyboard back.
+        let under = crate::panels::side_of(crate::panels::PanelTab::Project, cx) == crate::panels::side_of(crate::panels::PanelTab::Alternatives, cx);
+        match self.project.as_ref().filter(|p| p.open && under) {
             Some(p) => window.focus(&p.focus.clone(), cx),
             None => window.focus(&self.page.read(cx).focus.clone(), cx),
         }
@@ -673,99 +675,28 @@ impl Workspace {
         }
     }
 
-    pub(crate) fn left_switch(&self, cx: &mut Context<Self>) -> Option<AnyElement> {
-        let review = self.lab.open;
-        let alts = self.sidebar.is_some() && !review;
-        let editing = self.model.read(cx).layer;
-        let n = self.page_groups(cx).len();
-        let open = self.lab.open_total();
-        let side = |id: &'static str, label: &'static str, on: bool| {
-            div()
-                .id(id)
-                .relative()
-                .flex()
-                .items_center()
-                .gap(px(4.))
-                .h(px(28.))
-                .role(Role::Tab)
-                .aria_label(label)
-                .aria_selected(on)
-                .text_size(px(12.))
-                .text_color(if on { c(theme::accent()) } else { c(theme::muted()) })
-                .when(!on, |d| d.cursor_pointer().hover(|d| d.text_color(c(theme::text_2()))))
-                .child(label)
-                .when(on, |d| d.child(div().absolute().left_0().right_0().bottom(px(1.)).h(px(2.)).rounded(px(2.)).bg(c(theme::accent()))))
-        };
-        let project = side("switch-project", tr!("Project"), !alts && !review)
-            .when(alts || review, |d| {
-                d.on_click(cx.listener(|this, _, w, cx| {
-                    if this.project.is_some() {
-                        this.toggle_project(&ToggleProject, w, cx)
-                    } else {
-                        this.open_file_panel(w, cx)
-                    }
-                }))
-            });
-        let alternatives = side("switch-alternatives", tr!("Alternatives"), alts)
-            .when(n > 0, |d| d.child(div().id("alt-count").aria_label(trn!("{n} in this file", "{n} in this file", n)).text_size(px(10.)).child(n.to_string()).test_support()))
-            .when(!alts, |d| {
-                d.on_click(cx.listener(|this, _, w, cx| {
-                    let at = this.page.read(cx).caret_group();
-                    this.open_overview(at, w, cx)
-                }))
-            });
-        // Review is editing's, as the alternatives are.
-        let review_tab = editing.then(|| {
-            side("switch-review", l10n::trc!("pass menu", "Review"), review)
-                .when(open > 0, |d| d.child(div().id("review-count").aria_label(trn!("{n} open", "{n} open", open)).text_size(px(10.)).child(open.to_string()).test_support()))
-                .when(!review, |d| d.on_click(cx.listener(|this, _, w, cx| this.open_review(w, cx))))
-                .test_support()
-        });
-        Some(
-            div()
-                .id("left-switch")
-                .flex()
-                .flex_none()
-                .gap(px(if editing { 14. } else { 18. }))
-                .child(project.test_support())
-                .child(alternatives.test_support())
-                .children(review_tab)
-                .into_any_element(),
-        )
-    }
-
-    pub fn render_sidebar(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
+    pub fn render_sidebar(&mut self, side: crate::panels::Side, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let s = self.sidebar.as_ref()?;
         let info = s.group.and_then(|id| self.model.read(cx).doc.group(id));
-        let switch = self.left_switch(cx);
+        let switch = self.tab_strip(side, cx);
         let (body, keys) = match info {
             Some(g) => self.render_versions(g, window, cx),
             None => self.render_overview(cx),
         };
-        let foot = self.render_panel_foot(cx);
-        let el = div()
-            .id("sidebar")
-            .test_support()
-            .absolute()
-            .top(px(crate::workspace::HEADER_H))
-            .bottom_0()
-            .left_0()
-            .w(px(crate::workspace::sidebar_width(cx)))
+        let foot = self.foot_here(side, cx).then(|| self.render_panel_foot(cx));
+        let el = crate::panels::frame(div().id("sidebar").test_support(), side, cx)
             .flex()
             .flex_col()
-            .bg(theme::surface(theme::bg_panel()))
-            .border_r_1()
-            .border_color(c(theme::line()))
             .pt(px(12.))
             .px(px(20.))
-            .pb(px(crate::panel_foot::PANEL_PB))
+            .pb(px(if foot.is_some() { crate::panel_foot::PANEL_PB } else { 20. }))
             .gap_3()
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(crate::workspace::resize_handle(crate::workspace::PanelEdge::Sidebar))
-            .children(switch)
+            .child(crate::workspace::resize_handle(side.edge()))
+            .child(switch)
             .child(body)
             .child(keys_footer(keys))
-            .child(foot);
+            .children(foot);
         Some(el.into_any_element())
     }
 

@@ -216,6 +216,8 @@ impl Workspace {
         if let Some(s) = &mut self.sidebar {
             s.drop_at = None;
         }
+        // Dropped outside every header: nothing moves.
+        self.tab_drag = None;
         if !self.detached_dragging {
             return;
         }
@@ -329,7 +331,11 @@ impl Workspace {
     }
 
     pub(crate) fn spring_overflow(&mut self, e: &DragMoveEvent<TextDrag>, window: &mut Window, cx: &mut Context<Self>) {
-        let over = e.bounds.contains(&e.event.position) && self.drawer.is_none();
+        // Over the Cuts' side's button, unless that side already shows them (or Comments, which
+        // turns to the Cuts while text is carried).
+        let side = crate::panels::side_of(crate::panels::PanelTab::Cuts, cx);
+        let showing = matches!(self.shown_tab(side, cx), Some(crate::panels::PanelTab::Cuts | crate::panels::PanelTab::Comments));
+        let over = e.bounds.contains(&e.event.position) && !showing;
         if !over {
             if self.spring.take().is_some() {
                 cx.notify();

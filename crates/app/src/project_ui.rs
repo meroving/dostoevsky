@@ -16,7 +16,7 @@ use crate::project::{self, Day, Kind, Rename, Tree};
 use crate::sheets::group_thousands;
 use crate::theme::{self, c, ca};
 use crate::view::{Mode, TextView, ViewEvent};
-use crate::workspace::{self, PanelEdge, Workspace};
+use crate::workspace::{self, Workspace};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Section {
@@ -1029,10 +1029,7 @@ impl Workspace {
             return;
         }
         p.open = true;
-        self.lab.open = false;
-        if self.sidebar.is_some() {
-            self.close_sidebar(window, cx);
-        }
+        self.make_room_for(crate::panels::PanelTab::Project, window, cx);
         self.remember_project();
         self.focus_list(window, cx);
         self.scroll_list_to_page(cx);
@@ -1043,10 +1040,7 @@ impl Workspace {
     pub(crate) fn show_project_tab(&mut self, window: &mut Window, cx: &mut Context<Self>) {
         let Some(p) = &mut self.project else { return self.open_file_panel(window, cx) };
         p.open = true;
-        self.lab.open = false;
-        if self.sidebar.is_some() {
-            self.close_sidebar(window, cx);
-        }
+        self.make_room_for(crate::panels::PanelTab::Project, window, cx);
         self.remember_project();
         self.scroll_list_to_page(cx);
         cx.notify();
@@ -1561,10 +1555,7 @@ impl Workspace {
         self.project_root().map(project::folder_name)
     }
 
-    pub fn render_project(&mut self, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
-        if self.sidebar.is_some() || self.lab.open {
-            return None;
-        }
+    pub fn render_project(&mut self, side: crate::panels::Side, window: &mut Window, cx: &mut Context<Self>) -> Option<AnyElement> {
         let p = self.project.as_ref()?;
         if !p.open {
             return None;
@@ -1866,23 +1857,13 @@ impl Workspace {
 
         let hint = editing.is_some().then(|| tr!("return names it · esc cancels").to_string());
 
-        let switch = self.left_switch(cx);
+        let strip = crate::panels::strip_at_top(self.tab_strip(side, cx));
         let foot = self.render_panel_foot(cx);
-        let el = div()
-            .id("project")
-            .test_support()
+        let el = crate::panels::frame(div().id("project").test_support(), side, cx)
             .key_context("ProjectList")
             .track_focus(&focus)
-            .absolute()
-            .top(px(workspace::HEADER_H))
-            .bottom_0()
-            .left_0()
-            .w(px(workspace::sidebar_width(cx)))
             .flex()
             .flex_col()
-            .bg(theme::surface(theme::bg_panel()))
-            .border_r_1()
-            .border_color(c(theme::line()))
             .pt(px(160. - workspace::HEADER_H))
             .px(px(20.))
             .pb(px(crate::panel_foot::PANEL_PB))
@@ -1893,8 +1874,8 @@ impl Workspace {
             .on_action(cx.listener(Self::list_close))
             .on_action(cx.listener(Self::list_undo))
             .on_mouse_down(MouseButton::Left, |_, _, cx| cx.stop_propagation())
-            .child(workspace::resize_handle(PanelEdge::Sidebar))
-            .children(switch.map(|s| div().absolute().top(px(12.)).left(px(20.)).child(s)))
+            .child(workspace::resize_handle(side.edge()))
+            .child(strip)
             .child(
                 div()
                     .id("project-title")

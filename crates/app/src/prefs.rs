@@ -4,6 +4,8 @@ use gpui_kit::{App, Global};
 use l10n::tr;
 use serde::{Deserialize, Serialize};
 
+use crate::panels::PanelTab;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum Effects {
@@ -319,26 +321,34 @@ pub struct Prefs {
     pub check_updates: Option<bool>,
     /// What each mode had open when it was left, put back when you come back to it.
     pub panels: ModePanels,
+    /// Which side each panel tab lives on, in header order: one layout for every window.
+    pub panel_tabs: crate::panels::TabLayout,
 }
 
-/// A left panel's tab.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum LeftTab {
-    Project,
-    Alternatives,
-    Review,
-}
-
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(default)]
+/// The tabs a mode had showing, a side each.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(from = "SavedPanels")]
 pub struct Panels {
-    /// `None`: the left panel is closed.
-    pub left: Option<LeftTab>,
-    pub cuts: bool,
+    pub open: Vec<PanelTab>,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Before tabs could change sides: the left panel's tab, and whether the right panel was open.
+#[derive(Default, Deserialize)]
+#[serde(default)]
+struct SavedPanels {
+    open: Option<Vec<PanelTab>>,
+    left: Option<PanelTab>,
+    cuts: bool,
+}
+
+impl From<SavedPanels> for Panels {
+    fn from(s: SavedPanels) -> Self {
+        let open = s.open.unwrap_or_else(|| s.left.into_iter().chain(s.cuts.then_some(PanelTab::Cuts)).collect());
+        Panels { open }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct ModePanels {
     pub writing: Panels,
@@ -348,7 +358,7 @@ pub struct ModePanels {
 /// Writing starts with nothing open; editing on Review, which has no other button.
 impl Default for ModePanels {
     fn default() -> Self {
-        ModePanels { writing: Panels::default(), editing: Panels { left: Some(LeftTab::Review), cuts: false } }
+        ModePanels { writing: Panels::default(), editing: Panels { open: vec![PanelTab::Review] } }
     }
 }
 
@@ -446,6 +456,7 @@ impl Default for Prefs {
             welcome_shown: false,
             check_updates: None,
             panels: ModePanels::default(),
+            panel_tabs: Default::default(),
         }
     }
 }
@@ -528,6 +539,18 @@ mod tests {
     fn prefs_saved_before_themes_keep_the_original_look() {
         let old: Prefs = serde_json::from_str(r#"{"font_size":17.0}"#).unwrap();
         assert_eq!(old.theme, "dostoevsky");
+    }
+
+    #[test]
+    fn panels_saved_before_tabs_moved_still_read() {
+        use crate::panels::PanelTab;
+        let read = |json: &str| serde_json::from_str::<Prefs>(json).unwrap().panels;
+        let old = read(r#"{"panels": {"writing": {"left": "project", "cuts": true}, "editing": {"left": null, "cuts": false}}}"#);
+        assert_eq!(old.writing.open, vec![PanelTab::Project, PanelTab::Cuts]);
+        assert!(old.editing.open.is_empty());
+        let new = read(r#"{"panels": {"writing": {"open": ["comments"]}}}"#);
+        assert_eq!(new.writing.open, vec![PanelTab::Comments]);
+        assert_eq!(new.editing.open, vec![PanelTab::Review], "editing's default");
     }
 
     #[test]

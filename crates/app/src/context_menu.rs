@@ -39,6 +39,8 @@ pub enum Command {
     Comment(doc_model::CommentId, crate::comments::CommentOp),
     /// A theme tile's menu in Preferences, by theme id.
     Theme(String, crate::theme_ui::ThemeOp),
+    /// A panel tab to the end of the other side's header.
+    MoveTab(crate::panels::PanelTab, crate::panels::Side),
 }
 
 pub struct GroupTarget {
@@ -333,6 +335,16 @@ impl ContextMenu {
         }
         items.extend([None, item(tr!("Settings…"), ShowPreferences), item(tr!("Keyboard Shortcuts"), ShowShortcuts)]);
         ContextMenu { at, heading: Some(heading), items, up: false }
+    }
+
+    /// A panel tab's label: the way to move it without dragging (VoiceOver's too).
+    pub fn panel_tab(tab: crate::panels::PanelTab, to: crate::panels::Side, at: Point<Pixels>) -> Self {
+        let label = match to {
+            crate::panels::Side::Left => tr!("Move to Left Panel"),
+            crate::panels::Side::Right => tr!("Move to Right Panel"),
+        };
+        let items = vec![plain(label, Some(Command::MoveTab(tab, to))), None, item(tr!("Reset Panel Layout"), ResetPanelLayout)];
+        ContextMenu { at, heading: None, items, up: false }
     }
 
     pub fn open_menu(at: Point<Pixels>, recent: Vec<(std::path::PathBuf, String, &'static str)>, enclosing: bool) -> Self {
@@ -689,6 +701,7 @@ impl Workspace {
             Some(Command::Trace(id, op)) => self.trace_op(id, op, window, cx),
             Some(Command::Comment(id, op)) => self.comment_op(id, op, window, cx),
             Some(Command::Theme(id, op)) => self.theme_op(&id, op, window, cx),
+            Some(Command::MoveTab(tab, side)) => self.move_tab(tab, side, None, window, cx),
             None => {}
         }
     }

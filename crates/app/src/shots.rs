@@ -21,6 +21,8 @@
 //! {"drag": {"text": "a suggestion"}, "to": {"text": "You"}, "hold": true}   press and drag
 //!                                         (selected text); `hold` keeps the button down
 //! {"release": [640, 300]}                 let go of a held drag there
+//! {"drag": {"tab": "alternatives"}, "to": {"tab": "comments", "at": "start"}}   a panel tab
+//!                                         to a header (`at` start: before that tab)
 //! {"first_open": "confirm"}               the first-open sheet's “Open as …”
 //! {"new_project_place": "target/x"}      where New Project makes the folder
 //! {"expect": {"text_contains": "…", "group": {"index": 0, "active": 1}, …}}   see `expect`
@@ -164,6 +166,17 @@ fn range_of(v: &Value, ws: &Entity<Workspace>, cx: &App) -> Option<std::ops::Ran
 fn target(v: &Value, ws: &Entity<Workspace>, cx: &App) -> Option<Point<Pixels>> {
     if let Some(p) = point_of(v) {
         return Some(p);
+    }
+    // A panel tab's label; `"at": "start"` aims just inside its left edge (a drop lands before it).
+    if let Some(name) = v.get("tab").and_then(Value::as_str) {
+        let Some(b) = crate::panels::PanelTab::named(name).and_then(|t| ws.read(cx).tab_geometry.borrow().label(t)) else {
+            fail(format!("no {name:?} tab on screen"));
+            return None;
+        };
+        return Some(match v.get("at").and_then(Value::as_str) {
+            Some("start") => point(b.left() + px(3.), b.center().y),
+            _ => b.center(),
+        });
     }
     let r = if let Some(n) = v.get("group").and_then(Value::as_u64) {
         let groups = ws.read(cx).model.read(cx).doc.visible_groups();

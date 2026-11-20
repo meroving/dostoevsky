@@ -85,18 +85,18 @@ impl Workspace {
     }
 
     pub fn toggle_overflow(&mut self, _: &ToggleOverflow, window: &mut Window, cx: &mut Context<Self>) {
-        if self.drawer.is_some() {
-            self.drawer = None;
-            let f = self.page.read(cx).focus.clone();
-            window.focus(&f, cx);
-        } else {
-            self.open_drawer(window, cx);
-        }
+        self.toggle_cuts_side(window, cx);
         self.sync_comment_ticks(cx);
         cx.notify();
     }
 
-    pub(crate) fn open_drawer(&mut self, _: &mut Window, cx: &mut Context<Self>) {
+    /// The Cuts tab, on whichever side it lives.
+    pub(crate) fn open_drawer(&mut self, window: &mut Window, cx: &mut Context<Self>) {
+        self.make_room_for(crate::panels::PanelTab::Cuts, window, cx);
+        self.ensure_drawer(cx);
+    }
+
+    pub(crate) fn ensure_drawer(&mut self, cx: &mut Context<Self>) {
         if self.drawer.is_some() {
             return;
         }
@@ -107,13 +107,19 @@ impl Workspace {
     /// Opens a closed panel without the keyboard, only if the page can stay where it is: text
     /// that moved under the pointer as it was picked up would land in the wrong place.
     pub(crate) fn open_drawer_for_drag(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.drawer.is_some() {
+        use crate::panels::{side_of, side_width, PanelTab, Side};
+        let side = side_of(PanelTab::Cuts, cx);
+        if self.side_open(side, cx) {
             return;
         }
         let Some((origin, width)) = self.page.read(cx).layout.as_ref().map(|l| l.column()) else { return };
         // The page keeps 40 px clear of a panel (`compute_layout`).
-        let room = window.viewport_size().width - px(crate::workspace::overflow_width(cx)) - px(40.);
-        if origin.x + width > room {
+        let panel = px(side_width(side, cx)) + px(40.);
+        let fits = match side {
+            Side::Right => origin.x + width <= window.viewport_size().width - panel,
+            Side::Left => origin.x >= panel,
+        };
+        if !fits {
             return;
         }
         self.open_drawer(window, cx);
@@ -207,7 +213,8 @@ impl Workspace {
         }
         let size = window.viewport_size();
         if let Some(from) = from {
-            let to = point(size.width - px(crate::workspace::overflow_width(cx) - 24.), px(150.));
+            let side = crate::panels::side_of(crate::panels::PanelTab::Cuts, cx);
+            let to = point(px(self.side_x(side, f32::from(size.width), cx) + 24.), px(150.));
             self.overlay.fly(from, to, text, Prefs::get(cx).motion());
         }
         cx.notify();

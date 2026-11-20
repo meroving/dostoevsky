@@ -190,7 +190,7 @@ fn com_5_the_comments_tab() {
     assert!(ui.has_element("tab-comments"));
     ui.click_id("tab-comments");
     assert!(ui.has_element("comments-panel"));
-    assert_eq!(ui.read(|ws, cx| ws.panel_count(cx)), 2, "the header counts the open tab");
+    assert_eq!(ui.read(|ws, cx| ws.button_count(crate::panels::Side::Right, cx)), 2, "the header counts the open tab");
     assert!(notes(&ui).iter().all(|n| n.2), "ticks while the list has the notes");
     ui.click_id(("comment-row", 1usize));
     assert_eq!(writing(&ui).map(|_| ()), Some(()));

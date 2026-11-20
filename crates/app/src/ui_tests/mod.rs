@@ -12,6 +12,7 @@ mod layout;
 mod ghosts;
 mod overflow;
 mod panel_foot;
+mod panels;
 mod paragraphs;
 mod perf;
 mod prefs;

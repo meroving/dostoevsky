@@ -53,8 +53,8 @@ pub(crate) fn set_prefs(cx: &mut App, f: impl FnOnce(&mut Prefs)) {
     f(&mut p);
     p.save();
     let old = Prefs::get(cx);
-    let menus_changed = (old.appearance, old.zen_writing, old.typewriter, old.private_mode, old.alignment, old.hyphenation, old.paragraphs, old.font_size, old.ai.enabled, &old.language, &old.theme)
-        != (p.appearance, p.zen_writing, p.typewriter, p.private_mode, p.alignment, p.hyphenation, p.paragraphs, p.font_size, p.ai.enabled, &p.language, &p.theme);
+    let menus_changed = (old.appearance, old.zen_writing, old.typewriter, old.private_mode, old.alignment, old.hyphenation, old.paragraphs, old.font_size, old.ai.enabled, &old.language, &old.theme, &old.panel_tabs)
+        != (p.appearance, p.zen_writing, p.typewriter, p.private_mode, p.alignment, p.hyphenation, p.paragraphs, p.font_size, p.ai.enabled, &p.language, &p.theme, &p.panel_tabs);
     if old.language != p.language {
         // Tests switch only their own thread, so tests running beside them stay in English.
         if cfg!(test) {

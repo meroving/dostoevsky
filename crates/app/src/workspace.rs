@@ -26,7 +26,13 @@ pub struct Workspace {
     pub(crate) peek: Option<(doc_model::CutId, bool)>,
     pub(crate) comment_edit: Option<crate::comments::CommentEdit>,
     pub(crate) comment_peek: Option<doc_model::CommentId>,
-    pub(crate) right_tab: crate::comments::RightTab,
+    /// The Comments tab is open (over the Cuts on their side, as a tab of one panel).
+    pub(crate) comments_open: bool,
+    /// The tab each side showed when it closed, which its button opens again.
+    pub(crate) last_tab: [Option<crate::panels::PanelTab>; 2],
+    /// A tab's label being carried to a header.
+    pub(crate) tab_drag: Option<crate::panels::TabDragState>,
+    pub(crate) tab_geometry: crate::panels::SharedGeometry,
     pub(crate) comments_scope: crate::cuts_panel::Scope,
     pub(crate) comment_found: Option<doc_model::CommentId>,
     pub(crate) comment_files: crate::comments::DiskComments,
@@ -67,10 +73,6 @@ pub struct Workspace {
     pub(crate) project: Option<crate::project_ui::ProjectWindow>,
     /// The Project tab of a window with no project.
     pub(crate) file_panel: Option<crate::panel_foot::FilePanel>,
-    /// With no project, the panel button opens the tab used last: Alternatives if true.
-    pub(crate) left_alts: bool,
-    /// The left panel last showed Review.
-    pub(crate) left_review: bool,
     pub(crate) slides: Slides,
     pub(crate) ideas: Option<crate::ideas::IdeasRun>,
     pub(crate) lab: crate::lab::Lab,
@@ -145,7 +147,10 @@ impl Workspace {
             peek: None,
             comment_edit: None,
             comment_peek: None,
-            right_tab: Default::default(),
+            comments_open: false,
+            last_tab: [None, None],
+            tab_drag: None,
+            tab_geometry: Default::default(),
             comments_scope: crate::cuts_panel::Scope::Page,
             comment_found: None,
             comment_files: Default::default(),
@@ -164,8 +169,6 @@ impl Workspace {
             disk_prompt: false,
             project: None,
             file_panel: None,
-            left_alts: false,
-            left_review: false,
             slides: Slides::default(),
             ideas: None,
             lab: crate::lab::Lab::new(cx),
@@ -1182,19 +1185,11 @@ impl Workspace {
 
     /// What the mode being left has open, for when it comes back.
     fn remember_panels(&mut self, editing: bool, cx: &mut Context<Self>) {
-        use crate::prefs::{LeftTab, Panels};
-        let left = if self.lab.open {
-            Some(LeftTab::Review)
-        } else if self.sidebar.is_some() {
-            Some(LeftTab::Alternatives)
-        } else if self.panel_open() {
-            Some(LeftTab::Project)
-        } else {
-            None
-        };
-        let now = Panels { left, cuts: self.drawer.is_some() };
-        let all = Prefs::get(cx).panels;
-        if (if editing { all.editing } else { all.writing }) != now {
+        use crate::panels::Side;
+        let open = [Side::Left, Side::Right].into_iter().filter_map(|s| self.shown_tab(s, cx)).collect();
+        let now = crate::prefs::Panels { open };
+        let all = &Prefs::get(cx).panels;
+        if *(if editing { &all.editing } else { &all.writing }) != now {
             crate::sheets::set_prefs(cx, |p| *(if editing { &mut p.panels.editing } else { &mut p.panels.writing }) = now);
         }
     }
@@ -1202,24 +1197,23 @@ impl Workspace {
     /// Only by the mode switch: a command that goes to editing on its way brings its own panel.
     /// The keyboard stays on the page.
     fn put_back_panels(&mut self, editing: bool, window: &mut Window, cx: &mut Context<Self>) {
-        use crate::prefs::LeftTab;
-        let all = Prefs::get(cx).panels;
-        let want = if editing { all.editing } else { all.writing };
+        use crate::panels::{side_of, PanelTab};
+        let all = &Prefs::get(cx).panels;
+        let want = if editing { all.editing.clone() } else { all.writing.clone() };
         // Writing has closed everything first; editing only adds, so a list you go on using stays.
-        match want.left {
-            // Writing keeps to the Project tab.
-            Some(LeftTab::Review) if editing => self.open_review(window, cx),
-            Some(LeftTab::Alternatives) if editing => self.open_sidebar(None, window, cx),
-            Some(_) => self.show_project_tab(window, cx),
-            None => {}
+        for tab in want.open {
+            match tab {
+                PanelTab::Review if editing => self.open_review(window, cx),
+                PanelTab::Alternatives if editing => self.open_sidebar(None, window, cx),
+                // Writing keeps to the Project tab, where it shares their side.
+                PanelTab::Review | PanelTab::Alternatives if side_of(tab, cx) != side_of(PanelTab::Project, cx) => {}
+                PanelTab::Project | PanelTab::Review | PanelTab::Alternatives => self.show_project_tab(window, cx),
+                PanelTab::Cuts => self.open_drawer(window, cx),
+                PanelTab::Comments => self.show_comments(window, cx),
+            }
+            self.last_tab[side_of(tab, cx).i()] = Some(tab);
         }
-        if let Some(tab) = want.left.filter(|_| self.project.is_none()) {
-            self.left_alts = tab == LeftTab::Alternatives;
-        }
-        if want.cuts {
-            self.open_drawer(window, cx);
-            self.sync_comment_ticks(cx);
-        }
+        self.sync_comment_ticks(cx);
         self.focus_page(window, cx);
         cx.notify();
     }
@@ -1254,45 +1248,20 @@ impl Workspace {
         if self.find.is_some() {
             self.on_find_close(window, cx);
         }
-        if self.sidebar.is_some() || self.panel_open() || self.lab.open {
-            self.toggle_left_panel(window, cx);
+        for side in [crate::panels::Side::Left, crate::panels::Side::Right] {
+            if self.side_open(side, cx) {
+                self.close_side(side, window, cx);
+            }
         }
-        self.drawer = None;
         self.sync_comment_ticks(cx);
         self.focus_page(window, cx);
         cx.notify();
     }
 
+    /// ⌘P in a single file: the Project tab's side.
     pub(crate) fn toggle_left_panel(&mut self, window: &mut Window, cx: &mut Context<Self>) {
-        if self.sidebar.is_some() || self.panel_open() || self.lab.open {
-            if self.project.is_none() {
-                self.left_alts = self.sidebar.is_some();
-            }
-            self.left_review = self.lab.open;
-            if self.lab.open {
-                self.close_review(window, cx);
-            }
-            if self.sidebar.is_some() {
-                self.close_sidebar(window, cx);
-            }
-            if self.panel_open() {
-                self.close_panel(window, cx);
-            }
-            return;
-        }
-        if self.left_review && self.model.read(cx).layer {
-            return self.open_review(window, cx);
-        }
-        if self.project.is_some() {
-            self.toggle_project(&ToggleProject, window, cx);
-            return;
-        }
-        // Writing keeps to the Project tab: the alternatives are editing's.
-        if self.left_alts && self.model.read(cx).layer {
-            self.open_sidebar(None, window, cx);
-        } else {
-            self.open_file_panel(window, cx);
-        }
+        let side = crate::panels::side_of(crate::panels::PanelTab::Project, cx);
+        self.toggle_side(side, window, cx);
     }
 
     /// The document menu's first line, and whether it will save itself.
@@ -1729,12 +1698,20 @@ impl Render for Workspace {
         };
         // "— Edited" gave way: a dot says it instead.
         let dot = dirty && title != window_title(m);
-        let scraps = self.panel_count(cx);
+        use crate::panels::{PanelTab, Side};
+        let scraps = self.button_count(Side::Right, cx);
+        let left_scraps = self.button_count(Side::Left, cx);
         let chrome_alpha = if self.typing { 0.15 } else { 1. };
-        let drawer_open = self.drawer.is_some();
+        let drawer_open = self.side_open(Side::Right, cx);
         let find_open = self.find.is_some();
         let find_button = find_button_fits(window_w);
-        let left_open = self.sidebar.is_some() || self.panel_open() || self.lab.open;
+        let left_open = self.side_open(Side::Left, cx);
+        let (left_label, left_key) = self.side_button_label(Side::Left, cx);
+        let (right_label, right_key) = self.side_button_label(Side::Right, cx);
+        let left_empty = crate::panels::layout(cx).tabs(Side::Left).is_empty();
+        let right_empty = crate::panels::layout(cx).tabs(Side::Right).is_empty();
+        let cuts_side = crate::panels::side_of(PanelTab::Cuts, cx);
+        let springing = self.spring.is_some() && cx.has_active_drag();
         let menu_open = self.context_menu.as_ref().is_some_and(|m| m.heading.is_some());
         let selecting = !self.page.read(cx).selection().is_empty();
         let counter = self.counter(counter_room(window_w), cx);
@@ -1755,8 +1732,8 @@ impl Render for Workspace {
             ctx.add("project_panel");
         }
         let glass = theme::glass();
-        let left = if left_open { sidebar_width(cx) } else { 0. };
-        let right = if self.drawer.is_some() { overflow_width(cx) } else { 0. };
+        let left = self.side_room(Side::Left, cx);
+        let right = self.side_room(Side::Right, cx);
         let (left_in, right_in) = self.slides.step(left > 0., right > 0., Prefs::get(cx).motion());
         if left_in < 1. || right_in < 1. {
             window.request_animation_frame();
@@ -1771,13 +1748,11 @@ impl Render for Workspace {
             let d = if from_left { d.left(off) } else { d.right(off) };
             d.child(el).into_any_element()
         };
-        let sidebar = self.render_sidebar(window, cx).map(|e| slide(e, true, left, left_in));
-        let review = self.render_review(window, cx).map(|e| slide(e, true, left, left_in));
-        let project_panel = self.render_project(window, cx).map(|e| slide(e, true, left, left_in));
-        let file_panel = self.render_file_panel(cx).map(|e| slide(e, true, left, left_in));
+        let left_panel = self.render_side(Side::Left, window, cx).map(|e| slide(e, true, left, left_in));
+        let tab_targets = self.render_tab_targets(window, cx);
         let in_project = self.project.is_some();
         let has_path = self.model.read(cx).path.is_some();
-        let drawer = self.render_drawer(cx).map(|e| slide(e, false, right, right_in));
+        let right_panel = self.render_side(Side::Right, window, cx).map(|e| slide(e, false, right, right_in));
         let menu = self.render_context_menu(window, cx);
         let peek = self.render_peek(cx);
         let comment_field = self.render_comment_field(window, cx);
@@ -1864,9 +1839,12 @@ impl Render for Workspace {
             .when(!in_project, |d| d.on_action(cx.listener(|this, _: &ToggleProject, w, cx| this.toggle_left_panel(w, cx))))
             .when(!in_project && has_path, |d| d.on_action(cx.listener(Self::open_enclosing_folder)))
             .on_drop(cx.listener(|this, _: &crate::project_ui::RowDrag, _, cx| this.clear_drop(cx)))
-            .capture_any_mouse_down(cx.listener(|this, e: &MouseDownEvent, _, cx| {
-                // A click outside the sidebar saves a variant being edited there.
-                if f32::from(e.position.x) > sidebar_width(cx) {
+            .capture_any_mouse_down(cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                // A click outside the Alternatives' panel saves a variant being edited there.
+                let side = crate::panels::side_of(PanelTab::Alternatives, cx);
+                let (x, window_w) = (f32::from(e.position.x), f32::from(window.viewport_size().width));
+                let x0 = this.side_x(side, window_w, cx);
+                if x < x0 || x > x0 + crate::panels::side_width(side, cx) {
                     this.end_variant_edit(true, cx);
                 }
             }))
@@ -1894,6 +1872,12 @@ impl Render for Workspace {
                 Prefs::get(cx).save();
                 cx.refresh_windows();
             })
+            .on_drag_move(cx.listener(|this, e: &DragMoveEvent<crate::panels::TabDrag>, window, cx| {
+                let tab = e.drag(cx).tab;
+                this.drag_tab_over(tab, e.event.position, window, cx);
+            }))
+            .on_drop(cx.listener(|this, d: &crate::panels::TabDrag, window, cx| this.drop_tab(d.tab, window, cx)))
+            .on_action(cx.listener(|this, _: &ResetPanelLayout, window, cx| this.reset_panel_layout(window, cx)))
             .on_mouse_move(cx.listener(|this, _: &MouseMoveEvent, _, cx| {
                 if this.typing {
                     this.typing = false;
@@ -1975,11 +1959,9 @@ impl Render for Workspace {
                     )),
             )
             .when(glass, |d| d.child(div().absolute().top_0().left_0().right_0().h(px(HEADER_H)).bg(theme::surface(theme::bg()))))
-            .children(sidebar)
-            .children(review)
-            .children(project_panel)
-            .children(file_panel)
-            .children(drawer)
+            .children(left_panel)
+            .children(right_panel)
+            .children(tab_targets)
             .when(detached > 0 && self.sheet.is_none(), |d| {
                 d.child(
                     div()
@@ -2054,12 +2036,30 @@ impl Render for Workspace {
                                 .gap(px(PANEL_BUTTON_GAP))
                                 .opacity(chrome_alpha)
                                 .child(
-                                    icon_button("panel", icon("panel", "chrome/panel-left.svg", 20., 16., left_open), left_open)
-                                        .aria_label(if in_project { tr!("Project list") } else { tr!("Project and alternatives") })
-                                        .aria_toggled(toggled(left_open))
-                                        .tooltip(tip(if in_project { tr!("Project list") } else { tr!("Project and alternatives") }, Box::new(ToggleProject)))
-                                        .on_click(cx.listener(|this, _, w, cx| this.toggle_left_panel(w, cx)))
-                                        .test_support(),
+                                    icon_button(
+                                        "panel",
+                                        div()
+                                            .flex()
+                                            .items_center()
+                                            .gap(px(6.))
+                                            .child(icon("panel", "chrome/panel-left.svg", 20., 16., left_open))
+                                            .when(left_scraps > 0, |d| {
+                                                d.child(div().text_size(px(11.)).text_color(if left_open { c(theme::accent()) } else { c(theme::muted()) }).child(left_scraps.to_string()))
+                                            }),
+                                        left_open,
+                                    )
+                                    .when(left_scraps > 0, |d| d.w_auto().px(px(5.)))
+                                    .when(left_empty, |d| d.opacity(0.35))
+                                    .aria_label(left_label.0.clone())
+                                    .aria_toggled(toggled(left_open))
+                                    .tooltip(side_tip(left_label.1, left_key))
+                                    .on_click(cx.listener(|this, _, w, cx| this.toggle_side(Side::Left, w, cx)))
+                                    .when(cuts_side == Side::Left, |d| {
+                                        d.on_drag_move(cx.listener(Self::spring_overflow)).when(springing, |d| {
+                                            d.rounded(px(7.)).border_1().border_color(ca(theme::accent(), 0.7)).bg(ca(theme::accent(), 0.12))
+                                        })
+                                    })
+                                    .test_support(),
                                 )
                                 .child(
                                     div()
@@ -2205,22 +2205,15 @@ impl Render for Workspace {
                                     )
                                     .w_auto()
                                     .px(px(5.))
-                                    .aria_label(match scraps {
-                                        0 => tr!("Cuts").to_string(),
-                                        n => trn!("Cuts, {n} cut", "Cuts, {n} cuts", n),
-                                    })
+                                    .when(right_empty, |d| d.opacity(0.35))
+                                    .aria_label(right_label.0.clone())
                                     .aria_toggled(toggled(drawer_open))
-                                    .tooltip(tip(
-                                        match scraps {
-                                            0 => tr!("Cuts").to_string(),
-                                            n => trn!("Cuts · {n} cut", "Cuts · {n} cuts", n),
-                                        },
-                                        Box::new(ToggleOverflow),
-                                    ))
-                                    .on_click(|_, w, cx| w.dispatch_action(Box::new(ToggleOverflow), cx))
-                                    .on_drag_move(cx.listener(Self::spring_overflow))
-                                    .when(self.spring.is_some() && cx.has_active_drag(), |d| {
-                                        d.rounded(px(7.)).border_1().border_color(ca(theme::accent(), 0.7)).bg(ca(theme::accent(), 0.12))
+                                    .tooltip(side_tip(right_label.1, right_key))
+                                    .on_click(cx.listener(|this, _, w, cx| this.toggle_side(Side::Right, w, cx)))
+                                    .when(cuts_side == Side::Right, |d| {
+                                        d.on_drag_move(cx.listener(Self::spring_overflow)).when(springing, |d| {
+                                            d.rounded(px(7.)).border_1().border_color(ca(theme::accent(), 0.7)).bg(ca(theme::accent(), 0.12))
+                                        })
                                     })
                                     .test_support(),
                                 ),
@@ -2296,6 +2289,16 @@ impl Render for Tip {
             .text_color(c(theme::text_2()))
             .child(self.label.clone())
             .children(self.keys.clone().map(|k| div().text_color(c(theme::muted())).child(k)))
+    }
+}
+
+/// A side button's tooltip: the key only where an action opens that side.
+fn side_tip(label: String, action: Option<Box<dyn Action>>) -> impl Fn(&mut Window, &mut App) -> AnyView + 'static {
+    let label: SharedString = label.into();
+    move |_, cx| {
+        let keys = action.as_ref().and_then(|a| crate::context_menu::shortcut_label(a.as_ref(), cx));
+        let label = label.clone();
+        cx.new(|_| Tip { label, keys }).into()
     }
 }
 

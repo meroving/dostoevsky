@@ -401,13 +401,6 @@ impl ContextMenu {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub enum RightTab {
-    #[default]
-    Cuts,
-    Comments,
-}
-
 #[derive(Clone, Debug)]
 pub(crate) struct Row {
     pub id: Option<CommentId>,
@@ -506,22 +499,15 @@ impl Workspace {
     }
 
     pub(crate) fn show_comments_panel(&mut self, id: Option<CommentId>, window: &mut Window, cx: &mut Context<Self>) {
-        self.open_drawer(window, cx);
-        self.right_tab = RightTab::Comments;
+        self.show_comments(window, cx);
         self.comment_found = id;
-        self.sync_comment_ticks(cx);
-        cx.notify();
-    }
-
-    pub(crate) fn set_right_tab(&mut self, tab: RightTab, cx: &mut Context<Self>) {
-        self.right_tab = tab;
-        self.sync_comment_ticks(cx);
         cx.notify();
     }
 
     /// With the Comments tab open the list has the notes, so the page shows ticks instead.
     pub(crate) fn sync_comment_ticks(&mut self, cx: &mut Context<Self>) {
-        let ticks = self.drawer.is_some() && self.right_tab == RightTab::Comments;
+        let side = crate::panels::side_of(crate::panels::PanelTab::Comments, cx);
+        let ticks = self.shown_tab(side, cx) == Some(crate::panels::PanelTab::Comments);
         self.page.update(cx, |p, cx| {
             if p.comment_ticks != ticks {
                 p.comment_ticks = ticks;
@@ -554,43 +540,8 @@ impl Workspace {
         self.write_comment(id, window, cx);
     }
 
-    pub(crate) fn render_right_tabs(&self, cx: &mut Context<Self>) -> AnyElement {
-        let tab = self.right_tab;
-        let cuts = self.cuts_count_for_tab(cx);
-        let comments = self.comments_count(cx);
-        let one = |id: &'static str, label: String, n: usize, on: bool, which: RightTab, cx: &mut Context<Self>| {
-            div()
-                .id(id)
-                .relative()
-                .flex()
-                .items_center()
-                .gap(px(4.))
-                .h(px(28.))
-                .role(Role::Tab)
-                .aria_selected(on)
-                .cursor_pointer()
-                .text_color(if on { c(theme::accent()) } else { c(theme::muted()) })
-                .hover(|s| s.text_color(c(theme::text_2())))
-                .on_click(cx.listener(move |this, _, _, cx| this.set_right_tab(which, cx)))
-                .child(label)
-                .when(n > 0, |d| d.child(div().text_size(px(10.)).child(n.to_string())))
-                .when(on, |d| d.child(div().absolute().left_0().right_0().bottom(px(1.)).h(px(2.)).rounded(px(2.)).bg(c(theme::accent()))))
-                .test_support()
-        };
-        div()
-            .absolute()
-            .top(px(12.))
-            .left(px(20.))
-            .flex()
-            .gap(px(18.))
-            .text_size(px(12.))
-            .child(one("tab-cuts", tr!("Cuts").to_string(), cuts, tab == RightTab::Cuts, RightTab::Cuts, cx))
-            .child(one("tab-comments", tr!("Comments").to_string(), comments, tab == RightTab::Comments, RightTab::Comments, cx))
-            .into_any_element()
-    }
-
     /// The Comments tab (COM-5).
-    pub(crate) fn render_comments_panel(&mut self, cx: &mut Context<Self>) -> AnyElement {
+    pub(crate) fn render_comments_panel(&mut self, side: crate::panels::Side, cx: &mut Context<Self>) -> AnyElement {
         let sections = self.comment_sections(cx);
         let book = sections.len() > 1 || sections.first().is_some_and(|s| s.title.is_some());
         let found = self.comment_found;
@@ -674,27 +625,19 @@ impl Workspace {
             }
         }
         let empty = n == 0;
-        div()
-            .id("comments-panel")
-            .test_support()
-            .absolute()
-            .top(px(crate::workspace::HEADER_H))
-            .bottom_0()
-            .right_0()
-            .w(px(crate::workspace::overflow_width(cx)))
+        let strip = crate::panels::strip_at_top(self.tab_strip(side, cx));
+        let foot = self.foot_here(side, cx).then(|| self.render_panel_foot(cx));
+        crate::panels::frame(div().id("comments-panel").test_support(), side, cx)
             .flex()
             .flex_col()
-            .bg(theme::surface(theme::bg_panel()))
-            .border_l_1()
-            .border_color(c(theme::line()))
             .pt(px(160. - crate::workspace::HEADER_H))
             .px(px(13.))
             .pb(px(64.))
             .gap_3()
             .text_size(px(14.))
             .line_height(px(21.))
-            .child(crate::workspace::resize_handle(crate::workspace::PanelEdge::Overflow))
-            .child(self.render_right_tabs(cx))
+            .child(crate::workspace::resize_handle(side.edge()))
+            .child(strip)
             .child(
                 div()
                     .flex()
@@ -726,6 +669,7 @@ impl Workspace {
                     }),
             )
             .child(div().pl(px(8.)).text_size(px(11.)).text_color(c(theme::faint())).child(tr!("⌥⌘M comments on the selection")))
+            .children(foot)
             .into_any_element()
     }
 }

@@ -678,18 +678,19 @@ fn win_16_writing_puts_back_its_project_list() {
 
 #[test]
 fn each_mode_puts_back_its_own_panels() {
-    use crate::prefs::{LeftTab, ModePanels};
+    use crate::panels::PanelTab;
+    use crate::prefs::ModePanels;
     let mut ui = Ui::open(DOC);
     ui.set_prefs(|p| p.panels = ModePanels::default());
     let page_focused = |ui: &mut Ui| ui.read_window(|ws, w, cx| ws.page.read(cx).focus.is_focused(w));
-    let editing_left = |ui: &Ui| ui.read(|_, cx| Prefs::get(cx).panels.editing.left);
+    let editing_left = |ui: &Ui| ui.read(|_, cx| Prefs::get(cx).panels.editing.open.first().copied());
 
     ui.keys("cmd-2");
     assert!(ui.has_element("review"), "editing opens on Review the first time");
     assert!(page_focused(&mut ui), "the keyboard stays on the page");
     ui.keys("cmd-1");
     assert!(!ui.has_element("review") && !ui.has_element("file-panel"), "writing starts with nothing open");
-    assert_eq!(editing_left(&ui), Some(LeftTab::Review));
+    assert_eq!(editing_left(&ui), Some(PanelTab::Review));
 
     // Editing, closed: it stays closed.
     ui.keys("cmd-2 cmd-p");
