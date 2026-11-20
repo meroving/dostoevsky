@@ -1,0 +1,4 @@
+// Private mode (⇧⌘H) in writing mode: the page as blurred ink, the caret's sentence readable.
+{"select": {"text": "Software forgot this.", "at": "end"}}
+{"wait": 900}
+{"shot": "$OUT/writing-private.png"}

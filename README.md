@@ -2,13 +2,21 @@
 
 <h1 align="center">Dostoevsky</h1>
 
-A writing app for macOS that keeps every version of a word, sentence or paragraph where it
-belongs. Hover over a phrase, press ↓, and read the next version in place. Nothing gets
-deleted: you choose later, with the real sentence around it.
+A writing app for macOS. While you write, it's a quiet page: no marks, the rest of the draft
+dimmed, the text hidden when someone's looking. When you edit, it keeps every version of a word,
+sentence or paragraph where it belongs. Hover over a phrase, press ↓, and read the next version
+in place. Nothing gets deleted: you choose later, with the real sentence around it.
 
 ![The page in editing mode: underlined groups, their dots, and the hover label on "struggle"](docs/screens/hero.png)
 
-It looks like a plain text editor until you reach for one of its tools:
+While you write:
+
+- **Writing mode.** No underlines, no dots, no margin notes; the header fades while you type.
+- **Zen writing.** The sentence, line or paragraph you're in stays bright, and the rest fades with distance.
+- **Private mode.** The page turns to blurred ink, and only the sentence you're writing stays readable.
+- **Your page.** Five light-and-dark themes or your own, four typefaces, typewriter scrolling.
+
+When you edit:
 
 - **Alternatives.** Any span can hold several versions. You flip between them in place.
 - **Cuts.** ⌘X keeps what it cuts: the text fades where it was, ⌘V moves it, and the Cuts panel keeps every cut with its place. In a project, the panel reaches every chapter.
@@ -25,6 +33,76 @@ Built in Rust on [GPUI](https://www.gpui.rs) ([gpui-kit](https://docs.rs/gpui-ki
 Free and open source. Website: [dostoevsky.app](https://dostoevsky.app).
 
 ---
+
+## Writing mode
+
+The switch in the middle of the header picks **writing** (the pencil, ⌘1) or **editing** (the
+marked lines, ⌘2); ⌘D flips between them. In writing mode the underlines, dots and comments go away, the arrow keys
+only move the caret, and text doesn't drag. Switching never moves a line: cuts stay faded in
+both modes, and paragraphs keep their places. The header fades while you type. Asking for something
+only editing shows (⇧⌘A, ⌥⌘A, a hidden version in Find, a Review pass) switches to editing first,
+and the mode switch pulses so you see why the underlines came back. Writing closes the panels,
+and each mode puts back the ones it had when you left it; editing opens on the Review tab the
+first time. Panel tabs live where you put them: drag a tab's label (Project, Alternatives,
+Review, Cuts, Comments) to the other side's header, or use its menu's Move to Left / Right Panel;
+View → Reset Panel Layout puts them back.
+
+**Zen writing** (⌃⌘Z) dims the draft around what you're writing. Preferences → Writing sets what
+*stays bright*: the sentence, the line or the paragraph with the caret. *Distance fade* lets the
+rest fade the further it is from you (Near, or the Whole page) instead of all at once.
+**Typewriter scrolling** (⌃⌘T) keeps your line in the middle of the window.
+
+![Writing mode: the page with no underlines or dots, and a cut sentence faded as it is in editing](docs/screens/writing.png)
+
+![Zen writing set to the sentence, with distance fade: the caret's sentence bright, the rest of its paragraph dimmed, the paragraphs further away fainter still](docs/screens/writing-dials.png)
+
+**Private mode** (⇧⌘H) hides the page while you write, for the train, a café, a shared screen,
+or the urge to reread instead of writing on. The text turns to dots, bars, solid bars or blurred
+ink (Preferences → Writing → *Hidden text looks*), and *Stays visible* keeps the word or the
+sentence you're writing readable, or nothing at all. It only paints: the file is untouched, and editing shows every word.
+
+![Private mode: the page as blurred ink, only the sentence with the caret readable](docs/screens/writing-private.png)
+
+Spelling is checked by macOS in every language you have set up, mixed in one file if that's how
+you write. *Check spelling* (Preferences → Writing) is Always, Editing only (writing mode stays
+unmarked) or Off.
+
+**Sentences.** ⌃⌘← / ⌃⌘→ walk by sentence (⇧ selects), and ⌃⌘↑ grows the selection from a
+word to its group, its sentence, then its paragraph (⌃⌘↓ steps back). In editing, ⌥↑ / ⌥↓ move
+a selected sentence or paragraph past its neighbour, with the spaces fixed and its versions
+along. Preferences → General → *Tap ⇧ to select* makes a tap of ⇧ grow the selection too.
+
+The counter in the header (words and characters, or the selection's while you have one) opens
+**Statistics**: words, characters, paragraphs, reading time and reading ease.
+Reading ease runs 0–100, higher meaning easier, with one formula per language (Flesch for
+English, Oborneva for Russian, Amstad for German, and so on), the language read from the text
+itself. In a project there are columns for the chapter and the whole book.
+
+## Your page
+
+A **theme** is a pair, a light page and a dark one: Dostoevsky, Petersburg, Manuscript, White
+Nights and Aurora are built in. Preferences → General → *Appearance* picks Dark, Light or Match
+macOS (⌃⌘L switches by hand), and *Theme* picks the pair. *New* makes your own from three
+colours a half (paper, ink and an accent) and says so when a pair gets hard to read;
+*Import a theme file…* reads a Dostoevsky or VS Code theme. Themes are plain JSON files
+([docs/THEMES.md](docs/THEMES.md)).
+
+Fonts are IBM Plex Mono, JetBrains Mono, iA Writer Quattro or Literata, a serif, in four sizes
+(⌘= and ⌘− step through them, ⌘0 goes back to the default), with five column widths and three line
+spacings, ragged or justified, with or without hyphenation. Paragraphs are set apart by a gap or
+by an indent (Preferences → Page → *Paragraphs*); the file keeps Markdown's blank line either way. Headings
+are set in a hand, a step larger per level, and their `#` shows in the margin when the caret is
+on them. The hand is Bad Script, Caveat or Shantell Sans (Preferences → General → *Hand font*),
+and Page → *Headings* puts them back in the page font, bold. The background can go down to 50%
+opacity for a blurred-glass window.
+
+Preferences (⌘,) have five sections: General (language, theme, files, keyboard), Page (the
+font and the column, shown on a sample of your own document, or a passage from Dostoevsky when
+it's empty), Writing, Editing and AI, plus Project in a project window. The interface speaks
+English, Deutsch, Español, Français, Italiano, Português (Brasil) and Русский: it follows macOS,
+or pick one in General → *Language*.
+
+![The light half of the Dostoevsky theme with the Cuts panel open](docs/screens/light.png)
 
 ## Alternatives
 
@@ -124,38 +202,6 @@ The right panel has a **Comments** tab beside Cuts, with this page or the whole 
 mark's row has *Make a comment*, so a mark you agree with outlives *Close*. Copy Final Text, every
 export and the counts leave comments out; Word export can send them as Word comments
 (*My comments*).
-
-## Writing mode
-
-The switch in the middle of the header picks **writing** (the pencil, ⌘1) or **editing** (the
-marked lines, ⌘2); ⌘D flips between them. In writing mode the underlines, dots and comments go away, the arrow keys
-only move the caret, and text doesn't drag. Switching never moves a line: cuts stay faded in
-both modes, and paragraphs keep their places. The header fades while you type. Asking for something
-only editing shows (⇧⌘A, ⌥⌘A, a hidden version in Find, a Review pass) switches to editing first,
-and the mode switch pulses so you see why the underlines came back. Writing closes the panels,
-and each mode puts back the ones it had when you left it; editing opens on the Review tab the
-first time. Zen writing (⌃⌘Z) dims every paragraph but
-the one you're in, and typewriter scrolling (⌃⌘T) keeps your line in the middle of the
-window.
-
-![Writing mode: the page with no underlines or dots, and a cut sentence faded as it is in editing](docs/screens/writing.png)
-
-![Zen writing: the paragraph with the caret in full colour, the rest of the page dimmed](docs/screens/writing-zen.png)
-
-Spelling is checked by macOS in every language you have set up, mixed in one file if that's how
-you write. *Check spelling* (Preferences → Writing) is Always, Editing only (writing mode stays
-unmarked) or Off.
-
-**Sentences.** ⌃⌘← / ⌃⌘→ walk by sentence (⇧ selects), and ⌃⌘↑ grows the selection from a
-word to its group, its sentence, then its paragraph (⌃⌘↓ steps back). In editing, ⌥↑ / ⌥↓ move
-a selected sentence or paragraph past its neighbour, with the spaces fixed and its versions
-along. Preferences → General → *Tap ⇧ to select* makes a tap of ⇧ grow the selection too.
-
-The counter in the header (words and characters, or the selection's while you have one) opens
-**Statistics**: words, characters, paragraphs, reading time and reading ease.
-Reading ease runs 0–100, higher meaning easier, with one formula per language (Flesch for
-English, Oborneva for Russian, Amstad for German, and so on), the language read from the text
-itself. In a project there are columns for the chapter and the whole book.
 
 ## AI, if you want it
 
@@ -272,25 +318,6 @@ its folder.
 
 ![Export: the whole book as a PDF in the Book style](docs/screens/project-export.png)
 
-## Light, dark, or both
-
-Dark, a light paper theme, or Match macOS (⌃⌘L switches). Fonts are IBM Plex Mono,
-JetBrains Mono, iA Writer Quattro or Literata, a serif, with five column widths and three line
-spacings, ragged or justified, with or without hyphenation. Paragraphs are set apart by a gap or
-by an indent (Preferences → Page → *Paragraphs*); the file keeps Markdown's blank line either way. Headings
-are set in a hand, a step larger per level, and their `#` shows in the margin when the caret is
-on them. The hand is Bad Script, Caveat or Shantell Sans (Preferences → General → *Hand font*),
-and Page → *Headings* puts them back in the page font, bold. The background can go down to 50%
-opacity for a blurred-glass window.
-
-Preferences (⌘,) have five sections: General (language, theme, files, keyboard), Page (the
-font and the column, shown on a sample of your own document, or a passage from Dostoevsky when
-it's empty), Writing, Editing and AI, plus Project in a project window. The interface speaks
-English, Deutsch, Español, Français, Italiano, Português (Brasil) and Русский: it follows macOS,
-or pick one in General → *Language*.
-
-![The light theme with the Cuts panel open](docs/screens/light.png)
-
 ## Keyboard
 
 Every command has a shortcut and a menu item, and every binding can be changed in
@@ -308,8 +335,10 @@ Every command has a shortcut and a menu item, and every binding can be changed i
 | AI ideas | ⌥⌘A | | Review tab | ⌥⌘L |
 | Find next / previous | ⌘G / ⇧⌘G | | Find in the project | ⇧⌘F |
 | Zen writing | ⌃⌘Z | | Typewriter scrolling | ⌃⌘T |
-| Add comment | ⌥⌘M | | Next / previous sentence | ⌃⌘→ / ⌃⌘← |
-| Grow / shrink the selection | ⌃⌘↑ / ⌃⌘↓ | | Move a sentence up / down (editing) | ⌥↑ / ⌥↓ |
+| Private mode | ⇧⌘H | | Light / dark | ⌃⌘L |
+| Text bigger / smaller / default | ⌘= / ⌘− / ⌘0 | | Add comment | ⌥⌘M |
+| Next / previous sentence | ⌃⌘→ / ⌃⌘← | | Grow / shrink the selection | ⌃⌘↑ / ⌃⌘↓ |
+| Move a sentence up / down (editing) | ⌥↑ / ⌥↓ | | | |
 
 ![The keyboard shortcuts sheet](docs/screens/shortcuts.png)
 

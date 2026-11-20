@@ -1,4 +1,0 @@
-// Writing mode with Zen writing on: every paragraph but the caret's is dimmed.
-{"select": {"text": "Software forgot this.", "at": "end"}}
-{"wait": 900}
-{"shot": "$OUT/writing-zen.png"}

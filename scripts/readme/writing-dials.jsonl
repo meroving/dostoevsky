@@ -1,0 +1,4 @@
+// Zen writing's dials: only the caret's sentence stays bright, and the rest fades with distance.
+{"select": {"text": "Software forgot this.", "at": "end"}}
+{"wait": 900}
+{"shot": "$OUT/writing-dials.png"}
