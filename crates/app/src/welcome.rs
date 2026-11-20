@@ -39,6 +39,9 @@ pub fn action_named(name: &str) -> Option<Box<dyn Action>> {
         "Open" => Box::new(Open),
         "ShowShortcuts" => Box::new(ShowShortcuts),
         "ToggleLab" => Box::new(ToggleLab),
+        "TogglePrivate" => Box::new(TogglePrivate),
+        "TextBigger" => Box::new(TextBigger),
+        "TextSmaller" => Box::new(TextSmaller),
         _ => return None,
     })
 }
@@ -246,6 +249,10 @@ mod tests {
                 "NewProject" => "⌥⌘N",
                 "Open" => "⌘O",
                 "ShowShortcuts" => "⇧⌘K",
+                "ToggleLab" => "⌥⌘L",
+                "TogglePrivate" => "⇧⌘H",
+                "TextBigger" => "⌘=",
+                "TextSmaller" => "⌘−",
                 _ => return None,
             }
             .to_string(),
