@@ -2,7 +2,7 @@
 
 <h1 align="center">Dostoevsky</h1>
 
-A writing app for macOS. While you write, it's a quiet page: no marks, the rest of the draft
+A [writing app for macOS](https://dostoevsky.app). While you write, it's a quiet page: no marks, the rest of the draft
 dimmed, the text hidden when someone's looking. When you edit, it keeps every version of a word,
 sentence or paragraph where it belongs. Hover over a phrase, press ↓, and read the next version
 in place. Nothing gets deleted: you choose later, with the real sentence around it.
