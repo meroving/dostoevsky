@@ -133,7 +133,7 @@ dependencies = [
 
 [[package]]
 name = "ai"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64 0.22.1",
  "english",
@@ -1506,7 +1506,7 @@ dependencies = [
 
 [[package]]
 name = "doc-format"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "doc-model",
  "l10n",
@@ -1517,7 +1517,7 @@ dependencies = [
 
 [[package]]
 name = "doc-model"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "english",
  "proptest",
@@ -1534,7 +1534,7 @@ dependencies = [
 
 [[package]]
 name = "dostoevsky"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "ai",
  "block2 0.6.2",
@@ -1647,7 +1647,7 @@ checksum = "66b7e2430c6dff6a955451e2cfc438f09cea1965a9d6f87f7e3b90decc014099"
 
 [[package]]
 name = "english"
-version = "1.0.0"
+version = "1.0.1"
 
 [[package]]
 name = "enum-iterator"
@@ -1778,7 +1778,7 @@ dependencies = [
 
 [[package]]
 name = "export"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "crc32fast",
  "english",
@@ -3996,7 +3996,7 @@ dependencies = [
 
 [[package]]
 name = "l10n"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "serde_json",
 ]
@@ -5608,7 +5608,7 @@ dependencies = [
 
 [[package]]
 name = "prose"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "english",
  "unicode-segmentation",
