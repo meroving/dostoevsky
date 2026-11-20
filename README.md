@@ -276,8 +276,7 @@ already on the page as a heading.
 
 Find (⌘F, or the magnifier in the header) covers this chapter or the whole book, and looks in
 cuts, hidden versions and notes, with match case and whole words. ⌘G
-walks the whole book, opening the next chapter with a match. The source view's *Whole book* tab
-gives you the finished text of every chapter in order.
+walks the whole book, opening the next chapter with a match.
 
 ![Find across the project: "landlady" in two files](docs/screens/project-find.png)
 
@@ -289,9 +288,7 @@ one click to open that folder as a project, and your recent work.
 
 The page is plain Markdown. Versions, cuts and comments go in HTML comments at the end
 of the file, so other editors show clean text, and a file with none of them is saved as pure
-Markdown with no comment block. **⌥⌘U** shows the Markdown source as saved.
-
-![The Markdown source, with the cuts and meta comments at the end](docs/screens/source.png)
+Markdown with no comment block.
 
 Saves are atomic. Autosave runs after two seconds idle, the last 20 versions of each file are
 kept as backups, and unsaved work survives a crash. If the file changes on disk (another
@@ -328,7 +325,7 @@ Every command has a shortcut and a menu item, and every binding can be changed i
 | Next / previous version (pointer) | ↓ / ↑ | | Cut / put back | ⌘/ |
 | Next / previous version (caret) | ⌥⌘↓ / ⌥⌘↑ | | Cut without a trace | ⇧⌘X |
 | Next / previous group | ⌥⌘→ / ⌥⌘← | | Cuts | ⌃⌘C |
-| Back to the original | ⌥⌘0 | | Markdown source | ⌥⌘U |
+| Back to the original | ⌥⌘0 | | Move a sentence up / down (editing) | ⌥↑ / ⌥↓ |
 | Alternatives for selection | ⌘⇧A | | Copy the final text / Export | ⌘⇧C / ⌘⇧E |
 | Settle on this | ⌥⌘↩ | | Left panel (project, alternatives, review) | ⌘P |
 | Writing / editing (flip with ⌘D) | ⌘1 / ⌘2 | | Previous / next file | ⌘[ / ⌘] |
@@ -338,7 +335,6 @@ Every command has a shortcut and a menu item, and every binding can be changed i
 | Private mode | ⇧⌘H | | Light / dark | ⌃⌘L |
 | Text bigger / smaller / default | ⌘= / ⌘− / ⌘0 | | Add comment | ⌥⌘M |
 | Next / previous sentence | ⌃⌘→ / ⌃⌘← | | Grow / shrink the selection | ⌃⌘↑ / ⌃⌘↓ |
-| Move a sentence up / down (editing) | ⌥↑ / ⌥↓ | | | |
 
 ![The keyboard shortcuts sheet](docs/screens/shortcuts.png)
 
