@@ -33,7 +33,7 @@ ureq = { version = "3", default-features = false, features = ["rustls"], optiona
 objc2 = "0.6"
 block2 = "0.6"
 objc2-app-kit = { version = "0.3", features = ["NSWorkspace", "NSSound", "NSAccessibility", "NSSpellChecker", "NSView", "NSResponder", "NSWindow", "NSPanel", "NSSavePanel", "NSOpenPanel", "NSApplication", "NSColor", "NSColorPanel", "NSColorSpace", "block2"] }
-objc2-foundation = { version = "0.3", features = ["NSUserDefaults", "NSValue", "NSString", "NSArray", "NSRange", "NSGeometry", "NSAttributedString", "NSFileManager", "NSURL", "NSData", "NSError", "NSPathUtilities", "NSTextCheckingResult", "NSOrthography", "NSDictionary"] }
+objc2-foundation = { version = "0.3", features = ["NSUserDefaults", "NSValue", "NSString", "NSArray", "NSRange", "NSGeometry", "NSAttributedString", "NSFileManager", "NSURL", "NSData", "NSError", "NSPathUtilities", "NSTextCheckingResult", "NSOrthography", "NSDictionary", "NSDate", "NSDateFormatter", "NSFormatter", "NSLocale", "NSCalendar", "NSTimeZone"] }
 raw-window-handle = "0.6"
 # Export: TextKit pages into a PDF, its preview and Print (pdf.rs).
 objc2-core-foundation = "0.3"

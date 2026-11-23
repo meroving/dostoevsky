@@ -12,6 +12,7 @@ mod count;
 mod cuts;
 mod cuts_panel;
 mod drag;
+mod dates;
 mod drawer;
 mod effects;
 mod export_ui;

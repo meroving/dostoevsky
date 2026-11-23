@@ -257,6 +257,13 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   key per project kind ("New Chapter", "New Day"). `{count}` is a number already grouped
   (thousands: a comma in English, a no-break space elsewhere). "one"/"them" choices are plain
   keys picked by `n == 1`, not plurals: Russian's "one" form also serves 21.
+- **Dates come from macOS** (`dates.rs`): NSDateFormatter with a template (`EEEEdMMMMy`,
+  `LLLL`…) in the UI's language and the Mac's region, so English on a Mac set to Russia writes
+  "23 November", and no catalog holds a month or weekday. Reading a journal day's heading back
+  (`dates::says`) takes the date as any shipped language writes it, words in any order,
+  punctuation aside, abbreviations as a name's start: a day written under another UI language,
+  an older macOS or Dostoevsky 1.0 (whose catalogs spelt dates) still reads as its date. Tests
+  pin the region to Britain.
 - **The AI button** (once LAB, the Lab) says AI in each language's word: ИИ, KI, IA. German
   addresses the user with *du*, as Apple's German macOS does.
 - **What stays English:** file and folder names the app writes (notes/, Backups, untitled.md),

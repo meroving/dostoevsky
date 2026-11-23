@@ -7,6 +7,7 @@ use std::time::SystemTime;
 
 use l10n::tr;
 
+use crate::dates;
 use crate::files;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -77,96 +78,39 @@ impl Day {
         format!("{:04}-{:02}-{:02}.md", self.year, self.month, self.day)
     }
 
+    /// Mon 23, as the Mac writes it in the UI's language.
     pub fn label(self) -> String {
-        use chrono::{Datelike as _, Weekday};
-        let day = self.day;
-        match chrono::NaiveDate::from_ymd_opt(self.year, self.month, self.day).map(|d| d.weekday()) {
-            Some(Weekday::Mon) => tr!("Mon {day}", day = day),
-            Some(Weekday::Tue) => tr!("Tue {day}", day = day),
-            Some(Weekday::Wed) => tr!("Wed {day}", day = day),
-            Some(Weekday::Thu) => tr!("Thu {day}", day = day),
-            Some(Weekday::Fri) => tr!("Fri {day}", day = day),
-            Some(Weekday::Sat) => tr!("Sat {day}", day = day),
-            Some(Weekday::Sun) => tr!("Sun {day}", day = day),
-            None => format!(" {day}"),
-        }
+        self.format(dates::Form::WeekdayDay).unwrap_or_else(|| format!(" {}", self.day))
     }
 
-    fn month_name(self) -> &'static str {
-        match self.month {
-            0 | 1 => tr!("january"),
-            2 => tr!("february"),
-            3 => tr!("march"),
-            4 => tr!("april"),
-            5 => tr!("may"),
-            6 => tr!("june"),
-            7 => tr!("july"),
-            8 => tr!("august"),
-            9 => tr!("september"),
-            10 => tr!("october"),
-            11 => tr!("november"),
-            _ => tr!("december"),
-        }
+    fn format(self, form: dates::Form) -> Option<String> {
+        dates::format(self.year, self.month, self.day, form)
+    }
+
+    /// The list writes months in lowercase.
+    fn month_name(self) -> String {
+        self.format(dates::Form::Month).unwrap_or_default().to_lowercase()
     }
 
     pub fn month_title(self) -> String {
-        format!("{} {}", self.month_name(), self.year)
+        self.format(dates::Form::MonthYear).unwrap_or_default().to_lowercase()
     }
 
     /// The heading a new day starts with, in the UI's language; `None` for [`DateHeading::Off`].
     pub fn heading(self, form: DateHeading) -> Option<String> {
-        use chrono::{Datelike as _, Weekday};
-        let (day, year) = (self.day, self.year);
-        Some(match form {
-            DateHeading::Off => return None,
-            DateHeading::Iso => format!("{:04}-{:02}-{:02}", self.year, self.month, self.day),
-            DateHeading::Long => {
-                let weekday = match chrono::NaiveDate::from_ymd_opt(self.year, self.month, self.day)?.weekday() {
-                    Weekday::Mon => tr!("Monday"),
-                    Weekday::Tue => tr!("Tuesday"),
-                    Weekday::Wed => tr!("Wednesday"),
-                    Weekday::Thu => tr!("Thursday"),
-                    Weekday::Fri => tr!("Friday"),
-                    Weekday::Sat => tr!("Saturday"),
-                    Weekday::Sun => tr!("Sunday"),
-                };
-                match self.month {
-                    1 => tr!("{weekday}, {day} January {year}", weekday = weekday, day = day, year = year),
-                    2 => tr!("{weekday}, {day} February {year}", weekday = weekday, day = day, year = year),
-                    3 => tr!("{weekday}, {day} March {year}", weekday = weekday, day = day, year = year),
-                    4 => tr!("{weekday}, {day} April {year}", weekday = weekday, day = day, year = year),
-                    5 => tr!("{weekday}, {day} May {year}", weekday = weekday, day = day, year = year),
-                    6 => tr!("{weekday}, {day} June {year}", weekday = weekday, day = day, year = year),
-                    7 => tr!("{weekday}, {day} July {year}", weekday = weekday, day = day, year = year),
-                    8 => tr!("{weekday}, {day} August {year}", weekday = weekday, day = day, year = year),
-                    9 => tr!("{weekday}, {day} September {year}", weekday = weekday, day = day, year = year),
-                    10 => tr!("{weekday}, {day} October {year}", weekday = weekday, day = day, year = year),
-                    11 => tr!("{weekday}, {day} November {year}", weekday = weekday, day = day, year = year),
-                    _ => tr!("{weekday}, {day} December {year}", weekday = weekday, day = day, year = year),
-                }
-            }
-            DateHeading::Short => match self.month {
-                1 => tr!("{day} Jan {year}", day = day, year = year),
-                2 => tr!("{day} Feb {year}", day = day, year = year),
-                3 => tr!("{day} Mar {year}", day = day, year = year),
-                4 => tr!("{day} Apr {year}", day = day, year = year),
-                5 => tr!("{day} May {year}", day = day, year = year),
-                6 => tr!("{day} Jun {year}", day = day, year = year),
-                7 => tr!("{day} Jul {year}", day = day, year = year),
-                8 => tr!("{day} Aug {year}", day = day, year = year),
-                9 => tr!("{day} Sep {year}", day = day, year = year),
-                10 => tr!("{day} Oct {year}", day = day, year = year),
-                11 => tr!("{day} Nov {year}", day = day, year = year),
-                _ => tr!("{day} Dec {year}", day = day, year = year),
-            },
-        })
+        match form {
+            DateHeading::Off => None,
+            DateHeading::Iso => Some(format!("{:04}-{:02}-{:02}", self.year, self.month, self.day)),
+            DateHeading::Long => self.format(dates::Form::Long),
+            DateHeading::Short => self.format(dates::Form::Short),
+        }
     }
 
-    /// Whether `line` is this day's date heading in any form, as [`Day::heading`] writes it.
+    /// Whether `line` is a heading that says this day and nothing else, in any form and any
+    /// language ([`dates::says`]): a day written under another UI language is still dated.
     pub fn is_heading(self, line: &str) -> bool {
         let Some(text) = line.trim().strip_prefix('#') else { return false };
-        let text = text.trim_start_matches('#').trim();
-        [DateHeading::Long, DateHeading::Short, DateHeading::Iso].into_iter().any(|f| self.heading(f).is_some_and(|h| h == text))
+        dates::says(text.trim_start_matches('#'), self.year, self.month, self.day)
     }
 }
 
@@ -659,7 +603,7 @@ fn by_month(mut days: Vec<Entry>, root: &Path) -> Vec<Group> {
         let Some(d) = e.day else { continue };
         if last != Some((d.year, d.month)) {
             // The year shows on the newest month of each year.
-            let title = if last.map(|(y, _)| y) == Some(d.year) { d.month_name().to_string() } else { d.month_title() };
+            let title = if last.map(|(y, _)| y) == Some(d.year) { d.month_name() } else { d.month_title() };
             groups.push(Group { title: Some(title), dir: root.to_path_buf(), entries: Vec::new() });
             last = Some((d.year, d.month));
         }
@@ -1115,6 +1059,9 @@ mod tests {
         assert!(!day.is_heading("2026-11-15"), "only as a heading");
         assert!(!day.is_heading("# 15 Nov 2025"));
         assert!(!day.is_heading("# Trip to the river"));
+        assert!(day.is_heading("# воскресенье, 15 ноября 2026 г."), "written under another UI language");
+        assert!(day.is_heading("# Воскресенье, 15 ноября 2026"), "as Dostoevsky 1.0 wrote it");
+        assert!(!day.is_heading("# воскресенье, 15 ноября 2025 г."));
     }
 
     /// PROJ-6

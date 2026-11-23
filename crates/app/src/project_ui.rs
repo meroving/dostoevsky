@@ -218,21 +218,7 @@ pub(crate) fn when(t: SystemTime) -> String {
         return tr!("today").into();
     }
     use chrono::Datelike as _;
-    let day = d.day();
-    match d.month() {
-        1 => tr!("Jan {day}", day = day),
-        2 => tr!("Feb {day}", day = day),
-        3 => tr!("Mar {day}", day = day),
-        4 => tr!("Apr {day}", day = day),
-        5 => tr!("May {day}", day = day),
-        6 => tr!("Jun {day}", day = day),
-        7 => tr!("Jul {day}", day = day),
-        8 => tr!("Aug {day}", day = day),
-        9 => tr!("Sep {day}", day = day),
-        10 => tr!("Oct {day}", day = day),
-        11 => tr!("Nov {day}", day = day),
-        _ => tr!("Dec {day}", day = day),
-    }
+    crate::dates::format(d.year(), d.month(), d.day(), crate::dates::Form::MonthDay).unwrap_or_default()
 }
 
 impl ProjectWindow {
