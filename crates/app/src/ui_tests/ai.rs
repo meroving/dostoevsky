@@ -380,6 +380,30 @@ fn prefs_services_and_models() {
 }
 
 #[test]
+fn a_keyed_service_from_the_add_menu() {
+    let f = fake(vec![http("200 OK", "{}")]);
+    let mut ui = Ui::open(DOC);
+    ui.keys("cmd-,");
+    ui.click_id("nav-ai");
+    ui.click_id("ai-add-service");
+    ui.click_id(("ai-add", ServiceKind::Gemini as usize));
+    assert!(ui.read(|_, cx| crate::prefs::Prefs::get(cx).ai.service(ServiceKind::Gemini).is_some()));
+    assert!(ui.has_element("ai-paste-key"));
+    assert!(ui.has_element(("ai-key-page", ServiceKind::Gemini as usize)), "where to make a key");
+    let base = f.base.clone();
+    ui.set_prefs(move |p| p.ai.services.iter_mut().find(|s| s.kind == ServiceKind::Gemini).unwrap().base_url = base.clone());
+    ui.with_app(|cx| cx.write_to_clipboard(gpui_kit::ClipboardItem::new_string("AIza-test\n".into())));
+    ui.click_id("ai-paste-key");
+    assert_eq!(ai::secrets::get("gemini").as_deref(), Some("AIza-test"));
+    assert!(!ui.has_element(("ai-key-page", ServiceKind::Gemini as usize)), "saved: no link");
+    let done = ui.wait_for(5., |ui| ui.read(|_, cx| crate::prefs::Prefs::get(cx).ai.quick.as_ref().is_some_and(|m| m.service == ServiceKind::Gemini)));
+    assert!(done, "Quick was never filled from Gemini");
+    ui.click_id(("ai-remove", ServiceKind::Gemini as usize));
+    assert_eq!(ai::secrets::get("gemini"), None);
+    assert!(ui.read(|_, cx| crate::prefs::Prefs::get(cx).ai.service(ServiceKind::Gemini).is_none()));
+}
+
+#[test]
 fn prefs_ai_menu_closes_on_click_outside() {
     use gpui_kit::{point, px, MouseButton};
     let mut ui = Ui::open(DOC);

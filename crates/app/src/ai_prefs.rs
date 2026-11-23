@@ -150,14 +150,28 @@ impl Workspace {
                         .into_any_element()
                 }
             }
-            ServiceKind::OpenAi => {
+            ServiceKind::OpenAi | ServiceKind::Gemini | ServiceKind::Mistral | ServiceKind::Groq => {
                 let has = assist::key(kind, cx).is_some();
+                let page = kind.key_page();
                 div()
                     .flex()
                     .items_center()
                     .gap_2()
                     .when(has, |d| d.child(ok_mark()).child(div().text_color(c(theme::text())).child(tr!("Key saved"))).child(muted(tr!("in Keychain")).mr_2()))
-                    .when(!has, |d| d.child(button("ai-paste-key", tr!("Paste key"), true).on_click(move |_, _, cx| assist::paste_key(kind, cx)).test_support()).child(muted(tr!("copy it first")).mr_2()))
+                    .when(!has, |d| d.child(button("ai-paste-key", tr!("Paste key"), true).on_click(move |_, _, cx| assist::paste_key(kind, cx)).test_support()).child(muted(tr!("copy it first"))))
+                    .when_some(page.filter(|_| !has), |d, url| {
+                        d.child(
+                            div()
+                                .id(("ai-key-page", kind as usize))
+                                .mr_2()
+                                .cursor_pointer()
+                                .text_size(px(11.5))
+                                .text_color(c(theme::accent()))
+                                .on_click(move |_, _, cx| cx.open_url(url))
+                                .child(tr!("get a key"))
+                                .test_support(),
+                        )
+                    })
                     .child(remove(tr!("Remove")))
                     .into_any_element()
             }

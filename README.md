@@ -264,8 +264,8 @@ its word), or *Cut N words*, which cuts them, one entry in the Cuts panel, so th
 ![Trim at −22%: 260 → 204 words, the cut words faded and struck through, the slider and the cuts in the Review tab](docs/screens/ai-trim.png)
 
 **Setup (Preferences → AI).** Connect OpenRouter in one click (OAuth in the browser, no key
-to copy), add an OpenAI key, or use a model on your own Mac through Ollama or LM Studio. Any
-OpenAI-compatible server works. Pick a *Quick* model for ideas and a *Deep* one for AI passes and trims,
+to copy), add a key for OpenAI, Google Gemini (it has a free tier), Mistral or Groq, or use a model
+on your own Mac through Ollama or LM Studio. Any OpenAI-compatible server works (llama.cpp, Jan, MLX). Pick a *Quick* model for ideas and a *Deep* one for AI passes and trims,
 from any of your services. The model menu opens with a search field: type a few letters of a name
 (`claude son`, `qwen 32`) and it lists the matching models of every service. Keys go in the macOS
 Keychain.

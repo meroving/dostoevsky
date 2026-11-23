@@ -16,11 +16,12 @@ fn env(k: &str) -> Option<String> {
 }
 
 fn main() {
-    // DOSTOEVSKY_EVAL_KIND picks the service by its slug (openrouter, openai, ollama, lmstudio,
-    // custom); without it the address decides: OpenRouter's, or Custom for any other.
+    // DOSTOEVSKY_EVAL_KIND picks the service by its slug (openrouter, openai, gemini, mistral, groq,
+    // ollama, lmstudio, custom); without it the address decides: OpenRouter's, or Custom for any other.
     let kind = env("DOSTOEVSKY_EVAL_KIND").map(|k| {
         ServiceKind::ALL.into_iter().find(|s| s.slug() == k).unwrap_or_else(|| {
-            eprintln!("DOSTOEVSKY_EVAL_KIND: one of openrouter, openai, ollama, lmstudio, custom.");
+            let all: Vec<&str> = ServiceKind::ALL.iter().map(|k| k.slug()).collect();
+            eprintln!("DOSTOEVSKY_EVAL_KIND: one of {}.", all.join(", "));
             std::process::exit(2);
         })
     });
@@ -31,17 +32,26 @@ fn main() {
     let key = env("DOSTOEVSKY_EVAL_KEY").or_else(|| match kind {
         ServiceKind::OpenRouter => env("OPENROUTER_API_KEY"),
         ServiceKind::OpenAi => env("OPENAI_API_KEY"),
+        ServiceKind::Gemini => env("GEMINI_API_KEY"),
+        ServiceKind::Mistral => env("MISTRAL_API_KEY"),
+        ServiceKind::Groq => env("GROQ_API_KEY"),
         _ => None,
     });
-    let quick = env("DOSTOEVSKY_EVAL_QUICK").unwrap_or_else(|| ai::service::SONNET.into());
-    let deep = env("DOSTOEVSKY_EVAL_DEEP").unwrap_or_else(|| ai::service::OPUS.into());
     if kind.needs_key() && key.is_none() {
-        eprintln!("Set OPENROUTER_API_KEY or OPENAI_API_KEY (or DOSTOEVSKY_EVAL_BASE for a local server).");
+        eprintln!("Set OPENROUTER_API_KEY (or DOSTOEVSKY_EVAL_KIND=openai|gemini|mistral|groq and its *_API_KEY, or DOSTOEVSKY_EVAL_BASE for a local server).");
         std::process::exit(2);
     }
     let ep = Endpoint { kind, base, key };
     println!("{} at {}", kind.label(), ep.base);
-    match list_models(&ep) {
+    let listed = list_models(&ep);
+    // The app's own picks for the service, as Preferences would fill them.
+    let (q, d) = match &listed {
+        Ok(m) if kind != ServiceKind::OpenRouter => ai::service::default_models(kind, m),
+        _ => (Some(ai::service::SONNET.into()), Some(ai::service::OPUS.into())),
+    };
+    let quick = env("DOSTOEVSKY_EVAL_QUICK").or(q).unwrap_or_else(|| ai::service::SONNET.into());
+    let deep = env("DOSTOEVSKY_EVAL_DEEP").or(d).unwrap_or_else(|| quick.clone());
+    match listed {
         Ok(m) => {
             let has = |id: &str| if m.iter().any(|x| x.id == id) { "listed" } else { "NOT LISTED" };
             println!("models  {} (quick {}, deep {})", m.len(), has(&quick), has(&deep));

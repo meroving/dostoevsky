@@ -7,18 +7,33 @@ use serde_json::Value;
 pub enum ServiceKind {
     OpenRouter,
     OpenAi,
+    Gemini,
+    Mistral,
+    Groq,
     Ollama,
     LmStudio,
     Custom,
 }
 
 impl ServiceKind {
-    pub const ALL: [ServiceKind; 5] = [ServiceKind::OpenRouter, ServiceKind::OpenAi, ServiceKind::Ollama, ServiceKind::LmStudio, ServiceKind::Custom];
+    pub const ALL: [ServiceKind; 8] = [
+        ServiceKind::OpenRouter,
+        ServiceKind::OpenAi,
+        ServiceKind::Gemini,
+        ServiceKind::Mistral,
+        ServiceKind::Groq,
+        ServiceKind::Ollama,
+        ServiceKind::LmStudio,
+        ServiceKind::Custom,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
             ServiceKind::OpenRouter => "OpenRouter",
             ServiceKind::OpenAi => "OpenAI",
+            ServiceKind::Gemini => "Google Gemini",
+            ServiceKind::Mistral => "Mistral",
+            ServiceKind::Groq => "Groq",
             ServiceKind::Ollama => "Ollama",
             ServiceKind::LmStudio => "LM Studio",
             ServiceKind::Custom => tr!("Custom"),
@@ -29,8 +44,11 @@ impl ServiceKind {
         match self {
             ServiceKind::OpenRouter => tr!("one account, many models"),
             ServiceKind::OpenAi => tr!("API key"),
+            ServiceKind::Gemini => tr!("API key, has a free tier"),
+            ServiceKind::Mistral => tr!("API key, strong beyond English"),
+            ServiceKind::Groq => tr!("API key, very fast"),
             ServiceKind::Ollama | ServiceKind::LmStudio => tr!("on this Mac"),
-            ServiceKind::Custom => tr!("any compatible address"),
+            ServiceKind::Custom => tr!("any compatible address: llama.cpp, Jan, MLX…"),
         }
     }
 
@@ -38,6 +56,9 @@ impl ServiceKind {
         match self {
             ServiceKind::OpenRouter => "https://openrouter.ai/api/v1",
             ServiceKind::OpenAi => "https://api.openai.com/v1",
+            ServiceKind::Gemini => "https://generativelanguage.googleapis.com/v1beta/openai",
+            ServiceKind::Mistral => "https://api.mistral.ai/v1",
+            ServiceKind::Groq => "https://api.groq.com/openai/v1",
             ServiceKind::Ollama => "http://127.0.0.1:11434/v1",
             ServiceKind::LmStudio => "http://127.0.0.1:1234/v1",
             ServiceKind::Custom => "",
@@ -50,7 +71,23 @@ impl ServiceKind {
 
     /// Custom may or may not use one.
     pub fn needs_key(self) -> bool {
-        matches!(self, ServiceKind::OpenRouter | ServiceKind::OpenAi)
+        matches!(self, ServiceKind::OpenRouter | ServiceKind::OpenAi | ServiceKind::Gemini | ServiceKind::Mistral | ServiceKind::Groq)
+    }
+
+    /// Where a key is made, for the services that take a pasted one.
+    pub fn key_page(self) -> Option<&'static str> {
+        match self {
+            ServiceKind::OpenAi => Some("https://platform.openai.com/api-keys"),
+            ServiceKind::Gemini => Some("https://aistudio.google.com/apikey"),
+            ServiceKind::Mistral => Some("https://console.mistral.ai/api-keys"),
+            ServiceKind::Groq => Some("https://console.groq.com/keys"),
+            _ => None,
+        }
+    }
+
+    /// Takes `reasoning_effort` and counts the thinking in `max_tokens` (Gemini 3, gpt-oss on Groq).
+    pub fn effort_knob(self) -> bool {
+        matches!(self, ServiceKind::Gemini | ServiceKind::Groq)
     }
 
     /// The Keychain account its key is stored under.
@@ -58,6 +95,9 @@ impl ServiceKind {
         match self {
             ServiceKind::OpenRouter => "openrouter",
             ServiceKind::OpenAi => "openai",
+            ServiceKind::Gemini => "gemini",
+            ServiceKind::Mistral => "mistral",
+            ServiceKind::Groq => "groq",
             ServiceKind::Ollama => "ollama",
             ServiceKind::LmStudio => "lmstudio",
             ServiceKind::Custom => "custom",
@@ -128,17 +168,21 @@ pub fn parse_models(json: &Value) -> Vec<ModelInfo> {
         .map(|a| {
             a.iter()
                 .filter_map(|m| {
-                    let id = m["id"].as_str().or_else(|| m["name"].as_str())?.to_string();
-                    let name = m["name"].as_str().filter(|n| !n.is_empty() && *n != id).map(clean_name).unwrap_or_else(|| id.clone());
+                    // Gemini lists `models/gemini-…`; its chat endpoint takes the bare name too.
+                    let id = m["id"].as_str().or_else(|| m["name"].as_str())?;
+                    let id = id.strip_prefix("models/").unwrap_or(id).to_string();
+                    let name = m["name"].as_str().filter(|n| !n.is_empty() && *n != id && !n.starts_with("models/")).map(clean_name).unwrap_or_else(|| id.clone());
                     Some(ModelInfo { name, price_in: price(&m["pricing"]["prompt"]), price_out: price(&m["pricing"]["completion"]), id })
                 })
                 .collect()
         })
         .unwrap_or_default();
-    // Embedding and image models can't write; batch variants don't stream.
+    // Embedding, image, speech and safety models can't write; batch variants don't stream.
+    const NOT_WRITERS: [&str; 14] =
+        ["embed", "whisper", "tts", "dall-e", "imagen", "veo", "-image", "aqa", "guard", "moderation", "ocr", "transcribe", "native-audio", "realtime"];
     out.retain(|m| {
         let id = m.id.to_lowercase();
-        !id.contains("embed") && !id.contains("whisper") && !id.contains("tts") && !id.contains("dall-e") && !id.ends_with(":batch")
+        !NOT_WRITERS.iter().any(|w| id.contains(w)) && !id.ends_with(":batch")
     });
     out.sort_by_key(|a| a.name.to_lowercase());
     out.dedup_by(|a, b| a.id == b.id);
@@ -198,9 +242,51 @@ fn size_in_name(id: &str) -> f64 {
         .fold(0., f64::max)
 }
 
+/// Ids in order of preference; `a*b` takes the newest listed id that starts with `a` and has `b` after it.
+fn preferred(kind: ServiceKind) -> Option<([&'static str; 3], [&'static str; 3])> {
+    Some(match kind {
+        // `-latest` aliases follow Google's newest Flash and Pro.
+        ServiceKind::Gemini => (["gemini-flash-latest", "gemini-*-flash", "gemini-*flash"], ["gemini-pro-latest", "gemini-*-pro", "gemini-*pro"]),
+        ServiceKind::Mistral => (["mistral-small-latest", "mistral-medium-latest", "mistral-small*"], ["mistral-large-latest", "mistral-medium-latest", "mistral-large*"]),
+        ServiceKind::Groq => (["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss*"], ["moonshotai/kimi-k*", "openai/gpt-oss-120b", "llama-3.3-70b-versatile"]),
+        _ => return None,
+    })
+}
+
+fn pick(wanted: &[&str], models: &[ModelInfo]) -> Option<String> {
+    if models.is_empty() {
+        return wanted.first().filter(|w| !w.contains('*')).map(|w| w.to_string());
+    }
+    wanted.iter().find_map(|w| match w.split_once('*') {
+        Some((head, tail)) => models
+            .iter()
+            .filter(|m| m.id.strip_prefix(head).is_some_and(|rest| rest.contains(tail)) && !m.id.contains("lite"))
+            // The highest version, then a release before a preview.
+            .max_by(|a, b| {
+                let key = |id: &str| (version(&id[head.len()..]), !id.contains("preview"));
+                let (ka, kb) = (key(&a.id), key(&b.id));
+                ka.0.total_cmp(&kb.0).then(ka.1.cmp(&kb.1)).then(a.id.cmp(&b.id))
+            })
+            .map(|m| m.id.clone()),
+        None => models.iter().find(|m| m.id == *w).map(|m| m.id.clone()),
+    })
+}
+
+/// `3.5` in `3.5-flash`, `2` in `k2-instruct`; 0 when there's no number.
+fn version(s: &str) -> f64 {
+    let digits: String = s.chars().skip_while(|c| !c.is_ascii_digit()).take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+    digits.trim_end_matches('.').parse().unwrap_or(0.)
+}
+
 /// (Quick, Deep).
 pub fn default_models(kind: ServiceKind, models: &[ModelInfo]) -> (Option<String>, Option<String>) {
     let has = |id: &str| models.is_empty() || models.iter().any(|m| m.id == id);
+    if let Some((quick, deep)) = preferred(kind) {
+        let (q, d) = (pick(&quick, models), pick(&deep, models));
+        if q.is_some() || d.is_some() {
+            return (q.clone().or_else(|| d.clone()), d.or(q));
+        }
+    }
     match kind {
         ServiceKind::OpenRouter => (has(SONNET).then(|| SONNET.to_string()), has(OPUS).then(|| OPUS.to_string())),
         _ => {
@@ -318,6 +404,54 @@ mod tests {
         let (q, d) = default_models(ServiceKind::Ollama, &m);
         assert_eq!(q.as_deref(), Some("llama3.1:8b"));
         assert_eq!(d.as_deref(), Some("qwen3:14b"));
+    }
+
+    #[test]
+    fn gemini_lists_bare_ids_and_only_models_that_write() {
+        let v = json!({"object": "list", "data": [
+            {"id": "models/gemini-3-flash", "object": "model", "owned_by": "google"},
+            {"id": "models/gemini-flash-latest", "object": "model"},
+            {"id": "models/gemini-pro-latest", "object": "model"},
+            {"id": "models/gemini-embedding-001"},
+            {"id": "models/imagen-4.0-generate-001"},
+            {"id": "models/veo-3.0-generate-001"},
+            {"id": "models/gemini-2.5-flash-image"},
+            {"id": "models/gemini-2.5-flash-preview-tts"},
+            {"id": "models/gemini-2.5-flash-native-audio-latest"}
+        ]});
+        let m = parse_models(&v);
+        assert_eq!(m.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), ["gemini-3-flash", "gemini-flash-latest", "gemini-pro-latest"]);
+        assert_eq!(m[0].name, "gemini-3-flash");
+        let (q, d) = default_models(ServiceKind::Gemini, &m);
+        assert_eq!((q.as_deref(), d.as_deref()), (Some("gemini-flash-latest"), Some("gemini-pro-latest")));
+    }
+
+    #[test]
+    fn presets_fall_back_through_their_families() {
+        let ids = |ids: &[&str]| ids.iter().map(|id| ModelInfo { id: id.to_string(), name: id.to_string(), price_in: None, price_out: None }).collect::<Vec<_>>();
+        let m = ids(&["gemini-2.5-flash", "gemini-3-flash", "gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-3-pro-preview", "gemini-2.5-pro"]);
+        let (q, d) = default_models(ServiceKind::Gemini, &m);
+        assert_eq!((q.as_deref(), d.as_deref()), (Some("gemini-3.5-flash"), Some("gemini-3-pro-preview")), "the newest, never Lite");
+        let m = ids(&["llama-3.3-70b-versatile", "moonshotai/kimi-k2-instruct", "moonshotai/kimi-k2-instruct-0905", "openai/gpt-oss-120b"]);
+        let (q, d) = default_models(ServiceKind::Groq, &m);
+        assert_eq!((q.as_deref(), d.as_deref()), (Some("openai/gpt-oss-120b"), Some("moonshotai/kimi-k2-instruct-0905")));
+        let m = ids(&["mistral-small-latest", "codestral-latest"]);
+        let (q, d) = default_models(ServiceKind::Mistral, &m);
+        assert_eq!((q.as_deref(), d.as_deref()), (Some("mistral-small-latest"), Some("mistral-small-latest")), "Deep falls back to Quick");
+        let (q, d) = default_models(ServiceKind::Mistral, &[]);
+        assert_eq!((q.as_deref(), d.as_deref()), (Some("mistral-small-latest"), Some("mistral-large-latest")), "before the list arrives");
+        let m = ids(&["some-new-model"]);
+        assert_eq!(default_models(ServiceKind::Groq, &m).0.as_deref(), Some("some-new-model"), "nothing known: the size rule");
+    }
+
+    #[test]
+    fn every_kind_has_its_own_slug_and_keyed_ones_a_page() {
+        let slugs: std::collections::HashSet<_> = ServiceKind::ALL.iter().map(|k| k.slug()).collect();
+        assert_eq!(slugs.len(), ServiceKind::ALL.len());
+        for k in ServiceKind::ALL {
+            assert_eq!(k.key_page().is_some(), k.needs_key() && k != ServiceKind::OpenRouter, "{k:?}");
+            assert!(k == ServiceKind::Custom || k.default_base_url().starts_with("http"), "{k:?}");
+        }
     }
 
     #[test]

@@ -53,7 +53,8 @@ impl AiError {
             AiError::NotSetUp => tr!("No AI is set up yet.").into(),
             AiError::Auth => tr!("{s} didn't accept the key. Connect again in Preferences → AI.", s = s),
             AiError::NoCredits => tr!("{s}: out of credits.", s = s),
-            AiError::RateLimited if service == ServiceKind::OpenRouter => tr!("The limit for now is used up. Try again later or pick another model.").into(),
+            // Free models and free tiers have daily limits.
+            AiError::RateLimited if matches!(service, ServiceKind::OpenRouter | ServiceKind::Gemini | ServiceKind::Groq) => tr!("The limit for now is used up. Try again later or pick another model.").into(),
             AiError::RateLimited => tr!("{s} is busy. Try again in a moment.", s = s),
             AiError::Refused => tr!("The model declined this passage.").into(),
             AiError::OutOfRoom => tr!("The model spent its whole answer thinking. Try again or pick another model.").into(),
@@ -111,10 +112,17 @@ fn status_error(code: u16, body: &str) -> AiError {
     }
 }
 
-/// Room for a reasoning model's thinking on OpenRouter, where `max_tokens` counts it too.
+/// Room for a reasoning model's thinking where `max_tokens` counts it too.
 const THINKING_ROOM: u32 = 2000;
 
-fn body_json(kind: ServiceKind, req: &ChatRequest, stream: bool, with_schema: bool) -> Value {
+/// What a request carries beyond the messages; each is dropped when a server refuses it.
+#[derive(Clone, Copy)]
+struct Extras {
+    schema: bool,
+    effort: bool,
+}
+
+fn body_json(kind: ServiceKind, req: &ChatRequest, stream: bool, extras: Extras) -> Value {
     let mut b = json!({
         "model": req.model,
         "messages": [
@@ -124,8 +132,14 @@ fn body_json(kind: ServiceKind, req: &ChatRequest, stream: bool, with_schema: bo
         "stream": stream,
     });
     let openrouter = kind == ServiceKind::OpenRouter;
+    let effort = extras.effort && kind.effort_knob();
     if let Some(n) = req.max_tokens {
-        b["max_tokens"] = json!(if openrouter { n + THINKING_ROOM } else { n });
+        b["max_tokens"] = json!(if openrouter || effort { n + THINKING_ROOM } else { n });
+    }
+    if effort {
+        // The lowest effort Gemini 3 Pro and gpt-oss take; a model without the knob refuses it
+        // (Kimi K2 on Groq) and is asked again without.
+        b["reasoning_effort"] = json!("low");
     }
     if openrouter {
         // Left alone, reasoning models (GLM, DeepSeek, Kimi…) can think through the whole
@@ -133,7 +147,7 @@ fn body_json(kind: ServiceKind, req: &ChatRequest, stream: bool, with_schema: bo
         // "none"); non-reasoning models ignore it. `exclude`: the thinking isn't streamed back.
         b["reasoning"] = json!({"effort": "low", "exclude": true});
     }
-    if let (true, Some((name, schema))) = (with_schema, &req.schema) {
+    if let (true, Some((name, schema))) = (extras.schema, &req.schema) {
         b["response_format"] = json!({"type": "json_schema", "json_schema": {"name": name, "strict": true, "schema": schema}});
     }
     b
@@ -141,10 +155,14 @@ fn body_json(kind: ServiceKind, req: &ChatRequest, stream: bool, with_schema: bo
 
 /// Returns the whole reply; `cancel` is checked between pieces.
 pub fn chat_stream(ep: &Endpoint, req: &ChatRequest, cancel: &AtomicBool, mut on_text: impl FnMut(&str)) -> Result<String, AiError> {
-    match send(ep, req, cancel, true, &mut on_text) {
-        // Some servers refuse `response_format`: retry without it (the prompt describes the shape).
-        Err(AiError::Server(400 | 422, msg)) if req.schema.is_some() && mentions_format(&msg) => send(ep, req, cancel, false, &mut on_text),
-        r => r,
+    let mut extras = Extras { schema: req.schema.is_some(), effort: ep.kind.effort_knob() };
+    loop {
+        match send(ep, req, cancel, extras, &mut on_text) {
+            // Some servers refuse `response_format`: retry without it (the prompt describes the shape).
+            Err(AiError::Server(400 | 422, msg)) if extras.schema && mentions_format(&msg) => extras.schema = false,
+            Err(AiError::Server(400 | 422, msg)) if extras.effort && msg.to_lowercase().contains("reasoning") => extras.effort = false,
+            r => return r,
+        }
     }
 }
 
@@ -154,14 +172,15 @@ pub fn chat(ep: &Endpoint, req: &ChatRequest, cancel: &AtomicBool) -> Result<Str
 
 fn mentions_format(msg: &str) -> bool {
     let m = msg.to_lowercase();
-    m.contains("response_format") || m.contains("json_schema") || m.contains("structured")
+    // Gemini names its own field: "… at 'generation_config.response_schema'".
+    m.contains("response_format") || m.contains("json_schema") || m.contains("response_schema") || m.contains("structured")
 }
 
-fn send(ep: &Endpoint, req: &ChatRequest, cancel: &AtomicBool, with_schema: bool, on_text: &mut dyn FnMut(&str)) -> Result<String, AiError> {
+fn send(ep: &Endpoint, req: &ChatRequest, cancel: &AtomicBool, extras: Extras, on_text: &mut dyn FnMut(&str)) -> Result<String, AiError> {
     if cancel.load(Ordering::Relaxed) {
         return Err(AiError::Cancelled);
     }
-    let body = body_json(ep.kind, req, true, with_schema).to_string();
+    let body = body_json(ep.kind, req, true, extras).to_string();
     let mut r = agent(Duration::from_secs(300))
         .post(&url(&ep.base, "chat/completions"))
         .header("Content-Type", "application/json")
@@ -318,12 +337,22 @@ mod tests {
     #[test]
     fn openrouter_gets_low_reasoning_and_room_to_think() {
         let req = ChatRequest { model: "m".into(), max_tokens: Some(200), ..Default::default() };
-        let b = body_json(ServiceKind::OpenRouter, &req, true, false);
+        let all = Extras { schema: true, effort: true };
+        let b = body_json(ServiceKind::OpenRouter, &req, true, all);
         assert_eq!(b["reasoning"], json!({"effort": "low", "exclude": true}));
         assert_eq!(b["max_tokens"], json!(200 + THINKING_ROOM));
-        let b = body_json(ServiceKind::OpenAi, &req, true, false);
-        assert!(b.get("reasoning").is_none());
+        let b = body_json(ServiceKind::OpenAi, &req, true, all);
+        assert!(b.get("reasoning").is_none() && b.get("reasoning_effort").is_none());
         assert_eq!(b["max_tokens"], json!(200));
+        for kind in [ServiceKind::Gemini, ServiceKind::Groq] {
+            let b = body_json(kind, &req, true, all);
+            assert_eq!(b["reasoning_effort"], json!("low"), "{kind:?}");
+            assert_eq!(b["max_tokens"], json!(200 + THINKING_ROOM));
+            let b = body_json(kind, &req, true, Extras { schema: true, effort: false });
+            assert!(b.get("reasoning_effort").is_none());
+            assert_eq!(b["max_tokens"], json!(200));
+        }
+        assert!(body_json(ServiceKind::Mistral, &req, true, all).get("reasoning_effort").is_none(), "Mistral has no knob");
     }
 
     #[test]
@@ -397,6 +426,22 @@ mod tests {
         let seen = h.join().unwrap();
         assert!(seen[0].contains("response_format"));
         assert!(!seen[1].contains("response_format"));
+    }
+
+    #[test]
+    fn retries_without_reasoning_effort_then_without_the_schema() {
+        let (base, h) = serve(vec![
+            http("400 Bad Request", "application/json", r#"{"error":{"message":"`reasoning_effort` is not supported with this model"}}"#),
+            http("400 Bad Request", "application/json", r#"{"error":{"message":"Invalid JSON payload received. Unknown name \"additionalProperties\" at 'generation_config.response_schema'"}}"#),
+            http("200 OK", "application/json", r#"{"choices":[{"message":{"content":"ok"},"finish_reason":"stop"}]}"#),
+        ]);
+        let ep = Endpoint { kind: ServiceKind::Groq, base, key: Some("gsk".into()) };
+        let req = ChatRequest { model: "m".into(), schema: Some(("x".into(), json!({}))), ..Default::default() };
+        assert_eq!(chat(&ep, &req, &AtomicBool::new(false)).unwrap(), "ok");
+        let seen = h.join().unwrap();
+        assert!(seen[0].contains("reasoning_effort") && seen[0].contains("response_format"));
+        assert!(!seen[1].contains("reasoning_effort") && seen[1].contains("response_format"));
+        assert!(!seen[2].contains("reasoning_effort") && !seen[2].contains("response_format"));
     }
 
     #[test]
