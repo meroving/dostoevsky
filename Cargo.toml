@@ -12,6 +12,10 @@ rust-version = "1.95"
 # Line tables keep file:line in backtraces, including inside gpui; lldb can't show variables.
 [profile.dev]
 debug = "line-tables-only"
+# Unpacked (macOS's default) keeps every codegen unit's .o beside the binary for its debug
+# info, and incremental builds name them anew each time: target/debug grew by ~250 files an edit
+# (37 GB). Packed folds them into a .dSYM; backtraces keep their lines, a relink costs ~3 s more.
+split-debuginfo = "packed"
 
 [profile.dev.package."*"]
 debug = "line-tables-only"
