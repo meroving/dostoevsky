@@ -196,19 +196,29 @@ fn clean_name(n: &str) -> String {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// A suggested model in the menu: what it's good for, and the id it resolved to on this service.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Suggested {
-    pub id: &'static str,
-    pub name: &'static str,
+    pub id: String,
+    pub name: String,
+    pub role: Role,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Role {
+    /// The Quick default.
+    Quick,
+    Quickest,
+    /// The Deep default.
+    Deep,
 }
 
 impl Suggested {
     pub fn blurb(&self) -> &'static str {
-        match self.id {
-            SONNET => tr!("quick, good with words"),
-            HAIKU => tr!("quickest and cheapest"),
-            OPUS => tr!("best judgement, slower"),
-            _ => "",
+        match self.role {
+            Role::Quick => tr!("quick, good with words"),
+            Role::Quickest => tr!("quickest and cheapest"),
+            Role::Deep => tr!("best judgement, slower"),
         }
     }
 }
@@ -217,16 +227,136 @@ pub const SONNET: &str = "anthropic/claude-sonnet-5.5";
 pub const OPUS: &str = "anthropic/claude-opus-5.5";
 pub const HAIKU: &str = "anthropic/claude-haiku-5.5";
 
-pub fn suggested(kind: ServiceKind) -> &'static [Suggested] {
-    const OR: [Suggested; 3] = [
-        Suggested { id: SONNET, name: "Claude Sonnet 5.5" },
-        Suggested { id: HAIKU, name: "Claude Haiku 5.5" },
-        Suggested { id: OPUS, name: "Claude Opus 5.5" },
-    ];
+/// Each service's picks, in menu order: ids in order of preference, where `#` is a version
+/// (`3`, `2.5`), `*` anything and `!word` leaves out ids with that word; a pattern takes the
+/// newest listed id it matches (a preview of a newer version beats an older release).
+fn picks(kind: ServiceKind) -> &'static [(Role, &'static [&'static str])] {
     match kind {
-        ServiceKind::OpenRouter => &OR,
+        ServiceKind::OpenRouter => &[
+            (Role::Quick, &[SONNET, "anthropic/claude-sonnet-#"]),
+            (Role::Quickest, &[HAIKU, "anthropic/claude-haiku-#"]),
+            (Role::Deep, &[OPUS, "anthropic/claude-opus-#"]),
+        ],
+        ServiceKind::OpenAi => &[(Role::Quick, &["gpt-#-mini"]), (Role::Quickest, &["gpt-#-nano"]), (Role::Deep, &["gpt-#"])],
+        // `-latest` aliases follow Google's newest Flash and Pro.
+        ServiceKind::Gemini => &[
+            (Role::Quick, &["gemini-flash-latest", "gemini-#-flash*!lite"]),
+            (Role::Quickest, &["gemini-flash-lite-latest", "gemini-#-flash-lite*"]),
+            (Role::Deep, &["gemini-pro-latest", "gemini-#-pro*"]),
+        ],
+        ServiceKind::Mistral => &[
+            (Role::Quick, &["mistral-small-latest", "mistral-small-#*"]),
+            (Role::Quickest, &["ministral-8b-latest", "ministral-3b-latest"]),
+            (Role::Deep, &["mistral-large-latest", "mistral-medium-latest", "mistral-large-#*"]),
+        ],
+        ServiceKind::Groq => &[
+            (Role::Quick, &["openai/gpt-oss-120b", "llama-#-70b-versatile"]),
+            (Role::Quickest, &["llama-#-8b-instant", "openai/gpt-oss-20b"]),
+            (Role::Deep, &["moonshotai/kimi-k#*", "openai/gpt-oss-120b", "llama-#-70b-versatile"]),
+        ],
         _ => &[],
     }
+}
+
+/// `#` matches a version (digits and dots), `*` anything.
+fn glob(p: &[u8], s: &[u8]) -> bool {
+    match p.first() {
+        None => s.is_empty(),
+        Some(b'*') => (0..=s.len()).any(|i| glob(&p[1..], &s[i..])),
+        Some(b'#') => {
+            let n = s.iter().take_while(|c| c.is_ascii_digit() || **c == b'.').count();
+            s.first().is_some_and(u8::is_ascii_digit) && (1..=n).any(|i| glob(&p[1..], &s[i..]))
+        }
+        Some(c) => s.first() == Some(c) && glob(&p[1..], &s[1..]),
+    }
+}
+
+fn pick(wanted: &[&str], models: &[ModelInfo]) -> Option<String> {
+    if models.is_empty() {
+        // Before the list arrives: a known id, never a guess at a pattern.
+        return wanted.first().filter(|w| !w.contains(['#', '*'])).map(|w| w.to_string());
+    }
+    wanted.iter().find_map(|w| {
+        if !w.contains(['#', '*']) {
+            return models.iter().find(|m| m.id == *w).map(|m| m.id.clone());
+        }
+        let mut parts = w.split('!');
+        let w = parts.next().unwrap_or_default();
+        let without: Vec<&str> = parts.collect();
+        let head = &w[..w.find(['#', '*']).unwrap_or(w.len())];
+        models
+            .iter()
+            .filter(|m| glob(w.as_bytes(), m.id.as_bytes()) && !without.iter().any(|x| m.id.contains(x)))
+            // The highest version, then a release before a preview, then the latest dated one.
+            .max_by(|a, b| {
+                let key = |id: &str| (version(&id[head.len()..]).unwrap_or(0.), !id.contains("preview"));
+                let (ka, kb) = (key(&a.id), key(&b.id));
+                ka.0.total_cmp(&kb.0).then(ka.1.cmp(&kb.1)).then(a.id.cmp(&b.id))
+            })
+            .map(|m| m.id.clone())
+    })
+}
+
+/// `3.5` in `3.5-flash`, `2` in `k2-instruct`.
+fn version(s: &str) -> Option<f64> {
+    let digits: String = s.chars().skip_while(|c| !c.is_ascii_digit()).take_while(|c| c.is_ascii_digit() || *c == '.').collect();
+    digits.trim_end_matches('.').parse().ok()
+}
+
+/// The menu's suggested rows for a service, resolved against its list (each id once).
+pub fn suggested(kind: ServiceKind, models: &[ModelInfo]) -> Vec<Suggested> {
+    let mut out: Vec<Suggested> = Vec::new();
+    for (role, wanted) in picks(kind) {
+        if let Some(id) = pick(wanted, models).filter(|id| !out.iter().any(|s| s.id == *id)) {
+            let name = models.iter().find(|m| m.id == id && m.name != id).map(|m| m.name.clone()).unwrap_or_else(|| pretty_id(&id));
+            out.push(Suggested { id, name, role: *role });
+        }
+    }
+    out
+}
+
+/// A readable name for a bare id: `gemini-2.5-flash` → Gemini 2.5 Flash,
+/// `moonshotai/kimi-k2-instruct-0905` → Kimi K2, `openai/gpt-oss-120b` → GPT OSS 120B.
+pub fn pretty_id(id: &str) -> String {
+    let base = id.rsplit('/').next().unwrap_or(id);
+    base.split('-')
+        .filter(|t| !t.is_empty() && !matches!(*t, "latest" | "instruct" | "versatile" | "it"))
+        // Dates and build numbers: 0905, 001, 2025.
+        .filter(|t| !(t.chars().all(|c| c.is_ascii_digit()) && (t.len() >= 4 || t.starts_with('0'))))
+        .map(|t| match t {
+            "gpt" | "oss" => t.to_uppercase(),
+            _ => {
+                let mut cs: Vec<char> = t.chars().collect();
+                cs[0] = cs[0].to_ascii_uppercase();
+                // 120b → 120B, e4b → E4B.
+                if cs.len() > 1 && cs[cs.len() - 1] == 'b' && cs[cs.len() - 2].is_ascii_digit() {
+                    let last = cs.len() - 1;
+                    cs[last] = 'B';
+                }
+                cs.into_iter().collect()
+            }
+        })
+        .collect::<Vec<String>>()
+        .join(" ")
+}
+
+/// Readable names and newest first, for services whose lists are bare ids.
+pub fn polish(kind: ServiceKind, mut models: Vec<ModelInfo>) -> Vec<ModelInfo> {
+    if kind.local() || kind == ServiceKind::Custom || kind == ServiceKind::OpenRouter {
+        return models;
+    }
+    for m in &mut models {
+        if m.name == m.id {
+            m.name = pretty_id(&m.id);
+        }
+    }
+    // Family by family (the name without its numbers); in each, an alias first, then the newest.
+    let family = |n: &str| n.split(' ').filter(|t| !t.starts_with(|c: char| c.is_ascii_digit())).collect::<Vec<_>>().join(" ").to_lowercase();
+    models.sort_by(|a, b| {
+        let (va, vb) = (version(&a.name).unwrap_or(f64::INFINITY), version(&b.name).unwrap_or(f64::INFINITY));
+        family(&a.name).cmp(&family(&b.name)).then(vb.total_cmp(&va)).then(a.id.cmp(&b.id))
+    });
+    models
 }
 
 /// The largest free model by the size in its name (`29b`), otherwise the first.
@@ -242,72 +372,34 @@ fn size_in_name(id: &str) -> f64 {
         .fold(0., f64::max)
 }
 
-/// Ids in order of preference; `a*b` takes the newest listed id that starts with `a` and has `b` after it.
-fn preferred(kind: ServiceKind) -> Option<([&'static str; 3], [&'static str; 3])> {
-    Some(match kind {
-        // `-latest` aliases follow Google's newest Flash and Pro.
-        ServiceKind::Gemini => (["gemini-flash-latest", "gemini-*-flash", "gemini-*flash"], ["gemini-pro-latest", "gemini-*-pro", "gemini-*pro"]),
-        ServiceKind::Mistral => (["mistral-small-latest", "mistral-medium-latest", "mistral-small*"], ["mistral-large-latest", "mistral-medium-latest", "mistral-large*"]),
-        ServiceKind::Groq => (["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss*"], ["moonshotai/kimi-k*", "openai/gpt-oss-120b", "llama-3.3-70b-versatile"]),
-        _ => return None,
-    })
-}
-
-fn pick(wanted: &[&str], models: &[ModelInfo]) -> Option<String> {
-    if models.is_empty() {
-        return wanted.first().filter(|w| !w.contains('*')).map(|w| w.to_string());
-    }
-    wanted.iter().find_map(|w| match w.split_once('*') {
-        Some((head, tail)) => models
-            .iter()
-            .filter(|m| m.id.strip_prefix(head).is_some_and(|rest| rest.contains(tail)) && !m.id.contains("lite"))
-            // The highest version, then a release before a preview.
-            .max_by(|a, b| {
-                let key = |id: &str| (version(&id[head.len()..]), !id.contains("preview"));
-                let (ka, kb) = (key(&a.id), key(&b.id));
-                ka.0.total_cmp(&kb.0).then(ka.1.cmp(&kb.1)).then(a.id.cmp(&b.id))
-            })
-            .map(|m| m.id.clone()),
-        None => models.iter().find(|m| m.id == *w).map(|m| m.id.clone()),
-    })
-}
-
-/// `3.5` in `3.5-flash`, `2` in `k2-instruct`; 0 when there's no number.
-fn version(s: &str) -> f64 {
-    let digits: String = s.chars().skip_while(|c| !c.is_ascii_digit()).take_while(|c| c.is_ascii_digit() || *c == '.').collect();
-    digits.trim_end_matches('.').parse().unwrap_or(0.)
-}
-
 /// (Quick, Deep).
 pub fn default_models(kind: ServiceKind, models: &[ModelInfo]) -> (Option<String>, Option<String>) {
-    let has = |id: &str| models.is_empty() || models.iter().any(|m| m.id == id);
-    if let Some((quick, deep)) = preferred(kind) {
-        let (q, d) = (pick(&quick, models), pick(&deep, models));
-        if q.is_some() || d.is_some() {
-            return (q.clone().or_else(|| d.clone()), d.or(q));
-        }
+    let role = |r: Role| picks(kind).iter().find(|(x, _)| *x == r).and_then(|(_, w)| pick(w, models));
+    let (q, d) = (role(Role::Quick).or_else(|| role(Role::Quickest)), role(Role::Deep));
+    if q.is_some() || d.is_some() {
+        return (q.clone().or_else(|| d.clone()), d.or(q));
     }
-    match kind {
-        ServiceKind::OpenRouter => (has(SONNET).then(|| SONNET.to_string()), has(OPUS).then(|| OPUS.to_string())),
-        _ => {
-            let first = models.first().map(|m| m.id.clone());
-            let size = |m: &ModelInfo| size_in_name(&m.id);
-            if models.len() > 1 {
-                let q = models.iter().min_by(|a, b| size(a).total_cmp(&size(b))).map(|m| m.id.clone());
-                let d = models.iter().max_by(|a, b| size(a).total_cmp(&size(b))).map(|m| m.id.clone());
-                (q, d)
-            } else {
-                (first.clone(), first)
-            }
-        }
+    if kind == ServiceKind::OpenRouter {
+        return (None, None);
+    }
+    let first = models.first().map(|m| m.id.clone());
+    let size = |m: &ModelInfo| size_in_name(&m.id);
+    if models.len() > 1 {
+        let q = models.iter().min_by(|a, b| size(a).total_cmp(&size(b))).map(|m| m.id.clone());
+        let d = models.iter().max_by(|a, b| size(a).total_cmp(&size(b))).map(|m| m.id.clone());
+        (q, d)
+    } else {
+        (first.clone(), first)
     }
 }
 
 pub fn display_name(r: &ModelRef, models: &[ModelInfo]) -> String {
-    if let Some(s) = suggested(r.service).iter().find(|s| s.id == r.model) {
-        return s.name.to_string();
+    match models.iter().find(|m| m.id == r.model) {
+        Some(m) => m.name.clone(),
+        // The list isn't here yet (or no longer has it).
+        None if r.service.local() || r.service == ServiceKind::Custom => r.model.clone(),
+        None => pretty_id(&r.model),
     }
-    models.iter().find(|m| m.id == r.model).map(|m| m.name.clone()).unwrap_or_else(|| r.model.clone())
 }
 
 /// The model menu's search: every word of `query` is in the name or the id, ignoring case.
@@ -452,6 +544,55 @@ mod tests {
             assert_eq!(k.key_page().is_some(), k.needs_key() && k != ServiceKind::OpenRouter, "{k:?}");
             assert!(k == ServiceKind::Custom || k.default_base_url().starts_with("http"), "{k:?}");
         }
+    }
+
+    #[test]
+    fn patterns_take_versions_and_anything() {
+        let g = |p: &str, s: &str| glob(p.as_bytes(), s.as_bytes());
+        assert!(g("gpt-#", "gpt-5.1") && g("gpt-#", "gpt-5") && !g("gpt-#", "gpt-5-mini") && !g("gpt-#", "gpt-image"));
+        assert!(g("gpt-#-mini", "gpt-5-mini") && !g("gpt-#-mini", "gpt-mini"));
+        assert!(g("moonshotai/kimi-k#*", "moonshotai/kimi-k2-instruct-0905"));
+        assert!(g("gemini-#-pro*", "gemini-3-pro-preview") && !g("gemini-#-pro*", "gemini-pro-latest"));
+    }
+
+    #[test]
+    fn readable_names_for_bare_ids() {
+        assert_eq!(pretty_id("gemini-2.5-flash"), "Gemini 2.5 Flash");
+        assert_eq!(pretty_id("gemini-flash-lite-latest"), "Gemini Flash Lite");
+        assert_eq!(pretty_id("gemini-2.0-flash-001"), "Gemini 2.0 Flash");
+        assert_eq!(pretty_id("moonshotai/kimi-k2-instruct-0905"), "Kimi K2");
+        assert_eq!(pretty_id("openai/gpt-oss-120b"), "GPT OSS 120B");
+        assert_eq!(pretty_id("llama-3.3-70b-versatile"), "Llama 3.3 70B");
+        assert_eq!(pretty_id("gemma-3n-e4b-it"), "Gemma 3n E4B");
+        assert_eq!(pretty_id("qwen/qwen3-32b"), "Qwen3 32B");
+        assert_eq!(pretty_id("mistral-small-latest"), "Mistral Small");
+        assert_eq!(pretty_id(OPUS), "Claude Opus 5.5");
+    }
+
+    #[test]
+    fn preset_lists_read_newest_first_family_by_family() {
+        let ids = ["gemini-2.0-flash", "gemini-2.5-pro", "gemini-3-flash", "gemini-flash-latest", "gemini-2.5-flash", "gemma-3-4b-it", "gemma-3-27b-it"];
+        let m = polish(ServiceKind::Gemini, ids.iter().map(|id| ModelInfo { id: id.to_string(), name: id.to_string(), price_in: None, price_out: None }).collect());
+        let names: Vec<&str> = m.iter().map(|m| m.name.as_str()).collect();
+        assert_eq!(names, ["Gemini Flash", "Gemini 3 Flash", "Gemini 2.5 Flash", "Gemini 2.0 Flash", "Gemini 2.5 Pro", "Gemma 3 27B", "Gemma 3 4B"]);
+        let local = polish(ServiceKind::Ollama, vec![ModelInfo { id: "qwen3:14b".into(), name: "qwen3:14b".into(), price_in: None, price_out: None }]);
+        assert_eq!(local[0].name, "qwen3:14b", "local names are left alone");
+    }
+
+    #[test]
+    fn suggested_rows_resolve_against_the_list() {
+        let ids = |ids: &[&str]| ids.iter().map(|id| ModelInfo { id: id.to_string(), name: pretty_id(id), price_in: None, price_out: None }).collect::<Vec<_>>();
+        let m = ids(&["gemini-flash-latest", "gemini-pro-latest", "gemini-flash-lite-latest", "gemini-2.5-flash"]);
+        let s = suggested(ServiceKind::Gemini, &m);
+        let rows: Vec<(&str, &str, Role)> = s.iter().map(|s| (s.id.as_str(), s.name.as_str(), s.role)).collect();
+        assert_eq!(rows, [("gemini-flash-latest", "Gemini Flash", Role::Quick), ("gemini-flash-lite-latest", "Gemini Flash Lite", Role::Quickest), ("gemini-pro-latest", "Gemini Pro", Role::Deep)]);
+        // Groq without Kimi: Deep falls to gpt-oss-120b, already the Quick row, so it isn't listed twice.
+        let s = suggested(ServiceKind::Groq, &ids(&["openai/gpt-oss-120b", "llama-3.1-8b-instant"]));
+        assert_eq!(s.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["openai/gpt-oss-120b", "llama-3.1-8b-instant"]);
+        let s = suggested(ServiceKind::OpenAi, &ids(&["gpt-4o", "gpt-5", "gpt-5.1", "gpt-5-mini", "gpt-5-nano", "gpt-image-1"]));
+        assert_eq!(s.iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), ["gpt-5-mini", "gpt-5-nano", "gpt-5.1"]);
+        assert_eq!(suggested(ServiceKind::OpenRouter, &[]).iter().map(|s| s.id.as_str()).collect::<Vec<_>>(), [SONNET, HAIKU, OPUS], "known before the list");
+        assert!(suggested(ServiceKind::Ollama, &ids(&["llama3.2:3b"])).is_empty());
     }
 
     #[test]

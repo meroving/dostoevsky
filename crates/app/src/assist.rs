@@ -41,7 +41,8 @@ pub struct Assist {
     /// Local servers that answered.
     pub found: HashSet<ServiceKind>,
     pub menu: Option<PrefsMenu>,
-    pub all_models: bool,
+    /// Services whose whole list the model menu shows ("All … models").
+    pub all_models: HashSet<ServiceKind>,
 }
 
 impl Global for Assist {}
@@ -73,7 +74,7 @@ pub fn close_menu(cx: &mut App) -> bool {
     if open {
         let a = state(cx);
         a.menu = None;
-        a.all_models = false;
+        a.all_models.clear();
         cx.refresh_windows();
     }
     open
@@ -115,7 +116,7 @@ pub fn set_on(enabled: bool, cx: &mut App) {
         cancel_connect(cx);
         let a = state(cx);
         a.menu = None;
-        a.all_models = false;
+        a.all_models.clear();
         a.connect_error = None;
         a.test = None;
     }
@@ -401,7 +402,7 @@ fn finish_connect(r: Option<Result<String, AiError>>, cx: &mut App) {
     cx.refresh_windows();
 }
 
-#[cfg(test)]
+#[cfg(any(test, feature = "shots"))]
 pub fn set_key_for_tests(kind: ServiceKind, k: &str, cx: &mut App) {
     store_key(kind, Some(k.to_string()), cx);
 }

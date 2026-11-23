@@ -322,7 +322,7 @@ impl Workspace {
         }
         let a = cx.default_global::<assist::Assist>();
         a.menu = Some(PrefsMenu::Model(slot));
-        a.all_models = false;
+        a.all_models.clear();
         let model = self.model.clone();
         let field = cx.new(|cx| {
             let mut f = TextView::new(Mode::Field, model, cx);
@@ -481,8 +481,8 @@ impl Workspace {
                         .cursor_pointer()
                         .text_size(px(12.))
                         .text_color(c(theme::muted()))
-                        .on_click(|_, _, cx| {
-                            cx.default_global::<assist::Assist>().all_models = true;
+                        .on_click(move |_, _, cx| {
+                            cx.default_global::<assist::Assist>().all_models.insert(kind);
                             cx.refresh_windows();
                         })
                         .child(tr!("All {service} models ({n})…", service = kind.label(), n = count))
@@ -572,7 +572,7 @@ fn pick_model(slot: Slot, r: ModelRef, cx: &mut App) {
     set_prefs(cx, |p| p.ai.set_slot(slot, Some(r)));
     let a = cx.default_global::<assist::Assist>();
     a.menu = None;
-    a.all_models = false;
+    a.all_models.clear();
     a.test = None;
     cx.refresh_windows();
 }
@@ -582,13 +582,14 @@ fn pick_model(slot: Slot, r: ModelRef, cx: &mut App) {
 fn menu_parts(slot: Slot, query: &str, cx: &mut App) -> Vec<Part> {
     let added: Vec<ServiceKind> = Prefs::get(cx).ai.services.iter().map(|s| s.kind).collect();
     let services: Vec<ServiceKind> = added.into_iter().filter(|k| assist::ready(*k, cx)).collect();
-    let all = assist::get(cx).is_some_and(|a| a.all_models);
     let ideas = Prefs::get(cx).ai.ideas();
+    let current = Prefs::get(cx).ai.slot(slot).cloned();
     let mut parts = Vec::new();
     let mut found = 0usize;
     for kind in services {
         let title = if kind.local() { tr!("{service} · ON THIS MAC", service = kind.label().to_uppercase()) } else { kind.label().to_uppercase() };
         let models = assist::models_of(kind, cx);
+        let all = assist::get(cx).is_some_and(|a| a.all_models.contains(&kind));
         let state = assist::get(cx).and_then(|a| a.models.get(&kind));
         let loading = matches!(state, Some(Models::Loading) | None);
         let failed = match state {
@@ -601,10 +602,10 @@ fn menu_parts(slot: Slot, query: &str, cx: &mut App) -> Vec<Part> {
             let cost = if kind.local() { Some(tr!("free").to_string()) } else { ai::cost::per_use_with(m, slot, ideas) };
             MenuModel { r: ModelRef { service: kind, model: m.id.clone() }, name: m.name.clone(), blurb, cost }
         };
-        let suggested = ai::service::suggested(kind);
-        let suggested_row = |s: &ai::service::Suggested| MenuModel { r: ModelRef { service: kind, model: s.id.into() }, name: s.name.into(), blurb: Some(s.blurb().into()), cost: cost(s.id) };
+        let suggested = ai::service::suggested(kind, &models);
+        let suggested_row = |s: &ai::service::Suggested| MenuModel { r: ModelRef { service: kind, model: s.id.clone() }, name: s.name.clone(), blurb: Some(s.blurb().into()), cost: cost(&s.id) };
         if !query.is_empty() {
-            let mut hits: Vec<MenuModel> = suggested.iter().filter(|s| ai::service::matches_query(s.name, s.id, query)).map(suggested_row).collect();
+            let mut hits: Vec<MenuModel> = suggested.iter().filter(|s| ai::service::matches_query(&s.name, &s.id, query)).map(suggested_row).collect();
             hits.extend(models.iter().filter(|m| !suggested.iter().any(|s| s.id == m.id) && ai::service::matches_query(&m.name, &m.id, query)).map(listed));
             if !hits.is_empty() {
                 let total = models.len().max(suggested.len());
@@ -620,7 +621,12 @@ fn menu_parts(slot: Slot, query: &str, cx: &mut App) -> Vec<Part> {
         parts.push(Part::Header(title, None));
         if !suggested.is_empty() && !all {
             parts.extend(suggested.iter().map(|s| Part::Model(suggested_row(s))));
-            if let Some(f) = ai::service::free_model(&models) {
+            // The model in use stays in sight when it's none of the suggested ones.
+            let mine = current.as_ref().filter(|r| r.service == kind && !suggested.iter().any(|s| s.id == r.model));
+            if let Some(m) = mine.and_then(|r| models.iter().find(|m| m.id == r.model)) {
+                parts.push(Part::Model(listed(m)));
+            }
+            if let Some(f) = ai::service::free_model(&models).filter(|f| mine.is_none_or(|r| r.model != f.id)) {
                 parts.push(Part::Model(MenuModel {
                     r: ModelRef { service: kind, model: f.id.clone() },
                     name: tr!("A free model").into(),

@@ -281,7 +281,7 @@ pub fn list_models(ep: &Endpoint) -> Result<Vec<ModelInfo>, AiError> {
         return Err(status_error(code, &text));
     }
     let v: Value = serde_json::from_str(&text).map_err(|_| AiError::BadReply(first_line(&text)))?;
-    Ok(parse_models(&v))
+    Ok(crate::service::polish(ep.kind, parse_models(&v)))
 }
 
 /// Returns how long the first piece took.

@@ -31,6 +31,7 @@
 //!                                         fails like `expect` once the timeout (ms) is up
 //! {"say": "ready"}                        print `shots: say ready` on stderr (for a driver)
 //! {"prefs": {"autosave": "off"}}          change settings for this run (not saved)
+//! {"ai_key": {"gemini": "test"}}          a service's key (by slug); only with DOSTOEVSKY_SECRETS=memory
 //! {"export": {"format": "docx", "style": "book", "whole_book": true, "text_open": true, "page": 2}}
 //!                                          set the open Export sheet's choices
 //! {"shot": "target/x.png"}                  render the window to a PNG
@@ -348,6 +349,20 @@ fn step_once(step: &Value, ws: &WeakEntity<Workspace>, window: &mut Window, cx: 
         }
     } else if let Some(s) = step.get("say").and_then(Value::as_str) {
         eprintln!("shots: say {s}");
+    } else if let Some(Value::Object(keys)) = step.get("ai_key") {
+        // Never the real Keychain: a script's fake key would outlive the run.
+        if std::env::var("DOSTOEVSKY_SECRETS").as_deref() != Ok("memory") {
+            fail("ai_key needs DOSTOEVSKY_SECRETS=memory");
+            return true;
+        }
+        for (slug, k) in keys {
+            let Some(kind) = ai::ServiceKind::ALL.into_iter().find(|s| s.slug() == slug) else {
+                fail(format!("ai_key: no service {slug}"));
+                return true;
+            };
+            crate::assist::set_key_for_tests(kind, k.as_str().unwrap_or_default(), cx);
+        }
+        crate::assist::on_prefs_open(cx);
     } else if let Some(Value::Object(changes)) = step.get("prefs") {
         let mut prefs = serde_json::to_value(crate::prefs::Prefs::get(cx)).unwrap_or_default();
         if let Value::Object(p) = &mut prefs {
