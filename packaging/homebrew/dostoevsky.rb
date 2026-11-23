@@ -4,8 +4,7 @@ cask "dostoevsky" do
   version "__VERSION__"
   sha256 "__SHA256__"
 
-  url "https://github.com/meroving/dostoevsky/releases/download/v#{version}/Dostoevsky-#{version}.dmg",
-      verified: "github.com/meroving/dostoevsky/"
+  url "https://github.com/meroving/dostoevsky/releases/download/v#{version}/Dostoevsky-#{version}.dmg"
   name "Dostoevsky"
   desc "Writing app that keeps alternatives of any phrase in place"
   homepage "https://dostoevsky.app/"

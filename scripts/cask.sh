@@ -42,4 +42,4 @@ esac
 VERSION="$(basename "$DMG" | sed -n 's/^Dostoevsky-\(.*\)\.dmg$/\1/p')"
 [ -n "$VERSION" ] || { echo "can't read the version from $(basename "$DMG") (want Dostoevsky-X.Y.Z.dmg)" >&2; exit 1; }
 SHA="$(shasum -a 256 "$DMG" | cut -d' ' -f1)"
-sed -e "s/__VERSION__/$VERSION/" -e "s/__SHA256__/$SHA/" packaging/homebrew/dostoevsky.rb
+sed -e "s/__VERSION__/$VERSION/" -e "s/__SHA256__/$SHA/" -e "1,/^cask /{/^#/d;}" packaging/homebrew/dostoevsky.rb

@@ -100,14 +100,22 @@ NOTARY_KEY_ID=<KEY_ID> NOTARY_ISSUER=<ISSUER_ID> scripts/bundle.sh
 
 The `.dmg` on the GitHub Release is the file every other channel points at.
 
-- [ ] **Homebrew.** `scripts/cask.sh --release vX.Y.Z > target/dostoevsky.rb` writes the cask
-      with the new version and checksum (the release run's summary shows the same cask; after a
-      build by hand, `scripts/cask.sh target/bundle/Dostoevsky-X.Y.Z.dmg` does the same from the
-      uploaded file). Check it
-      with `brew style target/dostoevsky.rb`, then publish it through the tap. Writers install with
-      `brew install meroving/tap/dostoevsky` and update with `brew upgrade`. Once the repository
-      meets Homebrew's notability rules, submit the cask to `homebrew/homebrew-cask` and retire
-      the tap.
+- [ ] **Homebrew.** The tap is [meroving/homebrew-tap](https://github.com/meroving/homebrew-tap),
+      one file: `Casks/dostoevsky.rb`. `scripts/cask.sh --release vX.Y.Z` prints it with the new
+      version and checksum (after a build by hand, `scripts/cask.sh target/bundle/Dostoevsky-X.Y.Z.dmg`
+      does the same from the uploaded file). Homebrew only checks casks inside a tap, so write it
+      into your local copy and check it there:
+
+      ```sh
+      brew tap meroving/tap && brew trust meroving/tap      # once
+      scripts/cask.sh --release vX.Y.Z > "$(brew --repo meroving/tap)/Casks/dostoevsky.rb"
+      brew style meroving/tap/dostoevsky && brew audit --cask --strict --online meroving/tap/dostoevsky
+      git -C "$(brew --repo meroving/tap)" commit -am "dostoevsky X.Y.Z" && git -C "$(brew --repo meroving/tap)" push
+      ```
+
+      Writers install with `brew install meroving/tap/dostoevsky` (naming the tap in full trusts
+      it) and update with `brew upgrade`. Once the repository meets Homebrew's notability rules,
+      submit the cask to `homebrew/homebrew-cask` and retire the tap.
 - [ ] **The update notice.** The landing page's build writes `version.json` from the newest `v*` tag,
       and its deploy publishes it. The `.dmg` build's update check reads it, so deploy only after
       the release is published (its links lead to the release page).
