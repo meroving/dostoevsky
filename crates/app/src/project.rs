@@ -825,19 +825,6 @@ pub fn plan_to_list(tree: &Tree, path: &Path) -> Rename {
     Rename { from: path.to_path_buf(), to: if to == path { to } else { unused(&to) } }
 }
 
-pub fn plan_numbering(order: &[PathBuf]) -> Vec<Rename> {
-    order
-        .iter()
-        .enumerate()
-        .filter_map(|(i, p)| {
-            let dir = p.parent()?;
-            let ext = p.extension()?.to_string_lossy().into_owned();
-            let name = stem(p);
-            Some(Rename { from: p.clone(), to: dir.join(format!("{:02}-{name}.{ext}", i + 1)) })
-        })
-        .collect()
-}
-
 pub fn unused(path: &Path) -> PathBuf {
     if !path.exists() {
         return path.to_path_buf();
@@ -1331,15 +1318,6 @@ mod tests {
         assert_eq!(slug("../.."), "untitled");
         assert_eq!(slug("   "), "untitled");
         assert_eq!(slug("Глава первая"), "Глава-первая");
-    }
-
-    #[test]
-    fn a_folder_numbered_in_order_reads_as_a_book() {
-        let d = Dir::new("number").with(&["b.md", "a.md"]);
-        apply(&plan_numbering(&[d.0.join("b.md"), d.0.join("a.md")])).unwrap();
-        let t = scan(&d.0);
-        assert_eq!(t.kind, Kind::Book);
-        assert_eq!(labels(&t.main[0]), ["b", "a"]);
     }
 
     #[test]

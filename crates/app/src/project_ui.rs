@@ -240,7 +240,19 @@ impl ProjectWindow {
             rows.push(Row::Head { title: today.month_title(), dir: self.tree.root.clone(), detail: None, collapsed: None });
             rows.push(self.today_row(today));
         }
+        // A folder's new file goes in the folder itself, so its line follows the top-level
+        // files, ahead of the subfolders: after the last one it read as the subfolder's.
+        let root_add = || Row::Add {
+            dir: self.tree.root.clone(),
+            after: groups.first().filter(|g| g.title.is_none()).and_then(|g| g.entries.last()).map(|e| e.path.clone()),
+            what: Adds::File,
+        };
+        let mut root_added = !plain;
         for (i, g) in groups.iter().enumerate() {
+            if !root_added && g.title.is_some() {
+                rows.push(root_add());
+                root_added = true;
+            }
             let collapsible = !journal && g.title.is_some();
             let collapsed = collapsible && self.collapsed.contains(&g.dir);
             if let Some(title) = &g.title {
@@ -268,10 +280,12 @@ impl ProjectWindow {
                 rows.push(row);
             }
         }
-        // A book or a folder ends with a way to add to it; a journal's today row is that already.
-        if !journal {
+        // A book ends with a way to add to it; a journal's today row is that already.
+        if !root_added {
+            rows.push(root_add());
+        } else if !journal && !plain {
             let (dir, after) = groups.last().map_or((self.tree.root.clone(), None), |g| (g.dir.clone(), g.entries.last().map(|e| e.path.clone())));
-            rows.push(Row::Add { dir, after, what: if plain { Adds::File } else { Adds::Chapter } });
+            rows.push(Row::Add { dir, after, what: Adds::Chapter });
         }
         if !self.tree.loose.is_empty() {
             let dir = self.loose_key();
@@ -1429,29 +1443,20 @@ impl Workspace {
                 self.apply_renames(plan, true, window, cx);
             }
             Kind::Folder => {
-                let Some(g) = p.tree.main.iter().find(|g| g.dir == dir) else { return };
-                let mut order: Vec<PathBuf> = g.entries.iter().map(|e| e.path.clone()).filter(|q| *q != d.path).collect();
-                let i = before.and_then(|b| order.iter().position(|q| *q == b)).unwrap_or(order.len());
-                order.insert(i, d.path.clone());
-                let plan = project::plan_numbering(&order);
-                let rx = window.prompt(
-                    PromptLevel::Info,
-                    tr!("Number these files so the order sticks?"),
-                    Some(tr!("The order lives in the file names. Numbering them makes this folder a book. ⌘Z undoes the renames.")),
-                    &[tr!("Number Files"), tr!("Cancel")],
-                    cx,
-                );
-                let notes = p.tree.settings().notes;
-                cx.spawn_in(window, async move |this, cx| {
-                    if rx.await == Ok(0) {
-                        let _ = this.update_in(cx, |this, window, cx| {
-                            if this.apply_renames(plan, true, window, cx) {
-                                this.apply_settings(project::Settings { kind: Kind::Book, notes, title: None, author: None, date: None }, cx);
-                            }
-                        });
-                    }
-                })
-                .detach();
+                // A folder keeps its own order, newest first, so a drop only moves a file to
+                // another of its folders; its name stays.
+                if d.path.parent() == Some(dir.as_path()) {
+                    return;
+                }
+                let Some(name) = d.path.file_name() else { return };
+                let to = project::unused(&dir.join(name));
+                let place = match dir.strip_prefix(&p.tree.root) {
+                    Ok(r) if !r.as_os_str().is_empty() => format!("{}/", r.display()),
+                    _ => project::folder_name(&p.tree.root),
+                };
+                if self.apply_renames(vec![Rename { from: d.path.clone(), to }], true, window, cx) {
+                    self.flash_status(tr!("Moved to {name}. ⌘Z to undo", name = place), cx);
+                }
             }
             Kind::Journal => {}
         }
@@ -1559,6 +1564,7 @@ impl Workspace {
         let notes_key = p.tree.notes_dir.is_some().then(|| p.notes_key());
         let drop_at = if cx.has_active_drag() { p.drop_at.clone() } else { None };
         let draggable = matches!(kind, Kind::Book | Kind::Folder);
+        let numbered = kind != Kind::Folder;
         let editing = p.edit.as_ref().map(|e| match &e.target {
             EditTarget::New { dir, after, line } => (Some((dir.clone(), after.clone(), *line)), None, e.field.clone()),
             EditTarget::Rename(q) => (None, Some(q.clone()), e.field.clone()),
@@ -1625,7 +1631,8 @@ impl Workspace {
                             .when(draggable, |d| {
                                 d.on_drag_move::<RowDrag>(cx.listener(move |this, e: &DragMoveEvent<RowDrag>, _, cx| {
                                     if e.bounds.contains(&e.event.position) {
-                                        this.set_drop(DropAt::Top(target.clone()), cx);
+                                        let from = e.drag(cx).path.clone();
+                                        this.set_drop(DropAt::Top(target.clone()), &from, cx);
                                     }
                                 }))
                             })
@@ -1646,7 +1653,7 @@ impl Workspace {
                             .into_any_element(),
                     );
                     if let (true, Some((.., f))) = (new_here, &editing) {
-                        items.push(field_row("", f.clone()));
+                        items.push(field_row("", numbered, f.clone()));
                         placed = true;
                     }
                 }
@@ -1657,7 +1664,7 @@ impl Workspace {
                     let draggable = draggable && !note;
                     if editing.as_ref().and_then(|(_, r, _)| r.as_ref()) == Some(&path) {
                         if let Some((.., f)) = &editing {
-                            items.push(field_row(&no, f.clone()));
+                            items.push(field_row(&no, numbered, f.clone()));
                         }
                         continue;
                     }
@@ -1701,7 +1708,8 @@ impl Workspace {
                                 d.on_drag(drag, |d, _, _, cx| cx.new(|_| d.clone())).on_drag_move::<RowDrag>(cx.listener(move |this, e: &DragMoveEvent<RowDrag>, _, cx| {
                                     if e.bounds.contains(&e.event.position) {
                                         let above = e.event.position.y < e.bounds.center().y;
-                                        this.set_drop(if above { DropAt::Above(moves.clone()) } else { DropAt::Below(moves.clone()) }, cx);
+                                        let from = e.drag(cx).path.clone();
+                                        this.set_drop(if above { DropAt::Above(moves.clone()) } else { DropAt::Below(moves.clone()) }, &from, cx);
                                     }
                                 }))
                             })
@@ -1738,7 +1746,7 @@ impl Workspace {
                     );
                     if let Some((Some((_, after, false)), _, f)) = &editing {
                         if after.as_ref() == Some(&path) {
-                            items.push(field_row("", f.clone()));
+                            items.push(field_row("", numbered, f.clone()));
                             placed = true;
                         }
                     }
@@ -1746,7 +1754,7 @@ impl Workspace {
                 Row::Add { dir, after, what } => {
                     if let Some((n, _, f)) = &editing {
                         if !placed && n.as_ref().is_some_and(|(d, a, line)| *line && *d == dir && *a == after) {
-                            items.push(field_row("", f.clone()));
+                            items.push(field_row("", numbered, f.clone()));
                             placed = true;
                         }
                         continue;
@@ -1794,7 +1802,7 @@ impl Workspace {
             }
         }
         if let (Some((Some(_), _, f)), false) = (&editing, placed) {
-            items.insert(0, field_row("", f.clone()));
+            items.insert(0, field_row("", numbered, f.clone()));
         }
 
         let body: AnyElement = if empty && editing.is_none() {
@@ -1910,17 +1918,22 @@ impl Workspace {
         Some(el.into_any_element())
     }
 
-    fn set_drop(&mut self, at: DropAt, cx: &mut Context<Self>) {
+    /// In a folder a drop beside the file's own folder-mates moves nothing, so no line shows.
+    fn set_drop(&mut self, at: DropAt, from: &Path, cx: &mut Context<Self>) {
+        let stays = self.project.as_ref().is_some_and(|p| p.tree.kind == Kind::Folder)
+            && self.resolve_drop(&at).is_some_and(|(dir, _)| from.parent() == Some(dir.as_path()));
+        let at = (!stays).then_some(at);
         if let Some(p) = &mut self.project {
-            if p.drop_at.as_ref() != Some(&at) {
-                p.drop_at = Some(at);
+            if p.drop_at != at {
+                p.drop_at = at;
                 cx.notify();
             }
         }
     }
 }
 
-fn field_row(no: &str, field: Entity<TextView>) -> AnyElement {
+/// `numbered`: the rows have a number column (all but a folder's), which the field keeps to.
+fn field_row(no: &str, numbered: bool, field: Entity<TextView>) -> AnyElement {
     div()
         .flex()
         .items_center()
@@ -1929,11 +1942,15 @@ fn field_row(no: &str, field: Entity<TextView>) -> AnyElement {
         .h(px(ROW_H))
         .px(px(4.))
         .text_size(px(13.))
-        .child(div().flex_none().min_w(px(14.)).whitespace_nowrap().text_right().text_size(px(11.)).text_color(c(theme::accent())).child(no.to_string()))
+        .when(numbered, |d| {
+            d.child(div().flex_none().min_w(px(14.)).whitespace_nowrap().text_right().text_size(px(11.)).text_color(c(theme::accent())).child(no.to_string()))
+        })
         .child(
             div()
                 .flex_1()
                 .min_w_0()
+                // Without a number the typing lines up with the names above it.
+                .when(!numbered, |d| d.ml(px(-6.)))
                 .px(px(5.))
                 .rounded(px(4.))
                 .bg(c(theme::bg_raised()))

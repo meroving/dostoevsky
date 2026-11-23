@@ -515,6 +515,16 @@ fn a_folder_adds_files_and_a_journal_needs_no_line() {
     assert!(d.0.join("outline.md").exists());
     assert_eq!(page_text(&ui), "# outline\n\n");
 
+    // With a subfolder the line still adds to the folder itself, and comes before the subfolder.
+    d.file("drafts/some-stuff.md", "c\n");
+    let mut ui = Ui::open_folder(&d.0);
+    ui.keys("escape");
+    assert!(ui.element("add-file").bounds().top() < ui.element("head-drafts").bounds().top());
+    ui.click_id("add-file");
+    ui.type_text("margins");
+    ui.keys("enter");
+    assert!(d.0.join("margins.md").exists() && !d.0.join("drafts/margins.md").exists());
+
     let j = TempDir::new("journal-add");
     j.file("2020-01-01.md", "a\n");
     let mut ui = Ui::open_folder(&j.0);
@@ -609,20 +619,28 @@ fn dragging_a_chapter_reorders_the_files() {
 
 /// PROJ-11
 #[test]
-fn dragging_in_a_plain_folder_offers_to_number_it() {
+fn dragging_in_a_plain_folder_moves_between_folders_and_never_numbers() {
     let d = TempDir::new("plain");
     d.file("on-margins.md", "a\n");
     d.file("keep-the-words.md", "b\n");
+    d.file("drafts/some-stuff.md", "c\n");
     let mut ui = Ui::open_folder(&d.0);
     assert_eq!(ui.read(|ws, _| ws.project_kind()), Some(Kind::Folder));
     ui.keys("escape"); // the first-open sheet; the list under it doesn't take drags
-    let first = name_of(&ui);
-    let other = if first == "on-margins.md" { "keep-the-words.md" } else { "on-margins.md" };
-    ui.drag_row(&format!("row-{first}"), &format!("row-{other}"), false);
-    ui.answer_prompt("Number Files");
-    assert_eq!(ui.read(|ws, _| ws.project_kind()), Some(Kind::Book));
-    assert_eq!(names(&d.0), [".dostoevsky".to_string(), format!("01-{other}"), format!("02-{first}")]);
-    assert_eq!(settings_of(&d).map(|s| s.kind), Some(Kind::Book), "numbering made it a book");
+    // Its order is its own (newest first): a drop among the file's folder-mates moves nothing.
+    ui.drag_row("row-on-margins.md", "row-keep-the-words.md", false);
+    assert!(!ui.app.has_pending_prompt(), "no offer to number the files");
+    assert_eq!(names(&d.0), ["drafts/some-stuff.md", "keep-the-words.md", "on-margins.md"]);
+
+    click_row(&mut ui, "some-stuff.md");
+    ui.drag_row("row-some-stuff.md", "row-on-margins.md", true);
+    assert!(!ui.app.has_pending_prompt());
+    assert!(d.0.join("some-stuff.md").exists() && !d.0.join("drafts/some-stuff.md").exists());
+    assert_eq!(name_of(&ui), "some-stuff.md", "the page follows its file");
+    assert_eq!(ui.read(|ws, _| ws.project_kind()), Some(Kind::Folder));
+    assert!(!d.0.join(".dostoevsky").exists(), "a plain folder stays untouched");
+    ui.keys("cmd-z");
+    assert!(d.0.join("drafts/some-stuff.md").exists());
 }
 
 /// PROJ-1

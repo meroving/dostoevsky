@@ -63,6 +63,9 @@ impl TempDir {
 
     pub fn file(&self, name: &str, text: &str) -> std::path::PathBuf {
         let p = self.0.join(name);
+        if let Some(dir) = p.parent() {
+            std::fs::create_dir_all(dir).unwrap();
+        }
         std::fs::write(&p, text).unwrap();
         p
     }
