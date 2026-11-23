@@ -8,7 +8,7 @@ Dostoevsky ships in three places from the same commit and the same version numbe
 
 | Channel | Built by | How writers update |
 |---|---|---|
-| GitHub Release (`.dmg`) | `scripts/bundle.sh`, or the release workflow on a tag | the app's update notice (opt-in), then Download |
+| GitHub Release (`.dmg`) | `scripts/bundle.sh`, or the release workflow run by hand | the app's update notice (opt-in), then Download |
 | Homebrew (`meroving/tap`) | `scripts/cask.sh` from that `.dmg` | `brew upgrade` (the notice says so) |
 | Mac App Store | the maintainers' sandboxed build, uploaded to App Store Connect | the App Store |
 
@@ -24,9 +24,10 @@ versions. Its build fails if the update URL turns up in the binary.
    the bundle scripts first, or App Store Connect rejects the upload as a build it already has.
 2. **App Store.** Build the sandboxed `.pkg` from that commit, upload it and submit it for review.
    Review takes a day or more; the other channels needn't wait for it.
-3. **GitHub Release.** Tag `vX.Y.Z` on the same commit (§4). The workflow builds, signs, notarizes
-   and drafts the release; look it over and publish. With Actions unavailable, run §4 by hand and
+3. **GitHub Release.** Tag `vX.Y.Z` on the same commit and push the tag, build the `.dmg` (§4), then
    `gh release create vX.Y.Z target/bundle/Dostoevsky-X.Y.Z.dmg --verify-tag --title "Dostoevsky X.Y.Z"`.
+   Or run the release workflow on the tag (Actions → Release → Run workflow): it builds, signs,
+   notarizes and drafts the release; look it over and publish.
 4. **Homebrew.** Update the tap's cask (§5).
 5. **The update notice, last.** Deploy the landing page (§5): its `version.json` is what tells
    `.dmg` writers about the new version, within a day. Until it's deployed nobody is told, so the
@@ -66,9 +67,10 @@ versions. Its build fails if the update URL turns up in the binary.
 
 ## 4. Build, sign, notarize
 
-A tag does this on GitHub: `.github/workflows/release.yml` builds, signs and notarizes on a
-`vX.Y.Z` tag that matches `Cargo.toml` and attaches the `.dmg` to a draft release (its header
-lists the repository secrets it needs). By hand:
+`.github/workflows/release.yml` can do this on GitHub: run it by hand (Actions → Release → Run
+workflow) with a pushed `vX.Y.Z` tag that matches `Cargo.toml`, and it builds, signs, notarizes and
+attaches the `.dmg` to a draft release (its header lists the repository secrets it needs; pushing a
+tag alone runs nothing). By hand:
 
 One-time: a Developer ID Application certificate in the keychain, and either a notarytool
 keychain profile
@@ -90,8 +92,9 @@ NOTARY_KEY_ID=<KEY_ID> NOTARY_ISSUER=<ISSUER_ID> scripts/bundle.sh
 - [ ] Fresh macOS 13 VM: the .dmg opens without Gatekeeper warnings; app makes no network
       requests (Little Snitch or `nettop`, NFR-4) except the update check, and that only after
       the writer said yes to it (TECH-NOTES §14)
-- [ ] Tag `vX.Y.Z` (the release workflow attaches the .dmg to a draft), release notes list format
-      changes (there should be none), publish the draft
+- [ ] Tag `vX.Y.Z` and push it, then `gh release create` with the .dmg (or run the release
+      workflow, which attaches it to a draft); release notes list format changes (there should be
+      none), publish
 
 ## 5. After a release: the other channels
 

@@ -1,6 +1,8 @@
-# A vX.Y.Z tag → a universal .dmg signed with the Developer ID, notarized and stapled, attached to a
-# draft GitHub Release (dsky-a8n.10, docs/RELEASE.md §4 and §5). Look the draft over, then publish
-# it; the Homebrew cask for that .dmg is in the run's summary.
+# Manual only: Actions → Release → Run workflow, with a vX.Y.Z tag that's already pushed → a
+# universal .dmg signed with the Developer ID, notarized and stapled, attached to a draft GitHub
+# Release (dsky-a8n.10, docs/RELEASE.md §4 and §5). Look the draft over, then publish it; the
+# Homebrew cask for that .dmg is in the run's summary. Releases are usually built locally
+# (docs/RELEASE.md §4), so pushing a tag runs nothing.
 #
 # Repository secrets (NEEDS OWNER):
 #   DEVELOPER_ID_P12           base64 of a .p12 with the "Developer ID Application" certificate and its key
@@ -10,17 +12,21 @@
 name: Release
 
 on:
-  push:
-    tags: ['v[0-9]*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'The release tag, already pushed (vX.Y.Z)'
+        required: true
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ inputs.tag }}
 
 env:
   CARGO_TERM_COLOR: always
+  TAG: ${{ inputs.tag }}
 
 jobs:
   dmg:
@@ -29,12 +35,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          ref: refs/tags/${{ inputs.tag }}
           fetch-depth: 0   # bundle.sh's build number is the commit count
 
       - name: The tag matches Cargo.toml
         run: |
           v="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          [ "v$v" = "$GITHUB_REF_NAME" ] || { echo "::error::tag $GITHUB_REF_NAME, Cargo.toml says $v"; exit 1; }
+          [ "v$v" = "$TAG" ] || { echo "::error::tag $TAG, Cargo.toml says $v"; exit 1; }
           echo "VERSION=$v" >> "$GITHUB_ENV"
 
       - name: Rust toolchain (rust-toolchain.toml), both architectures
@@ -93,7 +100,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "$GITHUB_REF_NAME" "target/bundle/Dostoevsky-$VERSION.dmg" \
+          gh release create "$TAG" "target/bundle/Dostoevsky-$VERSION.dmg" \
             --draft --verify-tag --title "Dostoevsky $VERSION" --generate-notes
 
       - name: Homebrew cask for the tap
