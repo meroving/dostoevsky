@@ -32,6 +32,14 @@ optional, and it never rewrites your text.
 Built in Rust on [GPUI](https://www.gpui.rs) ([gpui-kit](https://docs.rs/gpui-kit/)). Native, with no web view.
 Free and open source. Website: [dostoevsky.app](https://dostoevsky.app).
 
+## Get it
+
+- **Download** the `.dmg` from [Releases](https://github.com/meroving/dostoevsky/releases/latest):
+  universal (Apple silicon and Intel), macOS 13 or later, signed and notarized. It can check for
+  new versions once a day if you say yes when it asks.
+- **Beta** builds on [TestFlight](https://testflight.apple.com/join/Aeg1FKmD).
+- Or build it yourself: see [Build and run](#build-and-run).
+
 ---
 
 ## Writing mode
@@ -106,7 +114,7 @@ or pick one in General → *Language*.
 
 ## Alternatives
 
-Select a word, a sentence or a paragraph and press **⌘⇧A**, or click *Alternatives* in the
+Select a word, a sentence or a paragraph and press **⇧⌘A**, or click *Alternatives* in the
 bar that shows above a mouse selection in editing (beside *Comment* and *Cut*; Preferences →
 Editing → *Buttons on a selection* turns it off). What you selected becomes the
 original, and you add versions under it. Back on the page, hover the span and press
@@ -147,7 +155,7 @@ headings. ↑/↓ glides the page to each one.
 **⌘X** fades the selection where it was: the page doesn't move, your eye skips it, and the
 word count, Copy Final Text and every export leave it out. It is on the clipboard too. Press
 **⌘V** somewhere else, in this chapter or another, and it moves there (one ⌘Z puts it back);
-press **esc** straight away and it goes back. **⌘/** (or *Cut* above a mouse selection, the
+press **Esc** straight away and it goes back. **⌘/** (or *Cut* above a mouse selection, the
 app icon's axe) cuts without touching the clipboard, and on a cut puts it back. Only ⌫ deletes.
 
 Right-click a cut for its menu: put it back, show it as a quiet mark instead of faded text,
@@ -187,7 +195,7 @@ undoes the move. Groups and cuts travel with the text.
 
 Select some words, or just put the caret in a sentence, and press **⌥⌘M** (or click *Comment*
 above a mouse selection, or right-click → *Add Comment*). The words take a faint wash and a note opens in the right margin, level with
-them. ↩ or esc finishes it, ⇧↩ starts a new line, and a note left empty leaves nothing. Point
+them. ↩ or Esc finishes it, ⇧↩ starts a new line, and a note left empty leaves nothing. Point
 at a note or its words and both light up; click the note to edit it. Right-click for Edit, Copy,
 Show in Comments and Delete (⌘⌫), each one ⌘Z away.
 
@@ -281,7 +289,7 @@ walks the whole book, opening the next chapter with a match.
 ![Find across the project: "landlady" in two files](docs/screens/project-find.png)
 
 The foot of the left panel has Open (recent documents and projects, New Project), Save, Show in
-Finder, Export and Settings. A project's type and notes folder are Settings → Project. A single file gets a Project tab too: its folder,
+Finder, Export and Settings. A project's type and notes folder are in Preferences → Project. A single file gets a Project tab too: its folder,
 one click to open that folder as a project, and your recent work.
 
 ## One Markdown file
@@ -299,11 +307,11 @@ can't place goes to *Detached*, so nothing is dropped. The format is documented 
 ## Getting it out
 
 **The final text** is what a reader sees: the version showing in each place, no cuts, no
-comments. **⌘⇧C** copies it formatted and as Markdown at once, so a paste into
+comments. **⇧⌘C** copies it formatted and as Markdown at once, so a paste into
 Mail, Google Docs, Substack or Medium keeps the headings and italics, and a paste into X or a
 Markdown editor gets Markdown.
 
-**⌘⇧E** opens *Export*: this page or the whole book, as PDF, Word, ePub, a web page, Markdown
+**⇧⌘E** opens *Export*: this page or the whole book, as PDF, Word, ePub, a web page, Markdown
 or plain text, in one of three looks. *Page* is your own font, set for paper. *Manuscript* is
 the standard submission format (12 pt Times, double-spaced, a title page and a running head).
 *Book* is a serif, justified and hyphenated, with indented paragraphs. The preview shows the
@@ -318,7 +326,7 @@ its folder.
 ## Keyboard
 
 Every command has a shortcut and a menu item, and every binding can be changed in
-`~/.config/dostoevsky/keymap.json` (changes apply live). ⌘⇧K lists them all.
+`~/.config/dostoevsky/keymap.json` (changes apply live). ⇧⌘K lists them all.
 
 | Action | Keys | | Action | Keys |
 |---|---|---|---|---|
@@ -326,7 +334,7 @@ Every command has a shortcut and a menu item, and every binding can be changed i
 | Next / previous version (caret) | ⌥⌘↓ / ⌥⌘↑ | | Cut without a trace | ⇧⌘X |
 | Next / previous group | ⌥⌘→ / ⌥⌘← | | Cuts | ⌃⌘C |
 | Back to the original | ⌥⌘0 | | Move a sentence up / down (editing) | ⌥↑ / ⌥↓ |
-| Alternatives for selection | ⌘⇧A | | Copy the final text / Export | ⌘⇧C / ⌘⇧E |
+| Alternatives for selection | ⇧⌘A | | Copy the final text / Export | ⇧⌘C / ⇧⌘E |
 | Settle on this | ⌥⌘↩ | | Left panel (project, alternatives, review) | ⌘P |
 | Writing / editing (flip with ⌘D) | ⌘1 / ⌘2 | | Previous / next file | ⌘[ / ⌘] |
 | AI ideas | ⌥⌘A | | Review tab | ⌥⌘L |
@@ -353,7 +361,7 @@ scripts/bundle.sh                             # universal Dostoevsky.app and .dm
 
 The screenshots on this page come from the real app, rendered offscreen by
 `scripts/shoot_readme.sh` (the AI shots use a stand-in model on localhost). More commands
-are in [CLAUDE.md](CLAUDE.md); the release checklist is [docs/RELEASE.md](docs/RELEASE.md).
+are in [AGENTS.md](AGENTS.md); the release checklist is [docs/RELEASE.md](docs/RELEASE.md).
 
 | Crate | What it does |
 |---|---|
@@ -366,7 +374,7 @@ are in [CLAUDE.md](CLAUDE.md); the release checklist is [docs/RELEASE.md](docs/R
 | `crates/ai` | One OpenAI-compatible client, prompts for ideas, AI passes and trims. No UI |
 | `crates/app` | The `dostoevsky` binary: the page, panels, menus, projects, preferences |
 
-Docs: [the file format](docs/FILE-FORMAT.md) · [technical notes](docs/TECH-NOTES.md) · [releasing](docs/RELEASE.md)
+Docs: [the file format](docs/FILE-FORMAT.md) · [technical notes](docs/TECH-NOTES.md) · [themes](docs/THEMES.md) · [releasing](docs/RELEASE.md)
 
 ## Credits
 
