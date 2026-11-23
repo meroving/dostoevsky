@@ -103,6 +103,7 @@ actions!(
         Print,
         ShowShortcuts,
         ShowWelcome,
+        ShowSupport,
         AllAlternatives,
         SidebarPrevGroup,
         SidebarNextGroup,
@@ -720,6 +721,8 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
             MenuItem::action(tr!("Welcome to Dostoevsky"), ShowWelcome),
             MenuItem::separator(),
             MenuItem::action(tr!("Keyboard Shortcuts"), ShowShortcuts),
+            MenuItem::separator(),
+            MenuItem::action(tr!("Dostoevsky Support"), ShowSupport),
         ]),
     ]
 }

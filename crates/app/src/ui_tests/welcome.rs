@@ -72,7 +72,15 @@ fn win_19_in_the_help_menu() {
             _ => None,
         })
         .collect();
-    assert_eq!(names, ["Welcome to Dostoevsky", "Keyboard Shortcuts"]);
+    assert_eq!(names, ["Welcome to Dostoevsky", "Keyboard Shortcuts", "Dostoevsky Support"]);
+}
+
+/// dsky-nke1.3: Help → Dostoevsky Support opens the support page.
+#[test]
+fn help_menu_opens_support() {
+    let mut ui = Ui::open("Text.\n");
+    ui.action(crate::actions::ShowSupport);
+    assert_eq!(ui.app.opened_url().as_deref(), Some(crate::about::SUPPORT));
 }
 
 #[test]

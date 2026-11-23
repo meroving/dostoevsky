@@ -401,6 +401,7 @@ fn register_actions(cx: &mut App) {
     cx.on_action(|a: &CreateThemeSheet, cx| in_active_workspace(cx, |ws, window, cx| ws.create_theme_sheet(a, window, cx)));
     cx.on_action(|_: &About, cx| about::show(cx));
     cx.on_action(|_: &ShowWelcome, cx| welcome::open(cx));
+    cx.on_action(|_: &ShowSupport, cx| cx.open_url(about::SUPPORT));
     #[cfg(feature = "updates")]
     cx.on_action(|_: &CheckForUpdates, cx| updates::check_now(cx));
     cx.on_action(|_: &Quit, cx| quit(cx));
