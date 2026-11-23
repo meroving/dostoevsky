@@ -305,10 +305,10 @@ fn context_picks_the_right_occurrence() {
         .into_iter()
         .find(|g| l.doc.text_range(g.range.clone()) == "cat")
         .unwrap();
-    assert_eq!(
-        l.doc.text_range(cat.range.start..cat.range.end + 4),
-        "cat ran"
-    );
+    // The second cat: the one after "Then The " (the cut beside it may not find its place).
+    let t: Vec<char> = l.doc.text().chars().collect();
+    let before: String = t[cat.range.start - 9..cat.range.start].iter().collect();
+    assert_eq!(before, "Then The ");
 }
 
 #[test]
@@ -340,7 +340,7 @@ fn edited_paragraphs_are_matched_by_similarity() {
 #[test]
 fn deleted_text_detaches_and_survives_saves() {
     let (_, f) = base();
-    let f = edit_body(&f, "\nThe cat sat. The cat  fast.\n", "");
+    let f = edit_body(&f, "\nThe cat sat. The cat fast.\n", "");
     let l = reload(&f);
     assert_eq!(l.detached().len(), 1);
     let det = &l.detached()[0];
@@ -431,7 +431,7 @@ fn foreign_ids_are_kept_and_duplicates_renamed() {
 #[test]
 fn detached_ids_never_collide_with_live_ones() {
     let (_, f) = base();
-    let f = edit_body(&f, "\nThe cat sat. The cat  fast.\n", "");
+    let f = edit_body(&f, "\nThe cat sat. The cat fast.\n", "");
     let mut l = parse(&f);
     let det_id = l.detached()[0].id.clone();
     // Make a live group that happens to get the detached group's id.

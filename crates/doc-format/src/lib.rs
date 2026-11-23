@@ -6,6 +6,7 @@ mod atomic;
 pub mod ids;
 mod layout;
 mod read;
+mod spaces;
 mod text;
 mod write;
 

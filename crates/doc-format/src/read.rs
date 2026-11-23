@@ -6,6 +6,7 @@ use doc_model::{Batch, Document, GroupId, Look, Scope, Source};
 use l10n::{tr, trn};
 use serde_json::Value;
 
+use crate::spaces::Side;
 use crate::anchor::{Found, Haystack, Hint, Spot};
 use crate::layout::{self, RawBlock};
 use crate::text::{blocks, Block};
@@ -376,6 +377,8 @@ struct StashRecord {
     /// Its trace: `Some(None)` follows the setting.
     trace: Option<Option<Look>>,
     batch: Option<Batch>,
+    /// The space the body gave up beside it (dsky-tzc).
+    space: Option<Side>,
 }
 
 #[derive(Clone, Default)]
@@ -386,6 +389,7 @@ struct NoteMeta {
     at: Option<Spot>,
     trace: Option<Option<Look>>,
     batch: Option<Batch>,
+    space: Option<Side>,
 }
 
 const ALT_FIELDS: &[&str] = &[
@@ -400,7 +404,7 @@ enum Detached {
 
 const GHOST_FIELDS: &[&str] = &["kind", "at", "parent", "pvariant"];
 const COMMENT_FIELDS: &[&str] = &["kind", "at", "text", "created", "author", "parent", "pvariant"];
-const STASH_FIELDS: &[&str] = &["kind", "note", "quote", "from", "paragraph", "trace", "batch", "version"];
+const STASH_FIELDS: &[&str] = &["kind", "note", "quote", "from", "paragraph", "trace", "batch", "version", "space"];
 
 fn unknown_fields(o: &Fields, known: &[&str]) -> Fields {
     o.iter()
@@ -505,6 +509,7 @@ impl Reader {
                         })
                     }),
                     note: o.get("note").and_then(Value::as_u64).map(|n| n as usize),
+                    space: o.get("space").and_then(Value::as_str).and_then(Side::parse),
                     quote,
                     origin: o
                         .get("from")
@@ -698,7 +703,7 @@ impl Reader {
                 continue;
             };
             let text = doc_model::snapshot::content_text(&n.content);
-            let planted = !text.is_empty() && self.plant_cut(&mut page, &body, &blocks, spot, &n, trace);
+            let planted = !text.is_empty() && self.plant_cut(&mut page, &body, &blocks, spot, &n, trace, m.space);
             if planted {
                 continue;
             }
@@ -709,6 +714,7 @@ impl Reader {
             n.look = trace;
             out_notes.push(n);
         }
+        crate::spaces::restore(&mut page);
         if lost > 0 {
             self.warn(trn!(
                 "a cut lost its place: it is kept with no trace",
@@ -794,10 +800,15 @@ impl Reader {
 
     /// Returns whether the spot was found.
     #[allow(clippy::too_many_arguments)]
-    fn plant_cut(&mut self, page: &mut Vec<TreeNode>, body: &[char], blocks: &[Block], spot: &Spot, n: &TreeNote, look: Option<Look>) -> bool {
+    #[allow(clippy::too_many_arguments)]
+    fn plant_cut(&mut self, page: &mut Vec<TreeNode>, body: &[char], blocks: &[Block], spot: &Spot, n: &TreeNote, look: Option<Look>, space: Option<Side>) -> bool {
         let make = || {
+            let mut content = n.content.clone();
+            if let Some(side) = space {
+                crate::spaces::mark(&mut content, side);
+            }
             TreeNode::Cut(TreeCut {
-                content: n.content.clone(),
+                content,
                 shown: look != Some(Look::Mark),
                 look,
                 paragraph: n.paragraph,
@@ -837,6 +848,7 @@ impl Reader {
             at,
             trace,
             batch,
+            space,
         } in std::mem::take(&mut self.stashes)
         {
             let starts = |i: usize| quote.as_deref().is_none_or(|q| notes[i].starts_with(q));
@@ -856,6 +868,7 @@ impl Reader {
                 at,
                 trace,
                 batch,
+                space,
             };
         }
         metas

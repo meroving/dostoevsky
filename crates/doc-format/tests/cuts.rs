@@ -139,7 +139,7 @@ fn older_readers_see_scraps_with_links() {
     d.cut(at(&d, "his landlady"), None).unwrap();
     let f = save(&d);
     assert!(f.contains("<!-- dostoevsky:overflow\nhis landlady\n-->"), "{f}");
-    assert!(f.contains("\"from\":{\"block\":1,\"quote\":\"He had avoided .\""), "{f}");
+    assert!(f.contains("\"from\":{\"block\":1,\"quote\":\"He had avoided.\""), "{f}");
 }
 
 #[test]
@@ -282,4 +282,49 @@ fn a_version_without_the_words_round_trips() {
         assert_eq!(c.len(), 1);
         assert_eq!(c[0].version, Some(g));
     }
+}
+
+/// dsky-tzc: a sentence cut from the middle of a paragraph leaves one space in the saved body;
+/// a reload gives the page back exactly, and Put Back the paragraph.
+#[test]
+fn a_cut_sentence_leaves_one_space_in_the_body() {
+    for (text, cut, saved, side) in [
+        ("He went up. Ghosted it. Then down.\n", "Ghosted it.", "He went up. Then down.\n", "after"),
+        ("He went up. Ghosted it.\n\nNext.\n", "Ghosted it.", "He went up.\n\nNext.\n", "before"),
+        ("It was very hot, and late.\n", "very hot", "It was, and late.\n", "before"),
+        ("Ghosted it. Then down.\n", "Ghosted it.", "Then down.\n", "after"),
+    ] {
+        for look in [Some(Look::Mark), None] {
+            let mut d = Document::from_text(text);
+            d.cut(at(&d, cut), look).unwrap();
+            let f = save(&d);
+            assert_eq!(body(&f), saved, "{f}");
+            assert!(f.contains(&format!("<!-- dostoevsky:overflow\n{cut}\n-->")), "the cut's text as it was\n{f}");
+            assert!(f.contains(&format!("\"space\":\"{side}\"")), "{f}");
+            let mut l = reload(&f);
+            assert_eq!(l.doc.clean_text(), d.clean_text(), "{f}");
+            if look.is_none() {
+                assert_eq!(l.doc.snapshot(), d.snapshot(), "{f}");
+            }
+            let id = l.doc.cuts()[0].id;
+            l.doc.put_back(id).unwrap();
+            assert_eq!(l.doc.text(), text, "Put Back after a reload");
+        }
+    }
+    // Two spaces stay two (only a lone one goes), and nothing changes on the next save.
+    let mut d = Document::from_text("Up.  Ghosted it.  Down.\n");
+    d.cut(at(&d, "Ghosted it."), None).unwrap();
+    let f = save(&d);
+    assert!(!f.contains("\"space\""), "{f}");
+}
+
+/// An outside editor already took the space out: a load doesn't put a second one in.
+#[test]
+fn a_cut_space_isnt_doubled_after_an_outside_edit() {
+    let mut d = Document::from_text("He went up. Ghosted it. Then down.\n");
+    d.cut(at(&d, "Ghosted it."), None).unwrap();
+    let f = save(&d).replacen("He went up. Then down.", "He went up.  Then down.", 1);
+    let l = parse(&f);
+    assert_eq!(l.doc.clean_text(), "He went up. Then down.\n");
+    assert!(!l.doc.text().contains("   "), "{:?}", l.doc.text());
 }

@@ -95,7 +95,7 @@ struct Out {
 }
 
 fn write(doc: &Document, layer: bool, kept: &Preserved) -> Out {
-    let tree = canonical(&doc.snapshot());
+    let tree = crate::spaces::take(canonical(&doc.snapshot()));
     let text = kept_text(&tree.page);
     let body = normalized_body(&text);
     let body_chars: Vec<char> = body.chars().collect();
@@ -369,7 +369,7 @@ impl Writer<'_> {
 
     fn cut(&mut self, c: &TreeCut, text: &[char], p: usize, nest: Option<&Nest>) {
         // Its text as it is: a paragraph cut's blank line comes along, so it goes back exactly.
-        let content = c.content.clone();
+        let (content, space) = crate::spaces::strip(&c.content);
         let note = content_text(&content);
         let (spot, link) = match nest {
             Some(n) => (
@@ -414,6 +414,9 @@ impl Writer<'_> {
             r.insert("paragraph".into(), json!(true));
         }
         r.insert("trace".into(), trace_json(c.look));
+        if let Some(side) = space {
+            r.insert("space".into(), json!(side.as_str()));
+        }
         // A version without the words: a project's panel lists it from the file only while it shows.
         if let Some(shows) = nest.and_then(|n| n.without) {
             r.insert("version".into(), json!(if shows { "showing" } else { "hidden" }));
