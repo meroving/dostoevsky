@@ -722,3 +722,28 @@ fn each_mode_puts_back_its_own_panels() {
     ui.keys("cmd-1 alt-cmd-l");
     assert!(ui.has_element("review") && !ui.has_element("overflow"));
 }
+
+/// dsky-9ks: in the README's window (1440 × 900) the Shortcuts sheet shows every group whole,
+/// with AI off and on.
+#[test]
+fn shortcuts_sheet_fits_without_scrolling() {
+    for ai in [false, true] {
+        let mut ui = Ui::open_sized(DOC, 1440., 900.);
+        ui.set_prefs(|p| p.ai.enabled = ai);
+        ui.action(crate::actions::ShowShortcuts);
+        assert_eq!(ui.sheet(), Some("shortcuts"));
+        let list = ui.element("shortcut-list").bounds();
+        let groups = crate::actions::shortcut_groups().len();
+        let mut shown = 0;
+        for i in 0..groups {
+            let id = gpui_kit::ElementId::from(("shortcut-group", i));
+            if !ui.has_element(id.clone()) {
+                continue;
+            }
+            shown += 1;
+            let g = ui.element(id).bounds();
+            assert!(g.bottom() <= list.bottom() && g.right() <= list.right() + px(1.), "ai {ai}: group {i} at {g:?} outside {list:?}");
+        }
+        assert!(shown >= groups - 1, "ai {ai}: {shown} of {groups} groups");
+    }
+}

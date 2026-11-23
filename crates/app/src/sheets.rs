@@ -610,7 +610,7 @@ impl Workspace {
         (title, body)
     }
 
-    fn render_shortcuts(&mut self, _: &mut Window, cx: &mut Context<Self>) -> (AnyElement, AnyElement) {
+    fn render_shortcuts(&mut self, window: &mut Window, cx: &mut Context<Self>) -> (AnyElement, AnyElement) {
         let title = div()
             .flex()
             .items_center()
@@ -627,36 +627,66 @@ impl Workspace {
                 items.retain(|(_, a)| !a.partial_eq(&crate::actions::AiAlternatives));
             }
         }
-        let cols: Vec<AnyElement> = groups
+        let wheel = Prefs::get(cx).wheel;
+        let groups: Vec<(&'static str, Vec<(&'static str, String)>)> = groups
             .into_iter()
             .map(|(name, items)| {
-                div()
-                    .flex()
-                    .flex_col()
-                    .gap_1()
-                    .w(px(300.))
-                    .mb_5()
-                    .child(div().text_color(c(theme::accent())).text_size(px(11.5)).mb_1().child(name.to_uppercase()))
-                    .children(items.into_iter().map(|(label, action)| {
+                let rows = items
+                    .into_iter()
+                    .map(|(label, action)| {
                         let keys = shortcut_label(action.as_ref(), cx).unwrap_or_else(|| "—".into());
-                        let keys = match (action.partial_eq(&CycleNext), Prefs::get(cx).wheel) {
+                        let keys = match (action.partial_eq(&CycleNext), wheel) {
                             (false, _) => keys,
                             (true, WheelSwitch::Always) => tr!("↑ ↓ or scroll (hover)").to_string(),
                             (true, WheelSwitch::WithOption) => tr!("↑ ↓ or ⌥ scroll (hover)").to_string(),
                             (true, WheelSwitch::Off) => tr!("↑ ↓ (hover)").to_string(),
                         };
+                        (label, keys)
+                    })
+                    .collect();
+                (name, rows)
+            })
+            .collect();
+        // dsky-9ks: columns of whole groups, in order, as even as they go, so the whole keymap
+        // shows at once in a usual window; a narrow or short one scrolls.
+        let room = window.viewport_size().width - sheet_inset(window.viewport_size().width) * 2. - px(2. * 26. + 2.);
+        let n = shortcut_column_count(room.into());
+        let col_w = (f32::from(room) - SHORTCUT_GAP * (n - 1) as f32) / n as f32;
+        let heights: Vec<f32> = groups.iter().map(|(_, rows)| shortcut_group_height(rows, col_w)).collect();
+        let mut groups = groups.into_iter().enumerate();
+        let cols: Vec<AnyElement> = shortcut_columns(&heights, n)
+            .into_iter()
+            .map(|run| {
+                div()
+                    .flex()
+                    .flex_col()
+                    .flex_1()
+                    .min_w_0()
+                    .gap_5()
+                    .children(groups.by_ref().take(run.len()).map(|(i, (name, rows))| {
                         div()
+                            .id(("shortcut-group", i))
                             .flex()
-                            .justify_between()
-                            .gap_3()
-                            .py(px(3.))
-                            .child(div().text_color(c(theme::text_2())).child(label))
-                            .child(div().text_color(c(theme::muted())).child(keys))
+                            .flex_col()
+                            .child(div().text_color(c(theme::accent())).text_size(px(11.5)).mb_1p5().child(name.to_uppercase()))
+                            .children(rows.into_iter().map(|(label, keys)| {
+                                // Words for keys ("↑ ↓ or scroll (hover)") go under the label rather than squeeze it.
+                                let wordy = keys.chars().count() > SHORTCUT_KEYS_WORDY;
+                                div()
+                                    .flex()
+                                    .when(wordy, |d| d.flex_wrap())
+                                    .justify_between()
+                                    .gap_x_3()
+                                    .py(px(SHORTCUT_ROW_PAD))
+                                    .child(div().min_w_0().text_color(c(theme::text_2())).child(label))
+                                    .child(div().when(wordy, |d| d.flex_grow(1.).text_right()).when(!wordy, |d| d.flex_none()).text_color(c(theme::muted())).child(keys))
+                            }))
+                            .test_support()
                     }))
                     .into_any_element()
             })
             .collect();
-        let body = div().id("shortcut-list").size_full().overflow_y_scroll().flex().flex_wrap().gap_x_10().children(cols).into_any_element();
+        let body = div().id("shortcut-list").size_full().overflow_y_scroll().child(div().flex().gap(px(SHORTCUT_GAP)).children(cols)).test_support().into_any_element();
         (title, body)
     }
 
@@ -1493,6 +1523,73 @@ impl IntoElement for PageSample {
 
 const PREFS_STACKED_BELOW: Pixels = px(820.);
 
+/// The Shortcuts sheet's columns: the gap between them, the narrowest one, and what a row and a
+/// group take, close enough to plan the columns before layout (13 px text, the UI's mono face).
+const SHORTCUT_GAP: f32 = 28.;
+const SHORTCUT_COL_MIN: f32 = 240.;
+const SHORTCUT_ROW_PAD: f32 = 3.;
+const SHORTCUT_LINE: f32 = 21.;
+const SHORTCUT_CHAR: f32 = 7.8;
+const SHORTCUT_HEADING: f32 = 24.;
+const SHORTCUT_GROUP_GAP: f32 = 20.;
+/// Keys longer than this are words, which wrap under their label.
+const SHORTCUT_KEYS_WORDY: usize = 8;
+
+/// How many columns fit `room` px, at most four.
+fn shortcut_column_count(room: f32) -> usize {
+    (((room + SHORTCUT_GAP) / (SHORTCUT_COL_MIN + SHORTCUT_GAP)) as usize).clamp(1, 4)
+}
+
+/// About how tall a group is in a column `col_w` wide: a label that doesn't fit beside its keys wraps.
+fn shortcut_group_height(rows: &[(&str, String)], col_w: f32) -> f32 {
+    let rows: f32 = rows
+        .iter()
+        .map(|(label, keys)| {
+            let (label, keys) = (label.chars().count() as f32 * SHORTCUT_CHAR, keys.chars().count());
+            if keys > SHORTCUT_KEYS_WORDY {
+                let one_line = label + 12. + keys as f32 * SHORTCUT_CHAR <= col_w;
+                return if one_line { 1. } else { 2. } * SHORTCUT_LINE + 2. * SHORTCUT_ROW_PAD;
+            }
+            let room = (col_w - 12. - keys as f32 * SHORTCUT_CHAR).max(SHORTCUT_CHAR * 8.);
+            let lines = (label / room).ceil().max(1.);
+            lines * SHORTCUT_LINE + 2. * SHORTCUT_ROW_PAD
+        })
+        .sum();
+    SHORTCUT_HEADING + rows + SHORTCUT_GROUP_GAP
+}
+
+/// Splits the groups, in order, into at most `n` runs of whole groups with the tallest run as
+/// short as it can be.
+fn shortcut_columns(heights: &[f32], n: usize) -> Vec<std::ops::Range<usize>> {
+    let len = heights.len();
+    let n = n.clamp(1, len.max(1));
+    let sum = |r: std::ops::Range<usize>| heights[r].iter().sum::<f32>();
+    // best[k][i]: the tallest run when the first i groups go into k runs; cut[k][i]: where the last run starts.
+    let mut best = vec![vec![f32::INFINITY; len + 1]; n + 1];
+    let mut cut = vec![vec![0; len + 1]; n + 1];
+    best[0][0] = 0.;
+    for k in 1..=n {
+        for i in 1..=len {
+            for s in (k - 1)..i {
+                let tallest = best[k - 1][s].max(sum(s..i));
+                if tallest < best[k][i] {
+                    best[k][i] = tallest;
+                    cut[k][i] = s;
+                }
+            }
+        }
+    }
+    let mut runs = Vec::new();
+    let mut i = len;
+    for k in (1..=n).rev() {
+        let s = cut[k][i];
+        runs.push(s..i);
+        i = s;
+    }
+    runs.reverse();
+    runs
+}
+
 pub(crate) fn sheet_inset(window_width: Pixels) -> Pixels {
     ((window_width - px(900.)) / 2.).clamp(px(24.), px(140.))
 }
@@ -1518,7 +1615,23 @@ pub(crate) fn group_thousands(n: usize) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::group_thousands;
+    use super::{group_thousands, shortcut_column_count, shortcut_columns};
+
+    #[test]
+    fn shortcut_columns_are_even_runs() {
+        assert_eq!(shortcut_columns(&[1., 1., 1., 1.], 2), vec![0..2, 2..4]);
+        assert_eq!(shortcut_columns(&[5., 1., 1., 1., 1., 1.], 2), vec![0..1, 1..6]);
+        assert_eq!(shortcut_columns(&[3., 3.], 4), vec![0..1, 1..2], "never more columns than groups");
+        assert_eq!(shortcut_columns(&[2., 2., 2.], 1), vec![0..3]);
+    }
+
+    #[test]
+    fn shortcut_column_count_by_room() {
+        assert_eq!(shortcut_column_count(200.), 1);
+        assert_eq!(shortcut_column_count(800.), 3);
+        assert_eq!(shortcut_column_count(1106.), 4);
+        assert_eq!(shortcut_column_count(3000.), 4);
+    }
 
     #[test]
     fn thousands() {
