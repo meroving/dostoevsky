@@ -37,6 +37,7 @@ Free and open source. Website: [dostoevsky.app](https://dostoevsky.app).
 - **Download** the `.dmg` from [Releases](https://github.com/meroving/dostoevsky/releases/latest):
   universal (Apple silicon and Intel), macOS 13 or later, signed and notarized. It can check for
   new versions once a day if you say yes when it asks.
+- **Homebrew**: `brew install meroving/tap/dostoevsky`, and `brew upgrade` for new versions.
 - **Beta** builds on [TestFlight](https://testflight.apple.com/join/Aeg1FKmD).
 - Or build it yourself: see [Build and run](#build-and-run).
 
