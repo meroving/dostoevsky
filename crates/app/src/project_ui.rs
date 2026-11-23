@@ -76,6 +76,8 @@ pub enum DropAt {
     Above(PathBuf),
     Below(PathBuf),
     Top(PathBuf),
+    /// Into the notes folder, or a folder in it.
+    Into(PathBuf),
 }
 
 #[derive(Clone)]
@@ -124,8 +126,8 @@ fn row_height(row: &Row) -> f32 {
 
 #[derive(Clone, Debug)]
 pub enum Row {
-    /// `detail`: its words, or for the notes how many files.
-    Head { title: String, dir: PathBuf, detail: Option<String>, collapsed: Option<bool> },
+    /// `detail`: its words, or for the notes how many files. `aside`: fainter, after the title.
+    Head { title: String, aside: Option<String>, dir: PathBuf, detail: Option<String>, collapsed: Option<bool> },
     /// `loose`: a file listed as not in the book (or journal).
     File { path: PathBuf, no: String, label: String, detail: String, placeholder: bool, loose: bool },
     /// Not a file, so ↑/↓ and ⌘[ ⌘] pass it by.
@@ -237,11 +239,11 @@ impl ProjectWindow {
         let mut rows = Vec::new();
         let today_missing = journal && self.tree.entry_for_day(today).is_none();
         if today_missing && !groups.first().and_then(|g| g.entries.first()).and_then(|e| e.day).is_some_and(|d| (d.year, d.month) == (today.year, today.month)) {
-            rows.push(Row::Head { title: today.month_title(), dir: self.tree.root.clone(), detail: None, collapsed: None });
+            rows.push(Row::Head { title: today.month_title(), aside: None, dir: self.tree.root.clone(), detail: None, collapsed: None });
             rows.push(self.today_row(today));
         }
-        // A folder's new file goes in the folder itself, so its line follows the top-level
-        // files, ahead of the subfolders: after the last one it read as the subfolder's.
+        // A folder's top-level line follows its top-level files, ahead of the subfolders (each
+        // of which has its own): after the last one it read as the subfolder's.
         let root_add = || Row::Add {
             dir: self.tree.root.clone(),
             after: groups.first().filter(|g| g.title.is_none()).and_then(|g| g.entries.last()).map(|e| e.path.clone()),
@@ -259,7 +261,7 @@ impl ProjectWindow {
                 let words: Option<usize> = (!journal).then(|| g.entries.iter().filter_map(|e| self.words(&e.path, live)).sum());
                 // Today's heading above already says the year.
                 let title = if i == 0 && rows.len() == 2 { title.trim_end_matches(&format!(" {}", today.year)).to_string() } else { title.clone() };
-                rows.push(Row::Head { title, dir: g.dir.clone(), detail: words.map(group_thousands), collapsed: collapsible.then_some(collapsed) });
+                rows.push(Row::Head { title, aside: None, dir: g.dir.clone(), detail: words.map(group_thousands), collapsed: collapsible.then_some(collapsed) });
             }
             if i == 0 && today_missing && rows.len() == 1 {
                 rows.push(self.today_row(today));
@@ -279,6 +281,10 @@ impl ProjectWindow {
                 };
                 rows.push(row);
             }
+            // A plain folder is a tree: each of its folders adds where it is.
+            if plain && g.title.is_some() {
+                rows.push(Row::Add { dir: g.dir.clone(), after: g.entries.last().map(|e| e.path.clone()), what: Adds::File });
+            }
         }
         // A book ends with a way to add to it; a journal's today row is that already.
         if !root_added {
@@ -296,7 +302,7 @@ impl ProjectWindow {
                 Kind::Journal => tr!("not in the journal"),
                 Kind::Folder => tr!("not in the folder"),
             };
-            rows.push(Row::Head { title: title.to_string(), dir, detail: Some(group_thousands(words)), collapsed: Some(collapsed) });
+            rows.push(Row::Head { title: title.to_string(), aside: None, dir, detail: Some(group_thousands(words)), collapsed: Some(collapsed) });
             if !collapsed {
                 for e in &self.tree.loose {
                     let detail = self.words(&e.path, live).map(group_thousands).unwrap_or_default();
@@ -304,7 +310,7 @@ impl ProjectWindow {
                 }
             }
         }
-        if self.tree.notes_dir.is_some() {
+        if let Some(notes_dir) = &self.tree.notes_dir {
             let key = self.notes_key();
             let shut = !self.collapsed.contains(&key);
             let n: usize = self.tree.notes.iter().map(|g| g.entries.len()).sum();
@@ -313,12 +319,27 @@ impl ProjectWindow {
                 0 => tr!("empty").to_string(),
                 n => trn!("{count} file", "{count} files", n, count = group_thousands(n)),
             };
-            rows.push(Row::Head { title, dir: key, detail: Some(detail), collapsed: Some(shut) });
-            if !shut {
+            let aside = match self.tree.kind {
+                Kind::Book => tr!("not in the book"),
+                Kind::Journal => tr!("not in the journal"),
+                Kind::Folder => tr!("not in the folder"),
+            };
+            rows.push(Row::Head { title, aside: Some(aside.to_string()), dir: key, detail: Some(detail), collapsed: Some(shut) });
+            let top_after = self.tree.notes.first().filter(|g| g.title.is_none()).and_then(|g| g.entries.last()).map(|e| e.path.clone());
+            let top_add = |after| Row::Add { dir: notes_dir.clone(), after, what: Adds::Note };
+            // Folded, the notes still take a new one: it opens on the page, which unfolds them.
+            if shut {
+                rows.push(top_add(None));
+            } else {
+                let mut top_added = false;
                 for g in &self.tree.notes {
+                    if !top_added && g.title.is_some() {
+                        rows.push(top_add(top_after.clone()));
+                        top_added = true;
+                    }
                     let folded = g.title.is_some() && self.collapsed.contains(&g.dir);
                     if let Some(title) = &g.title {
-                        rows.push(Row::Head { title: title.clone(), dir: g.dir.clone(), detail: Some(format!("{}", g.entries.len())), collapsed: Some(folded) });
+                        rows.push(Row::Head { title: title.clone(), aside: None, dir: g.dir.clone(), detail: Some(format!("{}", g.entries.len())), collapsed: Some(folded) });
                     }
                     if folded {
                         continue;
@@ -327,9 +348,12 @@ impl ProjectWindow {
                         let detail = self.words(&e.path, live).map(group_thousands).unwrap_or_default();
                         rows.push(Row::File { path: e.path.clone(), no: String::new(), label: e.label.clone(), detail, placeholder: false, loose: false });
                     }
+                    if g.title.is_some() {
+                        rows.push(Row::Add { dir: g.dir.clone(), after: g.entries.last().map(|e| e.path.clone()), what: Adds::Note });
+                    }
                 }
-                if let Some(dir) = &self.tree.notes_dir {
-                    rows.push(Row::Add { dir: dir.clone(), after: None, what: Adds::Note });
+                if !top_added {
+                    rows.push(top_add(top_after));
                 }
             }
         }
@@ -1429,36 +1453,64 @@ impl Workspace {
                 let g = p.tree.main.iter().find(|g| g.dir == *dir)?;
                 Some((g.dir.clone(), g.entries.first().map(|e| e.path.clone())))
             }
+            DropAt::Into(_) => None,
+        }
+    }
+
+    /// What a drop of `from` at `at` does: the renames and what the status line then says.
+    /// `None` where it would change nothing, so no drop line shows there either.
+    fn planned_drop(&self, from: &Path, at: &DropAt) -> Option<(Vec<Rename>, Option<String>)> {
+        let tree = &self.project.as_ref()?.tree;
+        let moved_to = |dir: &Path| {
+            let name = match dir.strip_prefix(&tree.root) {
+                Ok(r) if !r.as_os_str().is_empty() => format!("{}/", r.display()),
+                _ => project::folder_name(&tree.root),
+            };
+            Some(tr!("Moved to {name}. ⌘Z to undo", name = name).to_string())
+        };
+        // Within the notes, or a plain folder's own folders, a file keeps its name.
+        let keep_name = |dir: &Path| -> Option<(Vec<Rename>, Option<String>)> {
+            if from.parent() == Some(dir) {
+                return None;
+            }
+            let to = project::unused(&dir.join(from.file_name()?));
+            Some((vec![Rename { from: from.to_path_buf(), to }], moved_to(dir)))
+        };
+        if let DropAt::Into(dir) = at {
+            return if tree.is_note(from) {
+                keep_name(dir)
+            } else {
+                // A chapter leaves its number behind (Move to Notes).
+                Some((vec![project::plan_to_notes(tree, from, dir)], moved_to(dir)))
+            };
+        }
+        let (dir, before) = self.resolve_drop(at)?;
+        let joins = tree.is_note(from) || tree.is_loose(from);
+        match tree.kind {
+            Kind::Book => {
+                let plan = project::plan_move(tree, from, &dir, before.as_deref());
+                (!plan.is_empty()).then(|| (plan, joins.then(|| tr!("Added to the book. ⌘Z to undo").to_string())))
+            }
+            // A folder keeps its own order, newest first: a drop only moves a file to another
+            // of its folders.
+            Kind::Folder => keep_name(&dir),
+            // A day's place is its date; a note dropped among them is dated as Add to the
+            // Journal dates it.
+            Kind::Journal => {
+                let r = project::plan_to_list(tree, from);
+                (joins && r.to != r.from).then(|| (vec![r], Some(tr!("Added to the journal. ⌘Z to undo").to_string())))
+            }
         }
     }
 
     pub(crate) fn drop_row(&mut self, d: &RowDrag, window: &mut Window, cx: &mut Context<Self>) {
         let Some(at) = self.project.as_mut().and_then(|p| p.drop_at.take()) else { return };
-        let Some((dir, before)) = self.resolve_drop(&at) else { return };
+        let Some((plan, said)) = self.planned_drop(&d.path, &at) else { return };
         self.focus_list(window, cx);
-        let Some(p) = &self.project else { return };
-        match p.tree.kind {
-            Kind::Book => {
-                let plan = project::plan_move(&p.tree, &d.path, &dir, before.as_deref());
-                self.apply_renames(plan, true, window, cx);
+        if self.apply_renames(plan, true, window, cx) {
+            if let Some(said) = said {
+                self.flash_status(said, cx);
             }
-            Kind::Folder => {
-                // A folder keeps its own order, newest first, so a drop only moves a file to
-                // another of its folders; its name stays.
-                if d.path.parent() == Some(dir.as_path()) {
-                    return;
-                }
-                let Some(name) = d.path.file_name() else { return };
-                let to = project::unused(&dir.join(name));
-                let place = match dir.strip_prefix(&p.tree.root) {
-                    Ok(r) if !r.as_os_str().is_empty() => format!("{}/", r.display()),
-                    _ => project::folder_name(&p.tree.root),
-                };
-                if self.apply_renames(vec![Rename { from: d.path.clone(), to }], true, window, cx) {
-                    self.flash_status(tr!("Moved to {name}. ⌘Z to undo", name = place), cx);
-                }
-            }
-            Kind::Journal => {}
         }
         cx.notify();
     }
@@ -1563,7 +1615,13 @@ impl Workspace {
         let notes: HashSet<PathBuf> = p.tree.notes.iter().flat_map(|g| g.entries.iter()).map(|e| e.path.clone()).collect();
         let notes_key = p.tree.notes_dir.is_some().then(|| p.notes_key());
         let drop_at = if cx.has_active_drag() { p.drop_at.clone() } else { None };
-        let draggable = matches!(kind, Kind::Book | Kind::Folder);
+        let notes_dir = p.tree.notes_dir.clone();
+        let root = p.tree.root.clone();
+        // A drop into a notes folder lights that folder's heading and its notes.
+        let into = match &drop_at {
+            Some(DropAt::Into(d)) => Some(d.clone()),
+            _ => None,
+        };
         let numbered = kind != Kind::Folder;
         let editing = p.edit.as_ref().map(|e| match &e.target {
             EditTarget::New { dir, after, line } => (Some((dir.clone(), after.clone(), *line)), None, e.field.clone()),
@@ -1602,10 +1660,19 @@ impl Workspace {
                 continue;
             }
             match row {
-                Row::Head { title, dir, detail, collapsed } => {
+                Row::Head { title, aside, dir, detail, collapsed } => {
                     let toggle = dir.clone();
                     let top = drop_at.as_ref() == Some(&DropAt::Top(dir.clone()));
-                    let target = dir.clone();
+                    // The notes' heading and their folders' take a file into them; the book's
+                    // parts and a folder's folders, at their top.
+                    let target = if Some(&dir) == notes_key.as_ref() {
+                        notes_dir.clone().map_or(DropAt::Top(dir.clone()), DropAt::Into)
+                    } else if notes_dir.as_ref().is_some_and(|n| dir.starts_with(n)) {
+                        DropAt::Into(dir.clone())
+                    } else {
+                        DropAt::Top(dir.clone())
+                    };
+                    let lit = matches!(&target, DropAt::Into(d) if into.as_ref() == Some(d));
                     let new_here = editing.as_ref().and_then(|(n, ..)| n.as_ref()).is_some_and(|(d, after, line)| !line && *d == dir && after.is_none());
                     // The notes' heading has a name of its own: a folder in a plain folder
                     // could be called "notes" too.
@@ -1628,14 +1695,13 @@ impl Workspace {
                             .when(collapsed.is_some(), |d| {
                                 d.cursor_pointer().on_click(cx.listener(move |this, _, _, cx| this.toggle_part(toggle.clone(), cx)))
                             })
-                            .when(draggable, |d| {
-                                d.on_drag_move::<RowDrag>(cx.listener(move |this, e: &DragMoveEvent<RowDrag>, _, cx| {
-                                    if e.bounds.contains(&e.event.position) {
-                                        let from = e.drag(cx).path.clone();
-                                        this.set_drop(DropAt::Top(target.clone()), &from, cx);
-                                    }
-                                }))
-                            })
+                            .when(lit, |d| d.rounded_md().bg(ca(theme::accent(), 0.08)).text_color(c(theme::text())))
+                            .on_drag_move::<RowDrag>(cx.listener(move |this, e: &DragMoveEvent<RowDrag>, _, cx| {
+                                if e.bounds.contains(&e.event.position) {
+                                    let from = e.drag(cx).path.clone();
+                                    this.set_drop(target.clone(), &from, cx);
+                                }
+                            }))
                             .children(collapsed.map(|shut| {
                                 // › folds a part, turned down while it's open; ▾ is kept for menus.
                                 div().w(px(14.)).flex_none().flex().justify_end().child(
@@ -1646,7 +1712,16 @@ impl Workspace {
                                         .when(!shut, |s| s.with_transformation(Transformation::rotate(radians(std::f32::consts::FRAC_PI_2)))),
                                 )
                             }))
-                            .child(div().flex_1().min_w_0().truncate().child(title.clone()))
+                            .child(
+                                div()
+                                    .flex_1()
+                                    .min_w_0()
+                                    .flex()
+                                    .gap(px(5.))
+                                    // The aside gives way first: the name is what the heading is.
+                                    .child(div().flex_shrink_0().max_w_full().truncate().child(title.clone()))
+                                    .children(aside.map(|a| div().min_w_0().truncate().text_color(c(theme::faint())).child(format!("· {a}")))),
+                            )
                             .children(detail.map(|w| div().flex_none().text_color(c(theme::faint())).child(w)))
                             .when(top, |d| d.child(line(false)))
                             .test_support()
@@ -1661,7 +1736,9 @@ impl Workspace {
                     let on = current.as_ref() == Some(&path);
                     let note = notes.contains(&path);
                     let journal = kind == Kind::Journal && !note && !loose;
-                    let draggable = draggable && !note;
+                    // A note goes into its own folder: there's no order among notes.
+                    let into_here = note.then(|| path.parent().map(Path::to_path_buf)).flatten();
+                    let lit = into_here.is_some() && into_here == into;
                     if editing.as_ref().and_then(|(_, r, _)| r.as_ref()) == Some(&path) {
                         if let Some((.., f)) = &editing {
                             items.push(field_row(&no, numbered, f.clone()));
@@ -1704,12 +1781,17 @@ impl Workspace {
                                     this.open_row_menu(menu.clone(), e.position, cx);
                                 }))
                             })
-                            .when(draggable && !placeholder, |d| {
+                            .when(lit, |d| d.bg(ca(theme::accent(), 0.08)))
+                            .when(!placeholder, |d| {
                                 d.on_drag(drag, |d, _, _, cx| cx.new(|_| d.clone())).on_drag_move::<RowDrag>(cx.listener(move |this, e: &DragMoveEvent<RowDrag>, _, cx| {
                                     if e.bounds.contains(&e.event.position) {
-                                        let above = e.event.position.y < e.bounds.center().y;
+                                        let at = match &into_here {
+                                            Some(dir) => DropAt::Into(dir.clone()),
+                                            None if e.event.position.y < e.bounds.center().y => DropAt::Above(moves.clone()),
+                                            None => DropAt::Below(moves.clone()),
+                                        };
                                         let from = e.drag(cx).path.clone();
-                                        this.set_drop(if above { DropAt::Above(moves.clone()) } else { DropAt::Below(moves.clone()) }, &from, cx);
+                                        this.set_drop(at, &from, cx);
                                     }
                                 }))
                             })
@@ -1760,14 +1842,26 @@ impl Workspace {
                         continue;
                     }
                     let label = what.line_label();
+                    // A folder's own line is `add-file`, its subfolders' `add-file-drafts`.
+                    let top = match what {
+                        Adds::Chapter => None,
+                        Adds::File => Some(&root),
+                        Adds::Note => notes_dir.as_ref(),
+                    };
+                    let sub = top.and_then(|t| dir.strip_prefix(t).ok()).filter(|r| !r.as_os_str().is_empty()).map(|r| r.to_string_lossy().into_owned());
                     let tip = match what {
                         Adds::Chapter => (tr!("At the end of the book"), Some(tr!("after this chapter"))),
-                        Adds::File => (tr!("A new file"), Some("")),
+                        // ⌘N adds to the folder itself.
+                        Adds::File => (tr!("A new file"), sub.is_none().then_some("")),
                         Adds::Note => (tr!("A new note"), None),
+                    };
+                    let id = match &sub {
+                        Some(r) => format!("add-{}-{r}", what.noun()),
+                        None => format!("add-{}", what.noun()),
                     };
                     items.push(
                         div()
-                            .id(SharedString::from(format!("add-{}", what.noun())))
+                            .id(SharedString::from(id))
                             .flex()
                             .items_center()
                             .gap(px(8.))
@@ -1918,11 +2012,12 @@ impl Workspace {
         Some(el.into_any_element())
     }
 
-    /// In a folder a drop beside the file's own folder-mates moves nothing, so no line shows.
+    /// Only where the drop would change something.
     fn set_drop(&mut self, at: DropAt, from: &Path, cx: &mut Context<Self>) {
-        let stays = self.project.as_ref().is_some_and(|p| p.tree.kind == Kind::Folder)
-            && self.resolve_drop(&at).is_some_and(|(dir, _)| from.parent() == Some(dir.as_path()));
-        let at = (!stays).then_some(at);
+        if self.project.as_ref().is_some_and(|p| p.drop_at.as_ref() == Some(&at)) {
+            return;
+        }
+        let at = self.planned_drop(from, &at).is_some().then_some(at);
         if let Some(p) = &mut self.project {
             if p.drop_at != at {
                 p.drop_at = at;

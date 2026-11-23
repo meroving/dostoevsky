@@ -262,7 +262,9 @@ impl ContextMenu {
                         badge: None,
                     }));
                 }
-                items.push(plain(tr!("Move to Notes"), Some(Command::MoveToNotes(path.clone()))));
+                if kind != Kind::Folder {
+                    items.push(plain(tr!("Move to Notes"), Some(Command::MoveToNotes(path.clone()))));
+                }
             }
         }
         items.extend([

@@ -279,7 +279,9 @@ Open a folder and it becomes a project: a **book** (numbered chapters, in parts)
 in the file names and the type in a small `.dostoevsky` file, so the folder still makes sense
 in Finder, git or Obsidian. ⌘P opens the list, ↑/↓ flips through the chapters, dragging
 a chapter renames the files to match, and *+ new chapter* under the list adds one, its name
-already on the page as a heading.
+already on the page as a heading. A book or journal can keep a notes folder (research, cut
+scenes) outside the text; drag a chapter into it and back. A plain folder is just its tree:
+every folder in it has a *+ new file*, and dragging moves files between them.
 
 ![A book: two parts, chapters with word counts, a notes file outside the book](docs/screens/project-book.png)
 

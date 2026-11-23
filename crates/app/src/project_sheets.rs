@@ -282,7 +282,11 @@ impl Workspace {
     fn change_first_open(&mut self, f: impl FnOnce(&mut FirstOpen), cx: &mut Context<Self>) {
         let Some(root) = self.project_root().map(Path::to_path_buf) else { return };
         let Some(Sheet::ProjectType(form)) = &mut self.sheet else { return };
+        let was = form.kind;
         f(form);
+        if was == Kind::Folder && form.notes.is_none() {
+            form.notes = project::notes_guess(&root, form.kind);
+        }
         form.folders = project::notes_candidates(&root, form.kind);
         if form.notes.as_ref().is_some_and(|n| root.join(n).is_dir() && !form.folders.contains(n)) {
             form.notes = None;
@@ -365,8 +369,8 @@ impl Workspace {
             .text_size(px(12.5))
             .child(div().text_color(c(theme::muted())).line_height(px(19.)).child(tr!("{reason} Nothing is renamed or moved unless you say so.", reason = form.reason())))
             .child(div().mt_3().child(cards))
-            .child(label(tr!("NOTES")))
-            .child(notes_row)
+            // A plain folder is just its tree: nothing in it is set apart as notes.
+            .when(form.kind != Kind::Folder, |d| d.child(label(tr!("NOTES"))).child(notes_row))
             .when(form.kind != Kind::Folder && !form.loose.is_empty(), |d| {
                 d.child(label(trn!("THE OTHER FILE", "THE OTHER {n} FILES", form.loose.len())))
                     .child(
@@ -422,7 +426,9 @@ impl Workspace {
                     .aria_label(kind_title(k))
                     .aria_selected(on)
                     .on_click(cx.listener(move |this, _, _, cx| {
-                        this.apply_settings(Settings { kind: k, notes: notes.clone(), title: None, author: None, date: None }, cx);
+                        let Some(root) = this.project_root().map(Path::to_path_buf) else { return };
+                        let notes = notes.clone().or_else(|| project::notes_guess(&root, k));
+                        this.apply_settings(Settings { kind: k, notes, title: None, author: None, date: None }, cx);
                     }))
                     .child(kind_title(k))
                     .test_support()
@@ -466,9 +472,9 @@ impl Workspace {
         vec![
             div().id("project-settings-name").pb_1().font_family(theme::hand()).text_size(theme::hand_px(24.)).text_color(c(theme::accent())).child(name).test_support().into_any_element(),
             row(tr!("Type"), Some(tr!("renames nothing")), kinds).into_any_element(),
-            row(tr!("Notes folder"), None, chips).into_any_element(),
         ]
         .into_iter()
+        .chain((kind != Kind::Folder).then(|| row(tr!("Notes folder"), None, chips).into_any_element()))
         .chain(dates.map(|d| row(tr!("Date at the top"), Some(tr!("of each new day")), d).into_any_element()))
         .chain([
             div()

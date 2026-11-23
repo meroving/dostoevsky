@@ -417,11 +417,22 @@ pub fn notes_candidates(root: &Path, kind: Kind) -> Vec<String> {
     all.into_iter().filter(|f| !tree.in_order().any(|e| e.path.starts_with(root.join(f)))).collect()
 }
 
+/// The notes folder `kind` would pick from the names, for a folder turning into a book or
+/// journal (a plain folder has none to carry over).
+pub fn notes_guess(root: &Path, kind: Kind) -> Option<String> {
+    let tree = scan_as(root, Some(Settings { kind: Kind::Folder, notes: None, title: None, author: None, date: None }));
+    let entries: Vec<Entry> = tree.main.into_iter().flat_map(|g| g.entries).collect();
+    guess_notes(root, &entries, kind)
+}
+
 /// Best first.
 const NOTES_NAMES: [&str; 6] = ["notes", "research", "material", "materials", "reference", "codex"];
 
-/// One with a usual name first; a plain folder only counts one called `notes`.
+/// One with a usual name first; a plain folder has none.
 fn guess_notes(root: &Path, entries: &[Entry], kind: Kind) -> Option<String> {
+    if kind == Kind::Folder {
+        return None;
+    }
     let top = |e: &Entry| -> Option<String> {
         let rel = e.path.strip_prefix(root).ok()?;
         let mut parts = rel.iter();
@@ -444,9 +455,6 @@ fn guess_notes(root: &Path, entries: &[Entry], kind: Kind) -> Option<String> {
         }
     }
     candidates.retain(|d| !ruled_out.contains(d));
-    if kind == Kind::Folder {
-        return candidates.into_iter().find(|d| d.eq_ignore_ascii_case("notes"));
-    }
     for name in NOTES_NAMES {
         if let Some(d) = candidates.iter().find(|d| d.eq_ignore_ascii_case(name)) {
             return Some(d.clone());
@@ -548,7 +556,8 @@ pub fn scan_as(root: &Path, settings: Option<Settings>) -> Tree {
             (kind, guess_notes(root, &entries, kind))
         }
     };
-    let notes_dir = notes.map(|n| root.join(n));
+    // A plain folder is only a tree: no folder in it is set apart as notes.
+    let notes_dir = notes.filter(|_| kind != Kind::Folder).map(|n| root.join(n));
     let (notes, entries): (Vec<Entry>, Vec<Entry>) = entries.into_iter().partition(|e| notes_dir.as_ref().is_some_and(|d| e.path.starts_with(d)));
     let mut tree = Tree { root: root.to_path_buf(), kind, chosen, notes_dir: notes_dir.clone(), main: Vec::new(), notes: Vec::new(), loose: Vec::new(), counts };
     if let Some(d) = &notes_dir {
@@ -978,10 +987,10 @@ mod tests {
         let t = scan(&d.0);
         assert!(t.chosen);
         assert_eq!(t.kind, Kind::Folder);
-        assert_eq!(t.notes_name().as_deref(), Some("plans/"));
-        assert_eq!(t.notes.iter().map(|g| g.entries.len()).sum::<usize>(), 1);
+        assert_eq!(t.notes_name(), None, "a plain folder sets no folder apart, even one it was told to");
+        assert!(t.notes.is_empty());
         assert!(t.loose.is_empty(), "a plain folder lists everything");
-        assert_eq!(t.in_order().count(), 4);
+        assert_eq!(t.in_order().count(), 5);
         assert_eq!(d.names(), ["01-a.md", "02-b.md", "loose.md", "notes/people.md", "plans/outline.md"]);
         assert!(!t.holds(&d.0.join(SETTINGS_FILE)));
     }
@@ -1078,9 +1087,8 @@ mod tests {
         let d = Dir::new("guess-none").with(&["01-a.md", "part-1/02-b.md"]);
         assert_eq!(scan(&d.0).notes_dir, None);
         let d = Dir::new("guess-folder").with(&["a.md", "drafts/x.md", "notes/y.md"]);
-        assert_eq!(scan(&d.0).notes_name().as_deref(), Some("notes/"));
-        let d = Dir::new("guess-folder-2").with(&["a.md", "drafts/x.md"]);
-        assert_eq!(scan(&d.0).notes_dir, None);
+        assert_eq!(scan(&d.0).notes_dir, None, "a plain folder sets nothing apart, notes/ included");
+        assert_eq!(notes_guess(&d.0, Kind::Book).as_deref(), Some("notes"), "turned into a book, it would");
     }
 
     #[test]

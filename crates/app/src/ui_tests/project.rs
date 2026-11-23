@@ -487,9 +487,8 @@ fn the_new_chapter_line_cancels_and_cmd_n_still_goes_after_the_page() {
 fn a_new_note_goes_in_the_notes() {
     let d = book();
     let mut ui = Ui::open_folder(&d.0);
-    assert!(!ui.has_element("add-note"), "folded notes show no line");
-    ui.click_id("notes-section");
-    ui.click_id("add-note");
+    assert!(!ui.has_element("row-people.md"), "notes start folded");
+    ui.click_id("add-note"); // folded, they still take a new one
     assert_eq!(field_hint(&ui).as_deref(), Some("name the note"));
     ui.type_text("places");
     ui.keys("enter");
@@ -524,6 +523,11 @@ fn a_folder_adds_files_and_a_journal_needs_no_line() {
     ui.type_text("margins");
     ui.keys("enter");
     assert!(d.0.join("margins.md").exists() && !d.0.join("drafts/margins.md").exists());
+    // and each subfolder has its own
+    ui.click_id("add-file-drafts");
+    ui.type_text("plan");
+    ui.keys("enter");
+    assert!(d.0.join("drafts/plan.md").exists());
 
     let j = TempDir::new("journal-add");
     j.file("2020-01-01.md", "a\n");
@@ -615,6 +619,53 @@ fn dragging_a_chapter_reorders_the_files() {
     assert_eq!(name_of(&ui), "01-the-garret.md");
     ui.keys("cmd-z");
     assert_eq!(names(&d.0.join("part-1")), ["01-the-garret.md", "02-marmeladov.md", "03-the-letter.md"]);
+}
+
+/// PROJ-7, PROJ-11
+#[test]
+fn chapters_drag_into_the_notes_and_back() {
+    let d = book();
+    let mut ui = Ui::open_folder(&d.0);
+    ui.click_id("notes-section");
+    ui.drag_row("row-03-the-letter.md", "notes-section", false);
+    assert!(d.0.join("notes/the-letter.md").exists(), "it leaves its number behind");
+    assert_eq!(names(&d.0.join("part-1")), ["01-the-garret.md", "02-marmeladov.md"]);
+    ui.drag_row("row-the-letter.md", "row-02-marmeladov.md", true);
+    assert_eq!(names(&d.0.join("part-1")), ["01-the-garret.md", "02-the-letter.md", "03-marmeladov.md"]);
+    assert!(!d.0.join("notes/the-letter.md").exists());
+    ui.keys("cmd-z");
+    assert!(d.0.join("notes/the-letter.md").exists());
+    assert_eq!(names(&d.0.join("part-1")), ["01-the-garret.md", "02-marmeladov.md"]);
+}
+
+/// PROJ-7
+#[test]
+fn notes_have_a_line_in_each_of_their_folders() {
+    let d = book();
+    d.file("notes/research/fever.md", "a\n");
+    let mut ui = Ui::open_folder(&d.0);
+    ui.click_id("notes-section");
+    assert!(ui.element("add-note").bounds().top() < ui.element("head-research").bounds().top(), "the notes' own line comes first");
+    ui.click_id("add-note-research");
+    ui.type_text("streets");
+    ui.keys("enter");
+    assert!(d.0.join("notes/research/streets.md").exists());
+}
+
+/// PROJ-7
+#[test]
+fn a_journal_trades_days_and_notes_by_dragging() {
+    let d = TempDir::new("journal-notes");
+    d.file("2020-01-01.md", "a\n");
+    d.file("notes/ideas.md", "b\n");
+    choose(&d, Kind::Journal, Some("notes"));
+    let mut ui = Ui::open_folder(&d.0);
+    ui.click_id("notes-section");
+    ui.drag_row("row-ideas.md", "row-2020-01-01.md", false);
+    assert!(!d.0.join("notes/ideas.md").exists());
+    assert!(names(&d.0).iter().any(|n| n.ends_with(" ideas.md") && !n.starts_with("notes/")), "dated like Add to the Journal: {:?}", names(&d.0));
+    ui.drag_row("row-2020-01-01.md", "notes-section", false);
+    assert!(d.0.join("notes/2020-01-01.md").exists());
 }
 
 /// PROJ-11
@@ -1123,11 +1174,15 @@ fn project_settings_change_the_type_and_rename_nothing() {
     ui.click_id(("project-type", 2usize));
     assert_eq!(ui.read(|ws, _| ws.project_kind()), Some(Kind::Folder));
     assert_eq!(settings_of(&d).map(|s| s.kind), Some(Kind::Folder), "kept in the file that was there");
-    ui.click_id(("settings-notes", 99usize));
-    assert_eq!(settings_of(&d).and_then(|s| s.notes), None);
+    assert!(!ui.has_element(("settings-notes", 99usize)), "a plain folder has no notes folder to choose");
     ui.keys("escape");
     assert_eq!(ui.sheet(), None);
     assert!(!ui.has_element("notes-section"));
+    ui.click_id("project-kind");
+    ui.click_id(("project-type", 0usize));
+    ui.keys("escape");
+    assert_eq!(ui.read(|ws, _| ws.project_kind()), Some(Kind::Book));
+    assert!(ui.has_element("notes-section"), "a book again, notes/ is its notes again");
     assert_eq!(names(&d.0), before);
 }
 
