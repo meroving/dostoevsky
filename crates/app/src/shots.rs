@@ -83,8 +83,10 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
     #[cfg(target_os = "macos")]
     let _ = window.update(cx, |_, window, _| crate::platform::ignore_real_pointer(window));
     cx.spawn(async move |cx| {
+        let (mut ws, mut window) = (ws, window);
         cx.background_executor().timer(Duration::from_millis(700)).await;
         for step in steps {
+            follow(&mut ws, &mut window, cx);
             let wait = step.get("wait").and_then(Value::as_u64).unwrap_or(0);
             if wait > 0 {
                 cx.background_executor().timer(Duration::from_millis(wait)).await;
@@ -109,6 +111,7 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
                 let timeout = Duration::from_millis(step.get("timeout").and_then(Value::as_u64).unwrap_or(5000));
                 let start = Instant::now();
                 loop {
+                    follow(&mut ws, &mut window, cx);
                     let ws = ws.clone();
                     let r = window.update(cx, |_, window, cx| {
                         window.refresh();
@@ -158,6 +161,20 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
         cx.update(|cx| cx.quit());
     })
     .detach();
+}
+
+/// Keeps the script on a live window: a file Finder sends after launch has finished closes the
+/// empty window the script began in (`reuse_empty_window`) and opens in a new one, which a slow
+/// machine (CI) sees now and then. The script goes on there instead of quietly ending.
+fn follow(ws: &mut WeakEntity<Workspace>, window: &mut AnyWindowHandle, cx: &mut AsyncApp) {
+    if ws.upgrade().is_some() && window.update(cx, |_, _, _| ()).is_ok() {
+        return;
+    }
+    let newest = cx.update(|cx| crate::workspaces(cx).pop().map(|(h, w)| (h, w.downgrade())));
+    if let Some((h, w)) = newest {
+        *window = h;
+        *ws = w;
+    }
 }
 
 /// Types `text` a char at a time, about `cps` chars a second, pausing a little after
