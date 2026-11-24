@@ -640,7 +640,17 @@ fn lab_tone_suggests_alternatives() {
         {"sentence": 4, "quote": "basically", "note": "too casual"}
     ]}));
     // `candidates at once disappear`: the words either side of `quietly` came along.
-    let ideas = sse(&["1. silently\n- simply\n", "quietly\ncandidates at once disappear\nfor good\n"]);
+    // One reply for both asks (they run at once): each word keeps the versions that quote it.
+    let ideas = json_reply(serde_json::json!({"versions": [
+        {"quote": "quietly", "text": "silently"},
+        {"quote": "basically", "text": "silently"},
+        {"quote": "quietly", "text": "simply"},
+        {"quote": "basically a kind of", "text": "simply"},
+        {"quote": "quietly", "text": "quietly"},
+        {"quote": "basically", "text": "quietly"},
+        {"quote": "quietly", "text": "candidates at once disappear"},
+        {"quote": "quietly", "text": "for good"}
+    ]}));
     let f = fake(vec![marks_reply, ideas]);
     let mut ui = Ui::open(DOC);
     use_fake(&mut ui, &f.base);
@@ -656,11 +666,12 @@ fn lab_tone_suggests_alternatives() {
     let groups = ui.groups();
     assert_eq!(groups.len(), 2);
     assert_eq!(ui.variants(groups[0].id), ["quietly", "silently", "simply", "at once"], "cleaned, no repeat of the original or the words around it, three at most");
-    assert_eq!(ui.variants(groups[1].id), ["basically", "silently", "simply", "quietly"]);
+    assert_eq!(ui.variants(groups[1].id), ["basically a kind of", "silently a kind of", "simply"], "one stretch for all, the widest; “quietly” would echo the paragraph before");
     assert!(marks(&ui).is_empty(), "the marks became groups");
     let reqs = f.requests.lock().unwrap().clone();
     assert_eq!(reqs.len(), 3, "one pass, one ask per word");
     assert!(reqs[1..].iter().any(|r| r.contains("⟦basically⟧") && r.contains("too casual")), "each ask has its word and note");
+    assert!(reqs[1..].iter().all(|r| r.contains("The sentence: ") && r.contains("agreement")), "a word may take the words beside it along");
     ui.keys("cmd-z");
     assert!(ui.groups().is_empty(), "one ⌘Z");
     assert_eq!(ui.text(), before);
@@ -672,7 +683,7 @@ fn lab_suggest_for_one_mark() {
         {"sentence": 3, "quote": "quietly", "note": "too soft"},
         {"sentence": 4, "quote": "basically", "note": "too casual"}
     ]}));
-    let ideas = sse(&["silently\nsimply\n"]);
+    let ideas = json_reply(serde_json::json!({"versions": [{"quote": "basically", "text": "silently"}, {"quote": "basically", "text": "simply"}]}));
     let f = fake(vec![marks_reply, ideas]);
     let mut ui = Ui::open(DOC);
     use_fake(&mut ui, &f.base);
@@ -779,7 +790,7 @@ fn review_versions_keep_and_close() {
         {"sentence": 3, "quote": "quietly", "note": "too soft"},
         {"sentence": 4, "quote": "basically", "note": "too casual"}
     ]}));
-    let ideas = sse(&["silently\nsimply\n"]);
+    let ideas = json_reply(serde_json::json!({"versions": [{"quote": "quietly", "text": "silently"}, {"quote": "basically", "text": "simply"}, {"quote": "quietly", "text": "simply"}, {"quote": "basically", "text": "silently"}]}));
     let f = fake(vec![marks_reply, ideas.clone(), ideas]);
     let mut ui = Ui::open(DOC);
     use_fake(&mut ui, &f.base);
@@ -1142,7 +1153,8 @@ fn review_fits_its_panel() {
             {"sentence": 3, "quote": "quietly", "note": "Too soft for the rest of the paragraph, which is plain and direct and doesn't hedge anywhere else."},
             {"sentence": 4, "quote": "basically", "note": "too casual"}
         ]}));
-        let ideas = sse(&["silently\nsimply\nat once\n"]);
+        let versions: Vec<serde_json::Value> = ["silently", "simply", "at once"].iter().flat_map(|t| [serde_json::json!({"quote": "quietly", "text": t}), serde_json::json!({"quote": "basically", "text": t})]).collect();
+        let ideas = json_reply(serde_json::json!({ "versions": versions }));
         let cuts = json_reply(serde_json::json!({"cuts": [{"sentence": 4, "quote": "It is, in a way, basically a kind of a one-way street"}, {"sentence": 4, "quote": "really"}, {"sentence": 3, "quote": "quietly"}]}));
         let f = fake(vec![marks_reply, ideas.clone(), ideas, cuts]);
         let mut ui = Ui::open_sized(DOC, w, h);
@@ -1342,7 +1354,31 @@ fn lab_word_choice_marks_echoes() {
     assert!(ui.has_element("mark-kind"), "the list says echo");
     assert!(ui.wait_for(5., |ui| !lab_running(ui)));
     assert_eq!(marks(&ui), ["words", "At the end of the day"], "the model's mark joins, in page order");
-    assert!(ai::lab::Pass::Tone.steer("“words” again", ai::lab::Found::Echo).contains("different word"));
+    assert!(ai::lab::Pass::Tone.steer("“words” again", ai::lab::Found::Echo).contains("repetition"));
+}
+
+#[test]
+fn an_echos_versions_leave_no_echo() {
+    let doc = "# Keep Them\n\nMost of the friction in writing comes from choosing too early. You pick a word, the sentence moves on, and the other candidates quietly disappear. A week later you can’t remember those words, only that one of them was better.\n";
+    let versions = json_reply(serde_json::json!({"versions": [
+        {"quote": "words", "text": "word choices"},
+        {"quote": "words", "text": "candidates"},
+        {"quote": "those words", "text": "them"},
+        {"quote": "those words", "text": "the ones you lost"}
+    ]}));
+    let f = fake(vec![json_reply(serde_json::json!({"marks": []})), versions]);
+    let mut ui = Ui::open(doc);
+    use_fake(&mut ui, &f.base);
+    run(&mut ui, ai::lab::Pass::Tone);
+    assert!(ui.wait_for(5., |ui| !lab_running(ui)));
+    assert_eq!(marks(&ui), ["words"]);
+    ui.click_id(("review-row", 0usize));
+    ui.click_id("row-suggest");
+    assert!(ui.wait_for(5., |ui| !lab_running(ui) && !ui.groups().is_empty()));
+    let g = ui.groups()[0].id;
+    assert_eq!(ui.variants(g), ["those words", "them", "the ones you lost"], "“word choices” still repeats “word”, “candidates” repeats the sentence before");
+    let reqs = f.requests.lock().unwrap().clone();
+    assert!(reqs[1].contains("They repeat \\\"word\\\"") && reqs[1].contains("You pick a word"), "the model sees the word repeated and where: {}", reqs[1]);
 }
 
 

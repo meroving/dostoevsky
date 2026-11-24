@@ -1205,6 +1205,7 @@ impl Document {
     }
 
     /// As [`Document::fix_words`], but the original stays showing with the alternatives after it.
+    /// An empty alternative is a version without the words (one per group, as an ∅ idea).
     pub fn offer_words(&mut self, offers: &[(Range<usize>, Vec<String>)]) -> Result<Vec<GroupId>, EditError> {
         self.words_to_groups(offers, Scope::Word, false)
     }
@@ -1215,9 +1216,19 @@ impl Document {
     }
 
     fn words_to_groups(&mut self, offers: &[(Range<usize>, Vec<String>)], scope: Scope, show: bool) -> Result<Vec<GroupId>, EditError> {
+        // Words can go (a cut version); sentences go by Trim or ⌘X, and a fix always says something.
+        let cuts = scope == Scope::Word && !show;
         let mut order: Vec<(&Range<usize>, Vec<&String>)> = offers
             .iter()
-            .map(|(r, alts)| (r, alts.iter().filter(|a| !a.is_empty()).collect::<Vec<_>>()))
+            .map(|(r, alts)| {
+                let mut kept: Vec<&String> = Vec::new();
+                for a in alts {
+                    if !a.is_empty() || (cuts && !kept.iter().any(|k| k.is_empty())) {
+                        kept.push(a);
+                    }
+                }
+                (r, kept)
+            })
             .filter(|(r, alts)| !r.is_empty() && !alts.is_empty() && r.end <= self.len())
             .collect();
         order.sort_by_key(|(r, _)| std::cmp::Reverse(r.start));
@@ -1237,9 +1248,19 @@ impl Document {
                     d.state = before;
                     continue;
                 }
+                let shown = d.wants_shown(&Cut { id: CutId(0), content: Container::from_text(""), shown: false, look: None, made: 0, paragraph: false, batch: None });
+                let cut_id = alts.iter().any(|a| a.is_empty()).then(|| CutId(d.alloc_id()));
                 d.modify_group(gid, &mut |g| {
                     for (alt, id) in alts.iter().zip(&alt_ids) {
-                        g.variants.push(Variant { without: false, id: *id, by: Source::Ai, content: Container::from_text(alt) });
+                        let variant = match cut_id.filter(|_| alt.is_empty()) {
+                            Some(cid) => {
+                                let text = g.variants[0].content.kept_text();
+                                let cut = Cut { id: cid, content: Container::from_text(&text), shown, look: None, made: 0, paragraph: false, batch: None };
+                                Variant { without: true, id: *id, by: Source::Ai, content: Container::from_nodes(vec![Node::Cut(Arc::new(cut))]) }
+                            }
+                            None => Variant { without: false, id: *id, by: Source::Ai, content: Container::from_text(alt) },
+                        };
+                        g.variants.push(variant);
                     }
                     if show {
                         g.active = 1;

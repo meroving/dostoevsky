@@ -68,7 +68,7 @@ impl Pass {
         let note = note.trim();
         match found {
             Found::Passive => return "in the active voice: whoever acts is the subject and comes first; the same meaning".into(),
-            Found::Echo => return format!("a different word, since the text has just used this one ({note})"),
+            Found::Echo => return "without the repetition".into(),
             Found::Model | Found::Long => {}
         }
         let because = |s: &str| if note.is_empty() { s.to_string() } else { format!("{s} (why it was marked: {note})") };
@@ -92,7 +92,8 @@ impl Pass {
                  (\"he said he will come\"), a subject and verb that don't agree, a wrong article or preposition, a missing word. \
                  Judge tense against the paragraphs around it: dialogue, a flashback, a general truth or a deliberate shift is not a mistake. \
                  Only real mistakes: never change style, word choice, wording you find weak, deliberate fragments or dialect, and never shorten anything. \
-                 For each, quote the smallest stretch that contains the mistake exactly as written (a word or a few words), \
+                 For each, quote the smallest stretch that contains the mistake exactly as written (a word or a few words; \
+                 when putting it right changes the words beside it too, as agreement does, quote them all), \
                  give the corrected text for that stretch as \"fix\" (it must differ from the quote), and a note that names the mistake in one to four words, \
                  like \"spelling\", \"doubled word\", \"agreement\", \"missing comma\" or \"tense: past\" (the fix itself is shown beside it). \
                  When changing a few words can't put a sentence right (a dangling or misplaced modifier, broken parallelism, \
@@ -184,6 +185,143 @@ pub fn request(pass: Pass, model: &str, title: Option<&str>, sentences: &[Senten
     // The document first, so passes in a row reuse the provider's prompt cache.
     user.push_str(&numbered(sentences));
     ChatRequest { model: model.to_string(), system, user, schema: Some(("marks".into(), pass.schema())), max_tokens: Some(8000) }
+}
+
+/// What versions of a word mark are asked with (the Word choice pass).
+#[derive(Clone, Debug)]
+pub struct WordAsk<'a> {
+    pub title: Option<&'a str>,
+    pub before: &'a str,
+    /// The paragraph with the marked words as ⟦…⟧.
+    pub paragraph: &'a str,
+    pub after: &'a str,
+    /// The marked sentence, as written.
+    pub sentence: &'a str,
+    pub current: &'a str,
+    /// What the versions should be ([`Pass::steer`]).
+    pub why: &'a str,
+    /// An echo: the earlier word it repeats, and that word's sentence.
+    pub echo: Option<(&'a str, &'a str)>,
+    pub count: usize,
+}
+
+/// A version of a word mark: `range` (display chars, inside the marked sentence, taking in the
+/// marked words) reads `text`.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WordVersion {
+    pub range: Range<usize>,
+    pub text: String,
+}
+
+/// A word can't always change alone: another gender or number changes the adjective and the verb
+/// beside it, a noun its article. So the model says which stretch of the sentence each version
+/// replaces, as few words as it needs.
+pub fn word_versions_request(model: &str, a: &WordAsk) -> ChatRequest {
+    let n = a.count;
+    let system = format!(
+        "You help a writer replace marked words in their draft. The marked words are ⟦…⟧ in the text; the sentence they are in follows it. \
+         Suggest {n} replacements. Each is a stretch of that sentence copied exactly as written (\"quote\", taking in all of the marked words) \
+         and the text that takes its place (\"text\"). Usually the quote is just the marked words. When a replacement only reads right if words beside it \
+         change too (gender, number or case agreement, an article, a preposition, a verb form, the word order), the quote takes in those words \
+         and the text gives them changed: as few words as that needs, never beyond the sentence. \
+         With the text in place of the quote the sentence must read correctly and naturally, so check every word that stays against the new ones. \
+         Keep the writer's meaning, voice, tense and register, and take the surrounding paragraphs into account: you are not a thesaurus. \
+         Suggest different directions, not small variations of one idea, and never the words as they stand. \
+         One text may be empty, when the sentence reads better with the quoted words simply gone. \
+         Write in the language of the text, whatever it is. \
+         Reply with JSON only, shaped like {{\"versions\": [{{\"quote\": \"…\", \"text\": \"…\"}}]}}."
+    );
+    let mut user = String::new();
+    if let Some(t) = a.title.filter(|t| !t.trim().is_empty()) {
+        user.push_str(&format!("Title: {}\n\n", t.trim()));
+    }
+    for part in [a.before, a.paragraph, a.after] {
+        if !part.trim().is_empty() {
+            user.push_str(&format!("{}\n\n", part.trim()));
+        }
+    }
+    user.push_str(&format!("The sentence: {}\nThe marked words: {}\n", a.sentence.trim(), a.current));
+    if let Some((first, where_)) = a.echo {
+        user.push_str(&format!(
+            "They repeat \"{first}\", used just before (in: {}). Every replacement must leave the text without that repetition: \
+             another word, a pronoun, the word gone, or the sentence turned around it; if both are in this sentence, the quote may take in the earlier one instead.\n",
+            where_.trim()
+        ));
+    }
+    if !a.why.trim().is_empty() {
+        user.push_str(&format!("Make the replacements: {}\n", a.why.trim()));
+    }
+    let schema = json!({
+        "type": "object",
+        "properties": {"versions": {"type": "array", "items": {
+            "type": "object",
+            "properties": {
+                "quote": {"type": "string", "description": "Copied exactly from the sentence, taking in the marked words."},
+                "text": {"type": "string", "description": "What takes the quote's place."}
+            },
+            "required": ["quote", "text"],
+            "additionalProperties": false
+        }}},
+        "required": ["versions"],
+        "additionalProperties": false
+    });
+    ChatRequest { model: model.to_string(), system, user, schema: Some(("versions".into(), schema)), max_tokens: Some((150 * n.max(3) + 200) as u32) }
+}
+
+/// Versions whose quote takes in `mark` inside `sentence` (display chars in `text`), widened to
+/// whole words; a version gone takes a space along. Repeats of the words as they stand, of one
+/// another, and of the words either side of the quote are dropped.
+pub fn parse_word_versions(reply: &str, text: &[char], sentence: Range<usize>, mark: Range<usize>) -> Result<Vec<WordVersion>, AiError> {
+    let v = crate::json_object(reply).ok_or_else(|| AiError::BadReply("no JSON".into()))?;
+    let hay: String = text.get(sentence.clone()).unwrap_or_default().iter().collect();
+    let inner = mark.start.saturating_sub(sentence.start)..mark.end.saturating_sub(sentence.start);
+    let mut out: Vec<WordVersion> = Vec::new();
+    for it in v["versions"].as_array().cloned().unwrap_or_default() {
+        let Some(r) = anchor::find_covering(&hay, it["quote"].as_str().unwrap_or(""), inner.clone()) else { continue };
+        let core = anchor::to_words(text, sentence.start + r.start..sentence.start + r.end);
+        let said = it["text"].as_str().unwrap_or("").trim();
+        let (range, version) = if said.is_empty() {
+            (anchor::with_space(text, core), String::new())
+        } else {
+            let before: String = text[sentence.start.min(core.start)..core.start].iter().collect();
+            let after: String = text[core.end..sentence.end.max(core.end)].iter().collect();
+            match crate::ideas::unrepeat(said, &before, &after) {
+                Some(t) => (core, t),
+                None => continue,
+            }
+        };
+        let was: String = text[range.clone()].iter().collect();
+        if version.trim() == was.trim() || out.iter().any(|o| spliced(text, o) == spliced(text, &WordVersion { range: range.clone(), text: version.clone() })) {
+            continue;
+        }
+        out.push(WordVersion { range, text: version });
+    }
+    Ok(out)
+}
+
+/// The sentence-wide text with `v` in place, for comparing versions with different stretches.
+fn spliced(text: &[char], v: &WordVersion) -> String {
+    let mut s: String = text[..v.range.start].iter().collect();
+    s.push_str(&v.text);
+    s.extend(&text[v.range.end..]);
+    s
+}
+
+/// One stretch for all the versions (an alternatives group has one): the union of theirs, each
+/// version filled out to it with the words it leaves as they are. An empty one is the words gone.
+pub fn one_span(text: &[char], versions: &[WordVersion]) -> Option<(Range<usize>, Vec<String>)> {
+    let start = versions.iter().map(|v| v.range.start).min()?;
+    let end = versions.iter().map(|v| v.range.end).max()?;
+    let alts = versions
+        .iter()
+        .map(|v| {
+            let mut s: String = text[start..v.range.start].iter().collect();
+            s.push_str(&v.text);
+            s.extend(&text[v.range.end..end]);
+            s
+        })
+        .collect();
+    Some((start..end, alts))
 }
 
 /// Unanchored quotes are dropped; marks are in page order and don't overlap, fixes winning.
@@ -364,6 +502,53 @@ mod tests {
         assert!(r.schema.as_ref().unwrap().1.to_string().contains("\"fix\""));
         let h = request(Pass::HardToRead, "m", None, &s);
         assert!(h.system.contains("Sentences over 32 words") && !h.schema.unwrap().1.to_string().contains("\"fix\""));
+    }
+
+    #[test]
+    fn word_versions_take_in_the_words_they_change() {
+        // «дом» → «здание» changes «старый» and «стоял» too.
+        let t = "Мы жили в доме. Старый дом стоял у реки, и дом был пуст.";
+        let c: Vec<char> = t.chars().collect();
+        let sentence = 16..t.chars().count();
+        let mark = 43..46;
+        assert_eq!(c[mark.clone()].iter().collect::<String>(), "дом");
+        let reply = r#"{"versions":[
+            {"quote":"дом был пуст","text":"он был пуст"},
+            {"quote":"дом","text":"и здание"},
+            {"quote":"дом","text":"особняк"},
+            {"quote":"Старый дом","text":"Старое здание"},
+            {"quote":"дом","text":"дом"},
+            {"quote":"и дом был","text":"и он был"},
+            {"quote":"не в тексте","text":"x"},
+            {"quote":"дом","text":""}
+        ]}"#;
+        let v = parse_word_versions(reply, &c, sentence, mark).unwrap();
+        let texts: Vec<&str> = v.iter().map(|v| v.text.as_str()).collect();
+        assert_eq!(texts, ["он был пуст", "здание", "особняк", ""], "the first «дом» isn't the marked one; «и» came along and goes; as written; repeats; nowhere");
+        assert_eq!(c[v[0].range.clone()].iter().collect::<String>(), "дом был пуст");
+        assert_eq!(c[v[3].range.clone()].iter().collect::<String>(), "дом ", "gone with its space");
+        let (span, alts) = one_span(&c, &v).unwrap();
+        assert_eq!(c[span].iter().collect::<String>(), "дом был пуст");
+        assert_eq!(alts, ["он был пуст", "здание был пуст", "особняк был пуст", "был пуст"]);
+    }
+
+    #[test]
+    fn the_word_versions_request_shows_the_echo() {
+        let a = WordAsk {
+            title: None,
+            before: "",
+            paragraph: "Старый дом стоял у реки, и ⟦дом⟧ был пуст.",
+            after: "",
+            sentence: "Старый дом стоял у реки, и дом был пуст.",
+            current: "дом",
+            why: &Pass::Tone.steer("", Found::Echo),
+            echo: Some(("дом", "Старый дом стоял у реки, и дом был пуст.")),
+            count: 3,
+        };
+        let r = word_versions_request("m", &a);
+        assert!(r.system.contains("Suggest 3 replacements") && r.system.contains("agreement"));
+        assert!(r.user.contains("They repeat \"дом\"") && r.user.contains("The marked words: дом"));
+        assert!(r.schema.unwrap().1.to_string().contains("\"versions\""));
     }
 
     #[test]

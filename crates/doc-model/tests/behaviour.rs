@@ -677,6 +677,21 @@ fn offered_words_become_groups_keeping_the_original() {
 }
 
 #[test]
+fn an_empty_offered_word_is_the_words_gone() {
+    let mut d = Document::from_text("The house, the house was empty.");
+    let r = at(&d, "the house ");
+    let r = r.start + 4..r.end;
+    let ids = d.offer_words(&[(r, vec!["building ".to_string(), String::new(), String::new()])]).unwrap();
+    ok(&d);
+    let g = d.group(ids[0]).unwrap();
+    assert_eq!(g.variants.len(), 3, "one version without the words");
+    assert!(g.variants[2].cut && !g.variants[1].cut);
+    assert_eq!(d.text(), "The house, the house was empty.");
+    let ids = d.offer_sentences(&[(at(&d, "The house,"), vec![String::new()])]).unwrap();
+    assert!(ids.is_empty(), "a sentence doesn't go this way");
+}
+
+#[test]
 fn offered_sentences_become_sentence_groups_around_their_word_groups() {
     let mut d = Document::from_text("Short one. The utilise of words, which is in a way the thing, matters. End.");
     let w = d.offer_words(&[(at(&d, "utilise"), vec!["use".to_string()])]).unwrap()[0];

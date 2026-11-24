@@ -39,24 +39,101 @@ pub fn passive_sentences(text: &str, sentences: &[ai::segment::Sentence], long: 
         .collect()
 }
 
+/// Reads text for echoes: in the language of `body` (else of the whole text), the title's words
+/// left out (a text about keeping words says “keep”).
+pub struct EchoReader {
+    lang: prose::Lang,
+    skip: HashSet<String>,
+}
+
+impl EchoReader {
+    pub fn new(body: &str, text: &str, title: Option<&str>) -> Option<Self> {
+        let lang = prose::detect(body).or_else(|| prose::detect(text))?;
+        let mut r = EchoReader { lang, skip: HashSet::new() };
+        if let Some(title) = title {
+            for t in r.tokens(title) {
+                r.skip.insert(t.word.to_lowercase());
+                r.skip.insert(t.base());
+            }
+        }
+        Some(r)
+    }
+
+    fn tokens(&self, s: &str) -> Vec<prose::Token> {
+        let t = crate::tagger::tokens(s, self.lang);
+        if t.is_empty() { prose::plain_tokens(s) } else { t }
+    }
+
+    /// Each echo with the base word it repeats.
+    fn echoes(&self, tokens: &[prose::Token]) -> Vec<(prose::Echo, String)> {
+        prose::echoes(tokens, self.lang, &self.skip)
+            .into_iter()
+            .map(|e| {
+                let base = tokens.iter().find(|t| t.range == e.again).map(|t| t.base()).unwrap_or_else(|| e.word.to_lowercase());
+                (e, base)
+            })
+            .collect()
+    }
+}
+
+/// How far either side of a version its echoes are looked for: more than [`prose::ECHO_WINDOW`] words.
+const ECHO_REACH: usize = 600;
+
+/// `text[r]` widened to `reach` chars either side, in whole words.
+fn around(text: &[char], r: &Range<usize>, reach: usize) -> Range<usize> {
+    let mut lo = r.start.saturating_sub(reach);
+    while lo > 0 && !text[lo - 1].is_whitespace() {
+        lo -= 1;
+    }
+    let mut hi = (r.end + reach).min(text.len());
+    while hi < text.len() && !text[hi].is_whitespace() {
+        hi += 1;
+    }
+    lo..hi
+}
+
+/// The earlier word an echo at `mark` repeats: its range and its spelling there.
+pub fn echo_first(text: &[char], mark: &Range<usize>, reader: &EchoReader) -> Option<(Range<usize>, String)> {
+    let w = around(text, &(mark.start..mark.start), ECHO_REACH);
+    let w = w.start..mark.end;
+    let s: String = text[w.clone()].iter().collect();
+    let tokens = reader.tokens(&s);
+    let at = mark.start - w.start;
+    let i = tokens.iter().position(|t| t.range.start <= at && at < t.range.end)?;
+    let base = tokens[i].base();
+    let first = tokens[..i].iter().rev().find(|t| t.base() == base)?;
+    Some((first.range.start + w.start..first.range.end + w.start, first.word.clone()))
+}
+
+/// A version of a word mark reads clean: it brings no echo into the text that wasn't there, and
+/// for an echo (`mark` is its second word) it leaves no repeat of that word.
+pub fn reads_clean(text: &[char], v: &ai::lab::WordVersion, mark: &Range<usize>, echo: bool, reader: &EchoReader) -> bool {
+    let w = around(text, &v.range, ECHO_REACH);
+    let was: String = text[w.clone()].iter().collect();
+    let mut now: String = text[w.start..v.range.start].iter().collect();
+    now.push_str(&v.text);
+    now.extend(&text[v.range.end..w.end]);
+    let start = v.range.start - w.start;
+    let (old_r, new_r) = (start..v.range.end - w.start, start..start + v.text.chars().count());
+    let touches = |e: &prose::Echo, r: &Range<usize>| [&e.first, &e.again].iter().any(|x| x.start < r.end && r.start < x.end);
+    let old_tokens = reader.tokens(&was);
+    let mut allowed: HashSet<String> = reader.echoes(&old_tokens).into_iter().filter(|(e, _)| touches(e, &old_r)).map(|(_, b)| b).collect();
+    if echo {
+        let at = mark.start.saturating_sub(w.start);
+        if let Some(t) = old_tokens.iter().find(|t| t.range.start <= at && at < t.range.end) {
+            allowed.remove(&t.base());
+        }
+    }
+    reader.echoes(&reader.tokens(&now)).into_iter().filter(|(e, _)| touches(e, &new_r)).all(|(_, b)| allowed.contains(&b))
+}
+
 pub fn echo_marks(text: &str, sentences: &[ai::segment::Sentence], title: Option<&str>) -> Vec<ai::lab::Mark> {
     let (Some(first), Some(last)) = (sentences.first(), sentences.last()) else { return Vec::new() };
     let span = first.range.start..last.range.end;
     let body: String = text.chars().skip(span.start).take(span.len()).collect();
-    let Some(lang) = prose::detect(&body).or_else(|| prose::detect(text)) else { return Vec::new() };
-    let read = |s: &str| {
-        let t = crate::tagger::tokens(s, lang);
-        if t.is_empty() { prose::plain_tokens(s) } else { t }
-    };
-    let mut skip: std::collections::HashSet<String> = std::collections::HashSet::new();
-    if let Some(title) = title {
-        for t in read(title) {
-            skip.insert(t.word.to_lowercase());
-            skip.insert(t.base());
-        }
-    }
-    let tokens: Vec<prose::Token> = read(&body).into_iter().filter(|t| sentences.iter().any(|s| s.range.start <= t.range.start + span.start && t.range.end + span.start <= s.range.end)).collect();
-    prose::echoes(&tokens, lang, &skip)
+    let Some(reader) = EchoReader::new(&body, text, title) else { return Vec::new() };
+    let tokens: Vec<prose::Token> = reader.tokens(&body).into_iter().filter(|t| sentences.iter().any(|s| s.range.start <= t.range.start + span.start && t.range.end + span.start <= s.range.end)).collect();
+    prose::echoes(&tokens, reader.lang, &reader.skip)
         .into_iter()
         .map(|e| {
             let n = e.between + 1;
@@ -682,7 +759,7 @@ impl Workspace {
                 found.sort_by_key(|m| m.range.start);
                 found
             }
-            Pass::Tone => echo_marks(text, sentences, crate::ideas::doc_title(self.page.read(cx).index()).as_deref()),
+            Pass::Tone => echo_marks(text, sentences, self.lab_title(cx).as_deref()),
             Pass::Mistakes => Vec::new(),
         }
     }
@@ -749,6 +826,20 @@ impl Workspace {
 
     fn lab_text_now(&self, cx: &App) -> Vec<char> {
         self.model.read(cx).doc.text().chars().collect()
+    }
+
+    fn lab_title(&self, cx: &App) -> Option<String> {
+        crate::ideas::doc_title(self.page.read(cx).index())
+    }
+
+    /// The sentence `range` starts in (display chars in `text`, the document's), else its paragraph.
+    fn sentence_at(&self, text: &str, range: &Range<usize>, cx: &App) -> Range<usize> {
+        let block = self.page.read(cx).index().paragraph_at(range.start);
+        ai::segment::sentences(text, block.clone())
+            .into_iter()
+            .find(|s| s.range.start <= range.start && range.start < s.range.end.max(s.range.start + 1))
+            .map(|s| s.range.start..s.range.end.max(range.end))
+            .unwrap_or(block.start..block.end.max(range.end))
     }
 
     /// `range` in `then`, found again in `now`, with its words; `None` if gone.
@@ -1076,10 +1167,32 @@ impl Workspace {
         if asked.is_empty() {
             return;
         }
+        let text = self.lab_text_now(cx);
+        let whole: String = text.iter().collect();
+        let reader = if scope == ai::ideas::Scope::Word { EchoReader::new(&whole, &whole, self.lab_title(cx).as_deref()) } else { None };
         let reqs: Vec<ai::ChatRequest> = asked
             .iter()
             .map(|k| {
                 let ctx = self.ideas_context(k.range.clone(), cx);
+                if scope == ai::ideas::Scope::Word {
+                    // A word may take the words beside it along: the model says which.
+                    let sentence: String = text[self.sentence_at(&whole, &k.range, cx)].iter().collect();
+                    let first = reader.as_ref().filter(|_| k.found == ai::lab::Found::Echo).and_then(|r| echo_first(&text, &k.range, r));
+                    let first_sentence: Option<String> = first.as_ref().map(|(r, _)| text[self.sentence_at(&whole, r, cx)].iter().collect());
+                    let why = pass.steer(&k.note, k.found);
+                    let ask = ai::lab::WordAsk {
+                        title: Some(&ctx.title),
+                        before: &ctx.before,
+                        paragraph: &ctx.paragraph,
+                        after: &ctx.after,
+                        sentence: &sentence,
+                        current: &k.quote,
+                        why: &why,
+                        echo: first.as_ref().zip(first_sentence.as_ref()).map(|((_, w), s)| (w.as_str(), s.as_str())),
+                        count: SUGGESTIONS,
+                    };
+                    return ai::lab::word_versions_request(&model.model, &ask);
+                }
                 let existing = vec![k.quote.clone()];
                 let steer = Some(pass.steer(&k.note, k.found));
                 let ask = ai::ideas::Ask {
@@ -1128,6 +1241,8 @@ impl Workspace {
     fn offer_alternatives(&mut self, pass: Pass, asked: Vec<Mark>, replies: Vec<Result<String, AiError>>, kind: ServiceKind, cx: &mut Context<Self>) {
         let scope = if pass.word_level() { ai::ideas::Scope::Word } else { ai::ideas::Scope::Sentence };
         let text = self.lab_text_now(cx);
+        let whole: String = text.iter().collect();
+        let reader = if scope == ai::ideas::Scope::Word { EchoReader::new(&whole, &whole, self.lab_title(cx).as_deref()) } else { None };
         let mut offers: Vec<(Range<usize>, Vec<String>)> = Vec::new();
         let mut notes: Vec<(usize, String)> = Vec::new();
         let mut failed: Option<AiError> = None;
@@ -1140,6 +1255,23 @@ impl Workspace {
                 }
             };
             let Some(range) = refind(&text, &k.range, &k.quote) else { continue };
+            if scope == ai::ideas::Scope::Word {
+                let versions = match ai::lab::parse_word_versions(&reply, &text, self.sentence_at(&whole, &range, cx), range.clone()) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        failed.get_or_insert(e);
+                        continue;
+                    }
+                };
+                // Only versions that fix the echo and bring none of their own.
+                let echo = k.found == ai::lab::Found::Echo;
+                let clean: Vec<ai::lab::WordVersion> = versions.into_iter().filter(|v| reader.as_ref().is_none_or(|r| reads_clean(&text, v, &range, echo, r))).take(SUGGESTIONS).collect();
+                if let Some((span, alts)) = ai::lab::one_span(&text, &clean) {
+                    notes.push((span.start, k.note.clone()));
+                    offers.push((span, alts));
+                }
+                continue;
+            }
             let mut lines = ai::ideas::Lines::default();
             let mut all = lines.feed(&reply);
             all.extend(lines.finish());
