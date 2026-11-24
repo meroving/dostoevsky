@@ -392,3 +392,32 @@ fn editing_and_off_draw_no_mask_with_a_selection() {
     ui.draw();
     assert!(shown(&mut ui).is_none(), "editing");
 }
+
+#[test]
+fn a_selection_reads_with_its_hyphens() {
+    use crate::prefs::Alignment;
+    const BOOK: &str = "# Chapter One\n\nHe was hopelessly in debt to his landlady, and was afraid of meeting her. \
+This was not because he was cowardly and abject, quite the contrary; but for some time past he had been in \
+an overstrained irritable condition, verging on hypochondria.\n";
+    let mut ui = Ui::open(BOOK);
+    ui.set_prefs(|p| {
+        p.alignment = Alignment::Justified;
+        p.hyphenation = true;
+        p.private_mode = true;
+    });
+    ui.select(ui.find("He was").start..ui.find("hypochondria.").end);
+    ui.draw();
+    let (shown_ranges, _) = shown(&mut ui).expect("masked");
+    let (ends, live) = ui.read(|ws, cx| {
+        let layout = ws.page.read(cx).layout.as_ref().expect("laid out");
+        (layout.row_ends(2), layout.live_rects_on(2, &shown_ranges))
+    });
+    let broken: Vec<(usize, Pixels)> = ends.iter().enumerate().filter(|(_, (_, h))| *h).map(|(i, (x, _))| (i, *x)).collect();
+    assert!(!broken.is_empty(), "some word is broken: {ends:?}");
+    let top = live.iter().map(|r| r.top()).fold(px(1e9), |a, b| if b < a { b } else { a });
+    for (row, x) in broken {
+        let y = top + ui.line_height() * (row as f32 + 0.5);
+        let inside = live.iter().any(|r| r.left() < x - px(1.) && x - px(1.) <= r.right() && r.top() <= y && y < r.bottom());
+        assert!(inside, "row {row}'s hyphen, ending at {x:?}, is painted as text: {live:?}");
+    }
+}

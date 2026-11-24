@@ -502,18 +502,36 @@ impl Layout {
         self.lines.iter().flat_map(|b| self.mask_shapes(b, look, shown)).collect()
     }
 
-    /// The parts of `shown` on line box `b`, for painting them as text.
+    /// What Private mode paints as text on line `line`.
+    #[cfg(test)]
+    pub fn live_rects_on(&self, line: usize, shown: &[Range<usize>]) -> Vec<Bounds<Pixels>> {
+        self.line_box(line).map(|b| self.live_rects(b, shown)).unwrap_or_default()
+    }
+
+    /// The parts of `shown` on line box `b`, for painting them as text, and the hyphen after a
+    /// shown char where a word breaks: it's drawn past the row's last char.
     fn live_rects(&self, b: &LineBox, shown: &[Range<usize>]) -> Vec<Bounds<Pixels>> {
-        let info = self.index.lines[b.line];
+        let idx = &self.index;
+        let info = idx.lines[b.line];
         if b.gap {
             return Vec::new();
         }
-        shown
+        let mut out: Vec<Bounds<Pixels>> = shown
             .iter()
             .map(|s| s.start.max(info.char_start)..s.end.min(info.char_start + info.char_len))
             .filter(|r| !r.is_empty())
             .flat_map(|r| self.rects(r, false))
-            .collect()
+            .collect();
+        for (r, x, h) in &b.shaped.hyphens {
+            let Some(row) = b.shaped.rows.get(*r) else { continue };
+            let before = idx.byte_to_char(info.byte_start + row.end.saturating_sub(1));
+            if shown.iter().any(|s| s.contains(&before)) {
+                let left = self.origin.x + b.shift(*r) + *x;
+                let top = self.origin.y + b.y + self.line_height * *r as f32;
+                out.push(Bounds::from_corners(point(left, top), point(left + h.width, top + self.line_height)));
+            }
+        }
+        out
     }
 
     /// Private mode's shapes for line box `b`: a glyph's advance becomes a dot, a word's a bar,
