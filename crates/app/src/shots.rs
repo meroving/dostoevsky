@@ -130,6 +130,16 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
                 continue;
             }
             let ws = ws.clone();
+            // A page target outside the window (the CI runners' small screen) is scrolled to
+            // first, as a person would; a drop there would land off the window.
+            let scrolled = window.update(cx, |_, window, cx| ws.upgrade().is_some_and(|ws| scroll_to_targets(&step, &ws, window, cx)));
+            if matches!(scrolled, Ok(true)) {
+                cx.background_executor().timer(Duration::from_millis(400)).await;
+                let _ = window.update(cx, |_, window, cx| {
+                    window.refresh();
+                    let _ = window.draw(cx);
+                });
+            }
             let r = window.update(cx, |_, window, cx| step_once(&step, &ws, window, cx));
             if !matches!(r, Ok(true)) {
                 break;
@@ -419,6 +429,34 @@ fn range_of(v: &Value, ws: &Entity<Workspace>, cx: &App) -> Option<std::ops::Ran
         Some("end") => r.end..r.end,
         _ => r,
     })
+}
+
+/// Centres the page on each page target of `step` (`click`, `hover`, `drag`, `to`, `release`)
+/// that lies outside the window; true when it scrolled.
+fn scroll_to_targets(step: &Value, ws: &Entity<Workspace>, window: &mut Window, cx: &mut App) -> bool {
+    let page = ws.read(cx).page.clone();
+    let height = window.viewport_size().height;
+    let mut scrolled = false;
+    for key in ["click", "hover", "drag", "to", "release"] {
+        let Some(v) = step.get(key) else { continue };
+        let r = if let Some(n) = v.get("group").and_then(Value::as_u64) {
+            ws.read(cx).model.read(cx).doc.visible_groups().get(n as usize).map(|g| g.range.clone())
+        } else if let Some(s) = v.as_str().or_else(|| v.get("text").and_then(Value::as_str)) {
+            find(ws, s, cx)
+        } else {
+            None
+        };
+        let Some(r) = r else { continue };
+        let Some((p, lh)) = page.read(cx).layout.as_ref().and_then(|l| Some((l.point_for((r.start + r.end) / 2)?, l.line_height()))) else { continue };
+        if p.y >= px(0.) && p.y + lh <= height {
+            continue;
+        }
+        page.update(cx, |p, cx| p.centre_on(r, cx));
+        window.refresh();
+        let _ = window.draw(cx);
+        scrolled = true;
+    }
+    scrolled
 }
 
 /// A window position named by `[x, y]`, `{"group": n}` or `{"text": …}`: inside the glyph
