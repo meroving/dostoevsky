@@ -68,7 +68,8 @@ rest fade the further it is from you (Near, or the Whole page) instead of all at
 **Private mode** (⇧⌘H) hides the page while you write, for the train, a café, a shared screen,
 or the urge to reread instead of writing on. The text turns to dots, bars, solid bars or blurred
 ink (Preferences → Writing → *Hidden text looks*), and *Stays visible* keeps the word or the
-sentence you're writing readable, or nothing at all. It only paints: the file is untouched, and editing shows every word.
+sentence you're writing readable, or nothing at all. Select a passage to read it back; it hides again
+when the selection goes or the window loses focus. It only paints: the file is untouched, and editing shows every word.
 
 ![Private mode: the page as blurred ink, only the sentence with the caret readable](docs/screens/writing-private.png)
 

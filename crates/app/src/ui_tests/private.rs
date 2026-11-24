@@ -1,5 +1,5 @@
 //! Private mode (⇧⌘H): writing mode draws the page's text as dots, bars, solid bars or blurred
-//! ink, the live word or sentence left readable. Paint only: the text, the layout and every
+//! ink, the live word or sentence left readable, and a selection reads while the window has focus. Paint only: the text, the layout and every
 //! command that reads the document are the same with it on.
 
 use std::ops::Range;
@@ -35,7 +35,17 @@ fn mask(ui: &Ui) -> Option<(Range<usize>, Vec<MaskShape>)> {
     ui.read(|ws, cx| {
         let page = ws.page.read(cx);
         let (look, live) = page.private_mask(cx)?;
-        Some((live.clone(), page.layout.as_ref().expect("laid out").mask(look, &live)))
+        Some((live.clone(), page.layout.as_ref().expect("laid out").mask(look, std::slice::from_ref(&live))))
+    })
+}
+
+/// What the page paints as text, and the shapes for the rest, as drawn in the window.
+fn shown(ui: &mut Ui) -> Option<(Vec<Range<usize>>, Vec<MaskShape>)> {
+    ui.read_window(|ws, window, cx| {
+        let page = ws.page.read(cx);
+        let (look, shown) = page.private_shown(window, cx)?;
+        let shapes = page.layout.as_ref().expect("laid out").mask(look, &shown);
+        Some((shown, shapes))
     })
 }
 
@@ -314,4 +324,71 @@ fn every_language_names_it() {
     let ru = (l10n::tr!("Private mode"), l10n::tr!("Hidden text looks"), l10n::tr!("Stays visible"), HiddenLook::Blur.name());
     l10n::set_for_thread(None);
     assert_eq!(ru, ("Приватный режим", "Как выглядит скрытый текст", "Остаётся видимым", "Размытые чернила"), "as in the mockup");
+}
+
+#[test]
+fn a_selection_reads_while_it_is_selected() {
+    let mut ui = Ui::open(LONG);
+    ui.set_prefs(|p| p.private_mode = true);
+    ui.select_text("the other candidates quietly disappear");
+    ui.draw();
+    let sel = ui.find("the other candidates quietly disappear");
+    let (ranges, shapes) = shown(&mut ui).expect("masked");
+    // The caret is at the selection's end, before the full stop: the live word is “disappear.”.
+    let read = sel.start..ui.find("disappear.").end;
+    assert_eq!(ranges, vec![read.clone()], "the selection reads, and the live word's full stop");
+    let hidden_chars: Vec<(usize, char)> = ui.text().chars().enumerate().filter(|(i, c)| !c.is_whitespace() && !read.contains(i)).collect();
+    assert_eq!(shapes.len(), hidden_chars.len() - 1, "every other char is a dot (`# ` hides anyway)");
+
+    // Exactly the selection: a drag that stops mid-word shows half a word.
+    let early = ui.find("too early").start;
+    ui.select(early - 4..early + 6);
+    ui.draw();
+    let (ranges, _) = shown(&mut ui).unwrap();
+    assert_eq!(ranges, vec![early - 4..ui.find("early.").end], "“ing too ea” and the caret's word, “early.”, which it runs into");
+
+    ui.keys("right");
+    ui.draw();
+    let (ranges, _) = shown(&mut ui).unwrap();
+    assert_eq!(ranges, vec![ui.find("early.")], "the selection gone: the live word only");
+}
+
+#[test]
+fn a_selection_ending_mid_word_reads_with_the_caret_word() {
+    let mut ui = Ui::open(LONG);
+    ui.set_prefs(|p| p.private_mode = true);
+    let (a, b) = (ui.find("pick").start, ui.find("sentence").start + 3);
+    ui.select(a..b);
+    let (ranges, _) = shown(&mut ui).unwrap();
+    assert_eq!(ranges, vec![a..ui.find("sentence").end], "one range: the selection runs into the live word");
+
+    ui.set_prefs(|p| p.stays_visible = StaysVisible::Nothing);
+    ui.draw();
+    assert_eq!(shown(&mut ui).unwrap().0, vec![a..b], "with nothing else visible, exactly the selection");
+}
+
+#[test]
+fn a_window_in_the_background_hides_its_selection() {
+    let mut ui = Ui::open(LONG);
+    ui.set_prefs(|p| p.private_mode = true);
+    ui.select_text("You pick a word");
+    ui.draw();
+    assert_eq!(shown(&mut ui).unwrap().0, vec![ui.find("You pick a word,")], "the selection and the live word's comma");
+    ui.win.update(|_, window, cx| window.blur(cx));
+    ui.draw();
+    let (ranges, _) = shown(&mut ui).unwrap();
+    assert_eq!(ranges, vec![ui.find("word,")], "the caret's word only");
+    assert_eq!(ui.selection(), ui.find("You pick a word"), "the selection is kept");
+}
+
+#[test]
+fn editing_and_off_draw_no_mask_with_a_selection() {
+    let mut ui = Ui::open(LONG);
+    ui.select_text("You pick a word");
+    ui.draw();
+    assert!(shown(&mut ui).is_none(), "off");
+    ui.set_prefs(|p| p.private_mode = true);
+    ui.keys("cmd-d");
+    ui.draw();
+    assert!(shown(&mut ui).is_none(), "editing");
 }

@@ -496,23 +496,30 @@ impl Layout {
         Some((self.origin.y + ba.y, self.origin.y + bz.y + bz.height))
     }
 
-    /// Private mode's shapes for every line, `live` left out.
+    /// Private mode's shapes for every line, the `shown` chars left out.
     #[cfg(test)]
-    pub fn mask(&self, look: HiddenLook, live: &Range<usize>) -> Vec<MaskShape> {
-        self.lines.iter().flat_map(|b| self.mask_shapes(b, look, live)).collect()
+    pub fn mask(&self, look: HiddenLook, shown: &[Range<usize>]) -> Vec<MaskShape> {
+        self.lines.iter().flat_map(|b| self.mask_shapes(b, look, shown)).collect()
     }
 
-    /// The part of `live` on line box `b`, for painting it as text.
-    fn live_rects(&self, b: &LineBox, live: &Range<usize>) -> Vec<Bounds<Pixels>> {
+    /// The parts of `shown` on line box `b`, for painting them as text.
+    fn live_rects(&self, b: &LineBox, shown: &[Range<usize>]) -> Vec<Bounds<Pixels>> {
         let info = self.index.lines[b.line];
-        let r = live.start.max(info.char_start)..live.end.min(info.char_start + info.char_len);
-        if b.gap || r.is_empty() { Vec::new() } else { self.rects(r, false) }
+        if b.gap {
+            return Vec::new();
+        }
+        shown
+            .iter()
+            .map(|s| s.start.max(info.char_start)..s.end.min(info.char_start + info.char_len))
+            .filter(|r| !r.is_empty())
+            .flat_map(|r| self.rects(r, false))
+            .collect()
     }
 
     /// Private mode's shapes for line box `b`: a glyph's advance becomes a dot, a word's a bar,
     /// or the glyph is kept to be blurred. Nothing moves: the shapes sit where the glyphs were.
-    /// Spaces, the chars in `live` and what the line hides anyway (a `# ` off the caret line) get none.
-    fn mask_shapes(&self, b: &LineBox, look: HiddenLook, live: &Range<usize>) -> Vec<MaskShape> {
+    /// Spaces, the chars in `shown` and what the line hides anyway (a `# ` off the caret line) get none.
+    fn mask_shapes(&self, b: &LineBox, look: HiddenLook, shown: &[Range<usize>]) -> Vec<MaskShape> {
         let mut out = Vec::new();
         if b.gap {
             return out;
@@ -520,11 +527,12 @@ impl Layout {
         let idx = &self.index;
         let info = idx.lines[b.line];
         let s = idx.line_str(b.line);
-        let live_bytes = if live.start < info.char_start + info.char_len && live.end > info.char_start {
-            idx.byte_in_line(b.line, live.start.max(info.char_start))..idx.byte_in_line(b.line, live.end.min(info.char_start + info.char_len))
-        } else {
-            0..0
-        };
+        let line_end = info.char_start + info.char_len;
+        let shown_bytes: Vec<Range<usize>> = shown
+            .iter()
+            .filter(|r| r.start < line_end && r.end > info.char_start)
+            .map(|r| idx.byte_in_line(b.line, r.start.max(info.char_start))..idx.byte_in_line(b.line, r.end.min(line_end)))
+            .collect();
         let sh = &b.shaped;
         let ul = &sh.wrapped.unwrapped_layout;
         let fs = ul.font_size;
@@ -577,7 +585,7 @@ impl Layout {
         for MaskCell { row, x, advance, byte, glyph } in cells {
             let ch = char_at(byte);
             let color = color_at(byte);
-            let hidden = !ch.is_whitespace() && color.a > 0. && !live_bytes.contains(&byte);
+            let hidden = !ch.is_whitespace() && color.a > 0. && !shown_bytes.iter().any(|r| r.contains(&byte));
             if matches!(look, HiddenLook::Bars | HiddenLook::Solid) {
                 match &mut word {
                     Some(w) if hidden && w.0 == row && w.3 == color => w.2 = x + advance,
@@ -1250,8 +1258,8 @@ impl TextView {
         Some(ZenTarget { lines: a..b + 1, unit, caret, fade: p.zen_fade })
     }
 
-    /// Private mode on this page: how hidden text looks, and the chars left readable (empty for
-    /// none). Writing mode only: editing shows the text.
+    /// Private mode on this page: how hidden text looks, and the chars left readable around the
+    /// caret (empty for none). Writing mode only: editing shows the text.
     pub fn private_mask(&self, cx: &App) -> Option<(HiddenLook, Range<usize>)> {
         let p = Prefs::get(cx);
         if self.mode != Mode::Page || !p.private_mode || self.layer_on(cx) {
@@ -1279,6 +1287,27 @@ impl TextView {
         };
         let live = if live.is_empty() { caret..caret } else { start + live.start..start + live.end };
         Some((p.hidden_look, live))
+    }
+
+    /// What Private mode leaves readable on this page, as sorted, disjoint ranges: the live chars
+    /// and, while the window has focus, the selection, so selecting a passage reads it back.
+    pub fn private_shown(&self, window: &Window, cx: &App) -> Option<(HiddenLook, Vec<Range<usize>>)> {
+        let (look, live) = self.private_mask(cx)?;
+        let mut shown = vec![live];
+        if !self.sel.is_empty() && self.focus.is_focused(window) {
+            shown.push(self.sel.clone());
+        }
+        shown.retain(|r| !r.is_empty());
+        shown.sort_by_key(|r| r.start);
+        // Overlapping ranges painted twice would darken the ink where they meet.
+        let merged = shown.into_iter().fold(Vec::<Range<usize>>::new(), |mut out, r| {
+            match out.last_mut() {
+                Some(last) if r.start <= last.end => last.end = last.end.max(r.end),
+                _ => out.push(r),
+            }
+            out
+        });
+        Some((look, merged))
     }
 
     /// An empty page shows its title and hint, unless Private mode hides the page.
@@ -3683,7 +3712,7 @@ impl Element for PageElement {
         let chip_rect = view.chip_rect.clone();
         let misspelled = view.spelling_to_draw(cx);
         let lab = view.lab.clone();
-        let private = view.private_mask(cx);
+        let private = view.private_shown(window, cx);
         let carrying = view.carrying.clone();
         let drop_mark = view.drop_mark;
         let drop_span = view.drop_span.clone();
@@ -3821,13 +3850,13 @@ impl Element for PageElement {
                     continue;
                 }
                 match &private {
-                    // Private mode: the live chars as text, clipped to them; the rest as shapes.
-                    Some((look, live)) => {
-                        for r in layout.live_rects(b, live) {
+                    // Private mode: the live chars and the selection as text, clipped to them; the rest as shapes.
+                    Some((look, shown)) => {
+                        for r in layout.live_rects(b, shown) {
                             let clip = Bounds::from_corners(point(r.left() - px(2.), r.top()), point(r.right() + px(2.), r.bottom()));
                             window.with_content_mask(Some(ContentMask { bounds: clip }), |window| paint_line_text(&layout, b, window, cx));
                         }
-                        paint_mask(&layout.mask_shapes(b, *look, live), window);
+                        paint_mask(&layout.mask_shapes(b, *look, shown), window);
                     }
                     None => paint_line_text(&layout, b, window, cx),
                 }
