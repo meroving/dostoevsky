@@ -455,6 +455,12 @@ impl Layout {
                 }
                 let x0 = ul.x_for_index(rs) - row.x0;
                 let mut x1 = ul.x_for_index(re) - row.x0;
+                if !ink && rs < re && re == row.end {
+                    // A word broken here: its hyphen, drawn past the row's last char, goes with it.
+                    if let Some((_, x, h)) = b.shaped.hyphens.iter().find(|(r, ..)| *r == ri) {
+                        x1 = x1.max(*x + h.width);
+                    }
+                }
                 if full_rows && passes_end && ri + 1 == rows.len() {
                     // Show that the selection includes the line break.
                     x1 += px(6.);
@@ -508,30 +514,18 @@ impl Layout {
         self.line_box(line).map(|b| self.live_rects(b, shown)).unwrap_or_default()
     }
 
-    /// The parts of `shown` on line box `b`, for painting them as text, and the hyphen after a
-    /// shown char where a word breaks: it's drawn past the row's last char.
+    /// The parts of `shown` on line box `b`, for painting them as text (a broken word's hyphen with it).
     fn live_rects(&self, b: &LineBox, shown: &[Range<usize>]) -> Vec<Bounds<Pixels>> {
-        let idx = &self.index;
-        let info = idx.lines[b.line];
+        let info = self.index.lines[b.line];
         if b.gap {
             return Vec::new();
         }
-        let mut out: Vec<Bounds<Pixels>> = shown
+        shown
             .iter()
             .map(|s| s.start.max(info.char_start)..s.end.min(info.char_start + info.char_len))
             .filter(|r| !r.is_empty())
             .flat_map(|r| self.rects(r, false))
-            .collect();
-        for (r, x, h) in &b.shaped.hyphens {
-            let Some(row) = b.shaped.rows.get(*r) else { continue };
-            let before = idx.byte_to_char(info.byte_start + row.end.saturating_sub(1));
-            if shown.iter().any(|s| s.contains(&before)) {
-                let left = self.origin.x + b.shift(*r) + *x;
-                let top = self.origin.y + b.y + self.line_height * *r as f32;
-                out.push(Bounds::from_corners(point(left, top), point(left + h.width, top + self.line_height)));
-            }
-        }
-        out
+            .collect()
     }
 
     /// Private mode's shapes for line box `b`: a glyph's advance becomes a dot, a word's a bar,

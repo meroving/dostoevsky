@@ -301,6 +301,15 @@ an overstrained irritable condition, verging on hypochondria.\n";
     assert!(rows.iter().any(|(_, h)| *h), "some word is broken: {rows:?}");
     assert!(rows.last().unwrap().0 < right - px(4.), "the last row stays left: {rows:?}");
     assert_eq!(ui.read(|ws, cx| ws.page.read(cx).layout.as_ref().unwrap().row_ends(0)), heading, "the heading is untouched");
+    // A selection's highlight covers a broken word's hyphen.
+    let para = ui.find("He was").start..ui.find("hypochondria.").end;
+    let lit = ui.read(|ws, cx| ws.page.read(cx).layout.as_ref().unwrap().rects(para.clone(), true));
+    let top = lit.iter().map(|r| r.top()).fold(px(1e9), |a, b| if b < a { b } else { a });
+    for (row, (x, h)) in rows.iter().enumerate().filter(|(_, (_, h))| *h) {
+        let y = top + ui.line_height() * (row as f32 + 0.5);
+        let r = lit.iter().find(|r| r.top() <= y && y < r.bottom()).expect("a lit row");
+        assert!(r.right() >= *x - px(0.5), "row {row} (hyphen {h}) lit to {:?}, its hyphen ends at {x:?}", r.right());
+    }
     // The hyphen is drawn, not typed.
     assert_eq!(ui.text(), BOOK);
     ui.select_text("overstrained");
