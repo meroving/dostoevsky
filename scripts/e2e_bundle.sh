@@ -28,6 +28,9 @@ RUN="$(date +%Y%m%d-%H%M%S)-$$"
 # E2E_SCRATCH=target/e2e/scratch instead: runners have no such privacy wall, and the logs
 # and screenshots then ride along with the target/e2e artifacts.
 SCRATCH="${E2E_SCRATCH:-${TMPDIR:-/tmp}/dostoevsky-e2e}"
+# Absolute: the app starts in / under LaunchServices, and a relative DOSTOEVSKY_SUPPORT_DIR
+# there can't be made, so recent files and crash journals went nowhere.
+case "$SCRATCH" in /*) ;; *) SCRATCH="$PWD/$SCRATCH" ;; esac
 
 # variant/test → the bead that tracks it. Only a test's main result (the app run) counts;
 # its file checks fail along with it.

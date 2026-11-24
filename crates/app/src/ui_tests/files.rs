@@ -174,8 +174,25 @@ fn file_4_crash_recovery() {
     let mut next = Ui::open("");
     assert_eq!(next.with_app(crate::restore_recoveries), 1);
     let docs = next.documents();
-    assert_eq!(docs[1], (format!("Unsaved {DOC}"), Some(path)));
+    assert_eq!(docs[1], (format!("Unsaved {DOC}"), Some(path.clone())));
     assert!(std::fs::read_dir(&journals).unwrap().next().is_none(), "the journal is cleared once reopened");
+
+    // The watcher starting on the recovered page finds its file as the crash left it: not a
+    // change from outside to ask about, and the page saves.
+    let saved = next.with_app(|cx| {
+        let (window, ws) = crate::workspaces(cx).into_iter().find(|(_, ws)| ws.read(cx).model.read(cx).path.as_ref() == Some(&path)).unwrap();
+        window
+            .update(cx, |_, window, cx| {
+                ws.update(cx, |ws, cx| {
+                    ws.disk_changed(cx);
+                    assert!(ws.pending_disk.is_none(), "the file the crash left asked about as a change from outside");
+                    ws.save_to_current(window, cx)
+                })
+            })
+            .unwrap()
+    });
+    assert!(saved, "the recovered page doesn't save");
+    assert!(read(&path).starts_with("Unsaved "), "{:?}", read(&path));
 }
 
 /// How long a change made outside may take to arrive. fseventsd answers a watcher starting on

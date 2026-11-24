@@ -463,6 +463,9 @@ fn restore_recoveries(cx: &mut App) -> usize {
         m.present();
         m.kept = loaded.kept;
         m.path = r.original.clone();
+        // The file as the crash left it: what the recovered words are unsaved against, not a
+        // change from outside for the watcher to ask about (and hold every save back on).
+        m.disk_text = r.original.as_ref().and_then(|p| std::fs::read_to_string(p).ok());
         m.version += 1; // unsaved
         m.warnings.push(tr!("Recovered unsaved changes from the last session.").into());
         if open_model(m, cx).is_some() {
