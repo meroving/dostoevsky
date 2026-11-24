@@ -34,6 +34,10 @@
 //! {"ai_key": {"gemini": "test"}}          a service's key (by slug); only with DOSTOEVSKY_SECRETS=memory
 //! {"export": {"format": "docx", "style": "book", "whole_book": true, "text_open": true, "page": 2}}
 //!                                          set the open Export sheet's choices
+//! {"typing": "Quiet.", "cps": 18}         type a char at a time (`"into": "comment"`: the comment)
+//! {"glide": {"group": 1}, "ms": 500}      move the pointer there smoothly (a target, as `hover`)
+//! {"record": "target/x.mp4", "fps": 30}  start a video of the window (ffmpeg on PATH), the
+//! {"record_stop": true}                   pointer drawn in (`{"pointer": false}` hides it)
 //! {"shot": "target/x.png"}                  render the window to a PNG
 //! {"shot": "target/x.png", "window": "about"}   render the About window instead (app::About first)
 //! ```
@@ -85,6 +89,21 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
                 cx.background_executor().timer(Duration::from_millis(wait)).await;
                 continue;
             }
+            if let Some(t) = step.get("typing").and_then(Value::as_str) {
+                let comment = step.get("into").and_then(Value::as_str) == Some("comment");
+                type_slowly(t, step.get("cps").and_then(Value::as_f64).unwrap_or(14.), comment, &ws, window, cx).await;
+                continue;
+            }
+            if let Some(v) = step.get("glide") {
+                let ms = step.get("ms").and_then(Value::as_u64).unwrap_or(500);
+                glide(v, ms, &ws, window, cx).await;
+                continue;
+            }
+            if let Some(path) = step.get("record").and_then(Value::as_str) {
+                let fps = step.get("fps").and_then(Value::as_u64).unwrap_or(30).max(1);
+                record::start(path, fps, window, cx);
+                continue;
+            }
             if let Some(cond) = step.get("wait_for") {
                 let timeout = Duration::from_millis(step.get("timeout").and_then(Value::as_u64).unwrap_or(5000));
                 let start = Instant::now();
@@ -117,6 +136,10 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
             // Let the frame settle before the next step.
             cx.background_executor().timer(Duration::from_millis(120)).await;
         }
+        record::stop();
+        // Let the frame loop see the end and drop its sender, then wait for the file.
+        cx.background_executor().timer(Duration::from_millis(200)).await;
+        record::finish();
         if FAILED.load(Ordering::Relaxed) {
             std::process::exit(1);
         }
@@ -124,6 +147,236 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
         cx.update(|cx| cx.quit());
     })
     .detach();
+}
+
+/// Types `text` a char at a time, about `cps` chars a second, pausing a little after
+/// spaces and longer after punctuation, as a person would; into the page, or with `comment`
+/// into the comment being written.
+async fn type_slowly(text: &str, cps: f64, comment: bool, ws: &WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut AsyncApp) {
+    let mut seed: u32 = 0x9e37_79b9;
+    let base = 1000. / cps.max(1.);
+    // Paced by the clock, not by sleeps, so slow frames (a recording) don't slow the typing.
+    let mut due = Instant::now();
+    for ch in text.chars() {
+        let ws = ws.clone();
+        let r = window.update(cx, |_, window, cx| {
+            let Some(ws) = ws.upgrade() else { return false };
+            if comment {
+                let Some(editor) = ws.read(cx).comment_edit.as_ref().map(|e| e.editor.clone()) else { return false };
+                editor.update(cx, |v, cx| v.insert_text(&ch.to_string(), cx));
+            } else {
+                let page = ws.read(cx).page.clone();
+                page.update(cx, |p, cx| p.insert_text(&ch.to_string(), cx));
+            }
+            window.refresh();
+            let _ = window.draw(cx);
+            true
+        });
+        if !matches!(r, Ok(true)) {
+            return;
+        }
+        seed = seed.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+        let jitter = 0.6 + (seed >> 8) as f64 / (1u32 << 24) as f64 * 0.8;
+        let pause = match ch {
+            '.' | '!' | '?' => 4.,
+            ',' | ';' | ':' => 2.5,
+            ' ' => 1.3,
+            _ => 1.,
+        };
+        due += Duration::from_millis((base * jitter * pause) as u64);
+        cx.background_executor().timer(due.saturating_duration_since(Instant::now())).await;
+    }
+}
+
+/// Moves the pointer to `v` over `ms`, eased, a frame at a time (a hover that a video can follow).
+async fn glide(v: &Value, ms: u64, ws: &WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut AsyncApp) {
+    let ws2 = ws.clone();
+    let ends = window.update(cx, |_, _, cx| {
+        let ws = ws2.upgrade()?;
+        let to = target(v, &ws, cx)?;
+        let from = record::POINTER.with(|c| c.get()).unwrap_or(point(to.x + px(160.), to.y + px(120.)));
+        Some((from, to))
+    });
+    let Ok(Some((from, to))) = ends else { return };
+    let frames = (ms / 16).max(1);
+    for k in 1..=frames {
+        let t = k as f32 / frames as f32;
+        let e = t * t * (3. - 2. * t);
+        let p = point(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e);
+        let _ = window.update(cx, |_, window, cx| {
+            move_to(window, cx, p, None, Modifiers::default());
+            window.refresh();
+            let _ = window.draw(cx);
+        });
+        cx.background_executor().timer(Duration::from_millis(16)).await;
+    }
+}
+
+/// `{"record": "x.mp4", "fps": 30}` … `{"record_stop": true}`: the window as a video, through
+/// `ffmpeg` (on PATH). Frames are taken on a timer and placed by wall-clock time, so the app's
+/// own animations keep their speed even when a frame is slow to render (the last one repeats).
+/// The scripted pointer is drawn in (`{"pointer": false}` hides it).
+mod record {
+    use std::cell::{Cell, RefCell};
+    use std::io::Write;
+    use std::process::{Child, Command, Stdio};
+    use std::sync::mpsc::{Sender, channel};
+    use std::thread::JoinHandle;
+    use std::time::{Duration, Instant};
+
+    use gpui_kit::*;
+    use image::RgbaImage;
+
+    /// A frame and its place in the video (frames from the start), for the writer thread.
+    type Frames = Sender<(u64, RgbaImage)>;
+
+    thread_local! {
+        pub static POINTER: Cell<Option<Point<Pixels>>> = const { Cell::new(None) };
+        pub static SHOW_POINTER: Cell<bool> = const { Cell::new(true) };
+        static REC: RefCell<Option<(Frames, JoinHandle<()>)>> = const { RefCell::new(None) };
+    }
+
+    pub fn start(path: &str, fps: u64, window: AnyWindowHandle, cx: &mut AsyncApp) {
+        let (tx, rx) = channel::<(u64, RgbaImage)>();
+        let path = path.to_string();
+        let writer = std::thread::spawn(move || {
+            let mut ffmpeg: Option<Child> = None;
+            let mut next = 0u64;
+            for (index, img) in rx {
+                let child = ffmpeg.get_or_insert_with(|| {
+                    Command::new("ffmpeg")
+                        .args(["-loglevel", "error", "-y", "-f", "rawvideo", "-pix_fmt", "rgba", "-s"])
+                        .arg(format!("{}x{}", img.width(), img.height()))
+                        .args(["-framerate", &fps.to_string(), "-i", "-", "-c:v", "libx264", "-preset", "fast", "-crf", "12", "-pix_fmt", "yuv444p"])
+                        .arg(&path)
+                        .stdin(Stdio::piped())
+                        .spawn()
+                        .expect("ffmpeg")
+                });
+                let Some(stdin) = child.stdin.as_mut() else { break };
+                while next <= index {
+                    if stdin.write_all(img.as_raw()).is_err() {
+                        break;
+                    }
+                    next += 1;
+                }
+            }
+            if let Some(mut child) = ffmpeg {
+                drop(child.stdin.take());
+                let _ = child.wait();
+            }
+            eprintln!("shots: recorded {next} frames");
+        });
+        REC.with(|r| *r.borrow_mut() = Some((tx.clone(), writer)));
+        let started = Instant::now();
+        let interval = Duration::from_millis(1000 / fps);
+        cx.spawn(async move |cx| {
+            loop {
+                if REC.with(|r| r.borrow().is_none()) {
+                    break;
+                }
+                let frame = window.update(cx, |_, window, cx| {
+                    window.refresh();
+                    let _ = window.draw(cx);
+                    let scale = window.scale_factor();
+                    window.render_to_image().ok().map(|mut img| {
+                        if SHOW_POINTER.with(Cell::get) {
+                            if let Some(p) = POINTER.with(Cell::get) {
+                                draw_pointer(&mut img, f32::from(p.x) * scale, f32::from(p.y) * scale, scale);
+                            }
+                        }
+                        img
+                    })
+                });
+                if let Ok(Some(img)) = frame {
+                    let index = (started.elapsed().as_secs_f64() * fps as f64) as u64;
+                    if tx.send((index, img)).is_err() {
+                        break;
+                    }
+                }
+                cx.background_executor().timer(interval).await;
+            }
+        })
+        .detach();
+    }
+
+    /// Ends the recording; `finish` waits for the file.
+    pub fn stop() {
+        if let Some((tx, writer)) = REC.with(|r| r.borrow_mut().take()) {
+            // The frame loop's own sender goes at its next tick, which ends the channel.
+            drop(tx);
+            WRITERS.with(|w| w.borrow_mut().push(writer));
+        }
+    }
+
+    thread_local! {
+        static WRITERS: RefCell<Vec<JoinHandle<()>>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// Waits for every finished recording's file (call once the frame loops have stopped).
+    pub fn finish() {
+        for w in WRITERS.with(|w| std::mem::take(&mut *w.borrow_mut())) {
+            let _ = w.join();
+        }
+    }
+
+    /// A macOS-like arrow, tip at (x, y), white with a dark edge, 4× supersampled.
+    fn draw_pointer(img: &mut RgbaImage, x: f32, y: f32, scale: f32) {
+        const SHAPE: [(f32, f32); 7] = [(0., 0.), (0., 17.), (4.2, 13.3), (7., 19.6), (9.8, 18.4), (7.1, 12.2), (12.4, 12.2)];
+        let pts: Vec<(f32, f32)> = SHAPE.iter().map(|&(a, b)| (a * scale, b * scale)).collect();
+        let edge = 1.25 * scale;
+        let inside = |px: f32, py: f32| {
+            let mut c = false;
+            for i in 0..pts.len() {
+                let (a, b) = (pts[i], pts[(i + pts.len() - 1) % pts.len()]);
+                if (a.1 > py) != (b.1 > py) && px < (b.0 - a.0) * (py - a.1) / (b.1 - a.1) + a.0 {
+                    c = !c;
+                }
+            }
+            c
+        };
+        let dist = |px: f32, py: f32| {
+            let mut d = f32::MAX;
+            for i in 0..pts.len() {
+                let (a, b) = (pts[i], pts[(i + 1) % pts.len()]);
+                let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+                let t = (((px - a.0) * dx + (py - a.1) * dy) / (dx * dx + dy * dy)).clamp(0., 1.);
+                d = d.min(((px - a.0 - t * dx).powi(2) + (py - a.1 - t * dy).powi(2)).sqrt());
+            }
+            d
+        };
+        let (w, h) = (img.width() as i32, img.height() as i32);
+        let pad = edge.ceil() as i32 + 2;
+        for oy in -pad..(20. * scale) as i32 + pad {
+            for ox in -pad..(13. * scale) as i32 + pad {
+                let (ix, iy) = (x as i32 + ox, y as i32 + oy);
+                if ix < 0 || iy < 0 || ix >= w || iy >= h {
+                    continue;
+                }
+                let (mut white, mut dark) = (0., 0.);
+                for s in 0..16 {
+                    let sx = ox as f32 + (s % 4) as f32 / 4. + 0.125;
+                    let sy = oy as f32 + (s / 4) as f32 / 4. + 0.125;
+                    let inner = inside(sx, sy);
+                    let d = dist(sx, sy);
+                    if inner && d > edge * 0.55 {
+                        white += 1.;
+                    } else if inner || d <= edge * 0.45 {
+                        dark += 1.;
+                    }
+                }
+                if white + dark == 0. {
+                    continue;
+                }
+                let px = img.get_pixel_mut(ix as u32, iy as u32);
+                for c in 0..3 {
+                    let v = px.0[c] as f32;
+                    let v = v * (1. - (white + dark) / 16.) + 255. * white / 16. + 20. * dark / 16.;
+                    px.0[c] = v.round().clamp(0., 255.) as u8;
+                }
+            }
+        }
+    }
 }
 
 fn fail(what: impl std::fmt::Display) {
@@ -209,6 +462,7 @@ fn mouse(window: &mut Window, cx: &mut App, p: Point<Pixels>, button: MouseButto
 }
 
 fn move_to(window: &mut Window, cx: &mut App, p: Point<Pixels>, pressed: Option<MouseButton>, modifiers: Modifiers) {
+    record::POINTER.with(|c| c.set(Some(p)));
     window.dispatch_event(PlatformInput::MouseMove(MouseMoveEvent { position: p, pressed_button: pressed, modifiers }), cx);
 }
 
@@ -404,6 +658,10 @@ fn step_once(step: &Value, ws: &WeakEntity<Workspace>, window: &mut Window, cx: 
             }
             Err(e) => eprintln!("shots: render failed: {e}"),
         }
+    } else if step.get("record_stop").is_some() {
+        record::stop();
+    } else if let Some(show) = step.get("pointer").and_then(Value::as_bool) {
+        record::SHOW_POINTER.with(|c| c.set(show));
     } else if step.get("quit").is_some() {
         return false;
     }

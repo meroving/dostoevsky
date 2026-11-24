@@ -26,6 +26,7 @@ scripts/bundle.sh                            # universal Dostoevsky.app + .dmg (
 scripts/cask.sh --release vX.Y.Z > target/dostoevsky.rb   # Homebrew cask for a release .dmg (docs/RELEASE.md §5)
 cargo deny check                             # licenses, advisories, crate sources (deny.toml; CI runs it)
 scripts/shoot_readme.sh [shot…]              # README screenshots from the real app → docs/screens (AI via a local stub)
+scripts/demo_video.sh [name]                 # a demo video from the real app: scripts/demo/<name>.jsonl → target/demo/<name>.mp4 (ffmpeg)
 scripts/make_icon.py [--look night|deep] [--sheet|--looks]   # the app icon (an axe) from numbers → packaging/icon.svg, .icns, About, README, favicons; LOOKS keeps the other colourings
 ```
 

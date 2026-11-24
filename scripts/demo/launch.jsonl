@@ -1,0 +1,45 @@
+// The launch video (scripts/demo_video.sh): writing with Zen writing and Private mode, then editing: a word and a sentence flipped in place, a cut, a comment.
+// Writing: a new paragraph after the second, Zen writing on the sentence; then Private mode.
+{"select": {"text": "with the real sentence around them.", "at": "end"}}
+{"wait": 800}
+{"record": "$OUT/raw.mp4", "fps": 30}
+{"pointer": false}
+{"wait": 400}
+{"keys": "enter"}
+{"typing": "A writing app should work the same way. ", "cps": 21}
+{"keys": "shift-cmd-h"}
+{"wait": 250}
+{"typing": "Quiet while you write, and private on the train.", "cps": 21}
+{"wait": 500}
+{"keys": "shift-cmd-h"}
+{"wait": 400}
+// Editing: underlines and dots come back; flip a word, then a sentence.
+{"keys": "cmd-2"}
+{"wait": 600}
+{"pointer": true}
+{"glide": {"group": 1}, "ms": 550}
+{"wait": 400}
+{"keys": "down"}
+{"wait": 600}
+{"keys": "down"}
+{"wait": 650}
+{"glide": {"group": 2}, "ms": 500}
+{"wait": 300}
+{"keys": "down"}
+{"wait": 900}
+{"glide": [1040, 600], "ms": 450}
+{"pointer": false}
+// A cut stays on the page, faded; a comment goes in the margin.
+{"select": "A week later you can’t remember what they were, only that one of them was better."}
+{"wait": 450}
+{"keys": "cmd-x"}
+{"wait": 800}
+{"select": "A writing app should work the same way."}
+{"keys": "alt-cmd-m"}
+{"wait": 250}
+{"typing": "Say it plainer?", "cps": 16, "into": "comment"}
+{"wait": 300}
+{"keys": "escape"}
+{"select": {"text": "Most of the", "at": "start"}}
+{"wait": 1600}
+{"record_stop": true}
