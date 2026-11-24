@@ -177,6 +177,10 @@ impl Workspace {
             let answer = rx.await;
             let _ = this.update(cx, |this, cx| {
                 this.disk_prompt = false;
+                // The watcher reporting the same write while the question was open: answered.
+                if this.pending_disk.as_ref() == Some(&text) {
+                    this.pending_disk = None;
+                }
                 cx.notify();
                 match answer {
                     Err(_) => {}

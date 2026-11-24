@@ -1345,7 +1345,9 @@ fn lab_hard_to_read_marks_passive_sentences() {
     let sentences = ai::segment::sentences(ru, 0..ru.chars().count());
     let found = crate::lab::passive_sentences(ru, &sentences, &[]);
     let quotes: Vec<String> = found.iter().map(|m| ru.chars().skip(m.range.start).take(m.range.len()).collect()).collect();
-    assert_eq!(quotes, ["Письмо было написано ещё вчера."]);
+    // macOS 15 (the CI runners) can't tag Russian: nothing is found there, nothing wrong is found.
+    let want: &[&str] = if crate::tagger::reads(prose::Lang::Ru, ru) { &["Письмо было написано ещё вчера."] } else { &[] };
+    assert_eq!(quotes, want);
 
     let fr = "Nous avons marché longtemps sans rien dire. La lettre était écrite depuis la veille, et il est allé la poster.";
     let sentences = ai::segment::sentences(fr, 0..fr.chars().count());

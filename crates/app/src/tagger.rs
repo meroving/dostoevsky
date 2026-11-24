@@ -16,6 +16,13 @@ pub fn tokens(text: &str, lang: Lang) -> Vec<Token> {
     }
 }
 
+/// Whether this Mac's NaturalLanguage tags words of `lang` at all: macOS 15 (the CI runners)
+/// tags every Russian word `Other`, macOS 26 reads it.
+#[cfg(test)]
+pub fn reads(lang: Lang, sample: &str) -> bool {
+    tokens(sample, lang).iter().any(|t| t.class != prose::Class::Other)
+}
+
 #[cfg(target_os = "macos")]
 mod mac {
     use objc2::rc::{autoreleasepool, Allocated, Retained};
@@ -100,6 +107,10 @@ mod tests {
         assert_eq!(text.chars().skip(erased.range.start).take(erased.range.len()).collect::<String>(), "erased");
 
         let ru = "Письмо было написано ещё вчера.";
+        if !super::reads(Lang::Ru, ru) {
+            eprintln!("skipped: NaturalLanguage here doesn't tag Russian");
+            return;
+        }
         let t = tokens(ru, Lang::Ru);
         assert!(t.iter().any(|t| t.word == "написано" && t.class == Class::Verb), "{t:?}");
         assert!(prose::is_passive(&t, Lang::Ru));

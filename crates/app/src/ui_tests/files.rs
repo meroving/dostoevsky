@@ -266,6 +266,25 @@ fn file_5_a_save_before_the_watcher_notices_asks() {
     assert!(read(&path).starts_with("Mine. "), "Keep Mine lets the next save through");
 }
 
+/// The watcher reporting the same write while the question is open doesn't ask it again
+/// (on a slow machine FSEvents comes after the save has asked).
+#[test]
+fn file_5_the_watcher_late_for_an_answered_change_asks_nothing() {
+    let dir = TempDir::new("outside-late-watcher");
+    let path = dir.file("essay.md", DOC);
+    let mut ui = Ui::open_file(&path);
+    ui.caret_at(0);
+    ui.type_text("Mine. ");
+    std::fs::write(&path, "Theirs.\n").unwrap();
+    ui.keys("cmd-s");
+    assert!(ui.wait_for(2., |ui| ui.app.has_pending_prompt()), "no Keep mine / Load theirs prompt");
+    ui.update_window(|ws, _, cx| ws.disk_changed(cx));
+    ui.answer_prompt("Keep Mine");
+    assert!(!ui.app.has_pending_prompt(), "the same change asked about twice");
+    ui.keys("cmd-s");
+    assert!(read(&path).starts_with("Mine. "), "Keep Mine lets the next save through");
+}
+
 #[test]
 fn file_6_detached_groups() {
     let saved = {
