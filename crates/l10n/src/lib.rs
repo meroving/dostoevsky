@@ -46,6 +46,19 @@ impl Lang {
         }
     }
 
+    /// The language's name in English, for prompts.
+    pub fn english_name(self) -> &'static str {
+        match self {
+            Lang::En => "English",
+            Lang::De => "German",
+            Lang::Es => "Spanish",
+            Lang::Fr => "French",
+            Lang::It => "Italian",
+            Lang::PtBr => "Brazilian Portuguese",
+            Lang::Ru => "Russian",
+        }
+    }
+
     pub fn from_code(code: &str) -> Option<Lang> {
         Lang::ALL.into_iter().find(|l| l.code().eq_ignore_ascii_case(code))
     }

@@ -173,10 +173,13 @@ pub fn request(pass: Pass, model: &str, title: Option<&str>, sentences: &[Senten
         "You are a careful editor reading a writer's draft. The draft comes as numbered sentences, [n] before each, \
          with a blank line between paragraphs. {} \
          Never rewrite the text. Notes are read beside the text, so never mention sentence numbers in them. \
-         Write the notes in the language the draft is written in. \
+         Write the notes in {notes}, whatever language the draft is in; quotes and fixes stay in the draft's language. \
          If nothing qualifies, return an empty list. \
          Reply with JSON only, shaped like {shape}.",
-        pass.task()
+        pass.task(),
+        // The writer's UI language, like the notes the Mac writes itself: left to guess, models
+        // pick the draft's language unreliably (Spanish notes on an English draft).
+        notes = l10n::current().english_name()
     );
     let mut user = String::new();
     if let Some(t) = title.filter(|t| !t.trim().is_empty()) {
@@ -535,6 +538,7 @@ mod tests {
         assert!(r.schema.as_ref().unwrap().1.to_string().contains("\"fix\""));
         let h = request(Pass::HardToRead, "m", None, &s);
         assert!(h.system.contains("Sentences over 32 words") && !h.schema.unwrap().1.to_string().contains("\"fix\""));
+        assert!(h.system.contains("Write the notes in English, whatever language the draft is in"));
     }
 
     #[test]
