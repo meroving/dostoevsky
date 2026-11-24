@@ -214,22 +214,21 @@ pub struct WordVersion {
 }
 
 /// A word can't always change alone: another gender or number changes the adjective and the verb
-/// beside it, a noun its article. So the model says which stretch of the sentence each version
-/// replaces, as few words as it needs.
+/// beside it, a noun its article, a pronoun further on. Models get a whole sentence right far more
+/// often than a splice, so each version is the marked sentence written out; [`parse_word_versions`]
+/// finds what changed.
 pub fn word_versions_request(model: &str, a: &WordAsk) -> ChatRequest {
     let n = a.count;
     let system = format!(
         "You help a writer replace marked words in their draft. The marked words are ⟦…⟧ in the text; the sentence they are in follows it. \
-         Suggest {n} replacements. Each is a stretch of that sentence copied exactly as written (\"quote\", taking in all of the marked words) \
-         and the text that takes its place (\"text\"). Usually the quote is just the marked words. When a replacement only reads right if words beside it \
-         change too (gender, number or case agreement, an article, a preposition, a verb form, the word order), the quote takes in those words \
-         and the text gives them changed: as few words as that needs, never beyond the sentence. \
-         With the text in place of the quote the sentence must read correctly and naturally, so check every word that stays against the new ones. \
+         Suggest {n} versions of that sentence, each with the marked words replaced, written out in full. \
+         Change only what the replacement needs: the marked words and, where the sentence would not read right otherwise, the words that go with them \
+         (gender, number and case agreement, an article, a preposition, a verb form, a pronoun further on that points back to them). \
+         Copy every other word and mark of the sentence exactly as written. Each version must read correctly and naturally as a whole. \
          Keep the writer's meaning, voice, tense and register, and take the surrounding paragraphs into account: you are not a thesaurus. \
-         Suggest different directions, not small variations of one idea, and never the words as they stand. \
-         One text may be empty, when the sentence reads better with the quoted words simply gone. \
+         Suggest different directions, not small variations of one idea. A version may simply leave the marked words out, when the sentence reads better without them. \
          Write in the language of the text, whatever it is. \
-         Reply with JSON only, shaped like {{\"versions\": [{{\"quote\": \"…\", \"text\": \"…\"}}]}}."
+         Reply with JSON only, shaped like {{\"versions\": [{{\"sentence\": \"…\"}}]}}."
     );
     let mut user = String::new();
     if let Some(t) = a.title.filter(|t| !t.trim().is_empty()) {
@@ -243,8 +242,8 @@ pub fn word_versions_request(model: &str, a: &WordAsk) -> ChatRequest {
     user.push_str(&format!("The sentence: {}\nThe marked words: {}\n", a.sentence.trim(), a.current));
     if let Some((first, where_)) = a.echo {
         user.push_str(&format!(
-            "They repeat \"{first}\", used just before (in: {}). Every replacement must leave the text without that repetition: \
-             another word, a pronoun, the word gone, or the sentence turned around it; if both are in this sentence, the quote may take in the earlier one instead.\n",
+            "They repeat \"{first}\", used just before (in: {}). Every version must leave the text without that repetition: \
+             another word, a pronoun, the word left out, or the sentence turned around it; if both are in this sentence, the earlier one may change instead.\n",
             where_.trim()
         ));
     }
@@ -255,48 +254,82 @@ pub fn word_versions_request(model: &str, a: &WordAsk) -> ChatRequest {
         "type": "object",
         "properties": {"versions": {"type": "array", "items": {
             "type": "object",
-            "properties": {
-                "quote": {"type": "string", "description": "Copied exactly from the sentence, taking in the marked words."},
-                "text": {"type": "string", "description": "What takes the quote's place."}
-            },
-            "required": ["quote", "text"],
+            "properties": {"sentence": {"type": "string", "description": "The whole sentence with the replacement in place."}},
+            "required": ["sentence"],
             "additionalProperties": false
         }}},
         "required": ["versions"],
         "additionalProperties": false
     });
-    ChatRequest { model: model.to_string(), system, user, schema: Some(("versions".into(), schema)), max_tokens: Some((150 * n.max(3) + 200) as u32) }
+    let room = (a.sentence.chars().count() / 2 + 40) * n.max(3) + 100;
+    ChatRequest { model: model.to_string(), system, user, schema: Some(("versions".into(), schema)), max_tokens: Some(room as u32) }
 }
 
-/// Versions whose quote takes in `mark` inside `sentence` (display chars in `text`), widened to
-/// whole words; a version gone takes a space along. Repeats of the words as they stand, of one
-/// another, and of the words either side of the quote are dropped.
-pub fn parse_word_versions(reply: &str, text: &[char], sentence: Range<usize>, mark: Range<usize>) -> Result<Vec<WordVersion>, AiError> {
+/// What each version changed in `sentence` (display chars in `text`), in whole words. A version
+/// must change the words at `mark` (or `first`, the word an echo repeats, when it's in this
+/// sentence) and share a third of the sentence's other words (else it's about another sentence);
+/// agreement may carry a change across all of it (a noun changed at the start, its verb and
+/// pronoun at the end). Repeats of the sentence or of one another are dropped.
+pub fn parse_word_versions(reply: &str, text: &[char], sentence: Range<usize>, mark: Range<usize>, first: Option<Range<usize>>) -> Result<Vec<WordVersion>, AiError> {
     let v = crate::json_object(reply).ok_or_else(|| AiError::BadReply("no JSON".into()))?;
-    let hay: String = text.get(sentence.clone()).unwrap_or_default().iter().collect();
-    let inner = mark.start.saturating_sub(sentence.start)..mark.end.saturating_sub(sentence.start);
+    let old = &text[sentence.clone()];
+    // Leading and trailing spaces are the sentence's own, not the model's to change.
+    let lead = old.iter().take_while(|c| c.is_whitespace()).count();
+    let trail = old[lead..].iter().rev().take_while(|c| c.is_whitespace()).count();
+    let core = &old[lead..old.len() - trail];
+    let base = sentence.start + lead;
+    let words = |cs: &[char]| -> Vec<String> {
+        cs.iter().collect::<String>().split(|c: char| !english::is_word_char(c)).filter(|w| !w.is_empty()).map(str::to_lowercase).collect()
+    };
+    let marked = words(&text[mark.clone()]);
+    let others: Vec<String> = words(core).into_iter().filter(|w| !marked.contains(w)).collect();
     let mut out: Vec<WordVersion> = Vec::new();
     for it in v["versions"].as_array().cloned().unwrap_or_default() {
-        let Some(r) = anchor::find_covering(&hay, it["quote"].as_str().unwrap_or(""), inner.clone()) else { continue };
-        let core = anchor::to_words(text, sentence.start + r.start..sentence.start + r.end);
-        let said = it["text"].as_str().unwrap_or("").trim();
-        let (range, version) = if said.is_empty() {
-            (anchor::with_space(text, core), String::new())
-        } else {
-            let before: String = text[sentence.start.min(core.start)..core.start].iter().collect();
-            let after: String = text[core.end..sentence.end.max(core.end)].iter().collect();
-            match crate::ideas::unrepeat(said, &before, &after) {
-                Some(t) => (core, t),
-                None => continue,
-            }
-        };
-        let was: String = text[range.clone()].iter().collect();
-        if version.trim() == was.trim() || out.iter().any(|o| spliced(text, o) == spliced(text, &WordVersion { range: range.clone(), text: version.clone() })) {
+        let new: Vec<char> = it["sentence"].as_str().unwrap_or("").trim().chars().collect();
+        if new.is_empty() {
             continue;
         }
-        out.push(WordVersion { range, text: version });
+        let (was, now) = changed(core, &new);
+        let range = base + was.start..base + was.end;
+        let touches = |m: &Range<usize>| range.start < m.end && m.start < range.end || (range.is_empty() && m.start <= range.start && range.start <= m.end);
+        if was.is_empty() && now.is_empty() || !(touches(&mark) || first.as_ref().is_some_and(touches)) {
+            continue;
+        }
+        let new_words = words(&new);
+        if others.iter().filter(|w| new_words.contains(w)).count() * 3 < others.len() {
+            continue;
+        }
+        let version = WordVersion { range, text: new[now].iter().collect() };
+        if out.iter().any(|o| spliced(text, o) == spliced(text, &version)) {
+            continue;
+        }
+        out.push(version);
     }
     Ok(out)
+}
+
+/// The stretch of `old` that `new` changes and what it reads there, both in whole words: the
+/// longest common start and end, loosely (curly and straight quotes alike), backed off to the
+/// nearest word boundary.
+fn changed(old: &[char], new: &[char]) -> (Range<usize>, Range<usize>) {
+    let loose = |c: char| match c {
+        '\u{2018}' | '\u{2019}' | '\u{02BC}' => '\'',
+        '\u{201C}' | '\u{201D}' | '\u{00AB}' | '\u{00BB}' => '"',
+        '\u{00A0}' => ' ',
+        c => c,
+    };
+    let same = |a: char, b: char| loose(a) == loose(b);
+    let word = |c: char| english::is_word_char(c);
+    let mut p = old.iter().zip(new).take_while(|(a, b)| same(**a, **b)).count();
+    while p > 0 && word(old[p - 1]) && (old.get(p).is_some_and(|c| word(*c)) || new.get(p).is_some_and(|c| word(*c))) {
+        p -= 1;
+    }
+    let room = old.len().min(new.len()) - p;
+    let mut s = old.iter().rev().zip(new.iter().rev()).take(room).take_while(|(a, b)| same(**a, **b)).count();
+    while s > 0 && word(old[old.len() - s]) && (old.len() - s > p && word(old[old.len() - s - 1]) || new.len() - s > p && word(new[new.len() - s - 1])) {
+        s -= 1;
+    }
+    (p..old.len() - s, p..new.len() - s)
 }
 
 /// The sentence-wide text with `v` in place, for comparing versions with different stretches.
@@ -505,31 +538,72 @@ mod tests {
     }
 
     #[test]
-    fn word_versions_take_in_the_words_they_change() {
-        // «дом» → «здание» changes «старый» and «стоял» too.
-        let t = "Мы жили в доме. Старый дом стоял у реки, и дом был пуст.";
+    fn word_versions_are_what_changed_in_the_sentence() {
+        // «дом» → «здание» changes «оказался» too.
+        let t = "Мы жили в доме. Старый дом нашёлся, и дом оказался пуст до самой крыши.";
         let c: Vec<char> = t.chars().collect();
         let sentence = 16..t.chars().count();
-        let mark = 43..46;
+        let mark = 38..41;
         assert_eq!(c[mark.clone()].iter().collect::<String>(), "дом");
         let reply = r#"{"versions":[
-            {"quote":"дом был пуст","text":"он был пуст"},
-            {"quote":"дом","text":"и здание"},
-            {"quote":"дом","text":"особняк"},
-            {"quote":"Старый дом","text":"Старое здание"},
-            {"quote":"дом","text":"дом"},
-            {"quote":"и дом был","text":"и он был"},
-            {"quote":"не в тексте","text":"x"},
-            {"quote":"дом","text":""}
+            {"sentence":"Старый дом нашёлся, и он оказался пуст до самой крыши."},
+            {"sentence":"Другая фраза: дом совсем не о том."},
+            {"sentence":"Старый дом нашёлся, и здание оказалось пусто до самой крыши."},
+            {"sentence":"  Старый дом нашёлся, и оказался пуст до самой крыши. "},
+            {"sentence":"Старый дом нашёлся, и дом оказался пуст до самой крыши."},
+            {"sentence":"Старый дом нашёлся, и он оказался пуст до самой крыши."},
+            {"sentence":"Старинный дом нашёлся, и дом оказался пуст до самой крыши."},
+            {"sentence":"Совсем другая фраза о чём-то своём."},
+            {"sentence":"Старое здание нашлось, и оно оказалось пусто до самой крыши."}
         ]}"#;
-        let v = parse_word_versions(reply, &c, sentence, mark).unwrap();
-        let texts: Vec<&str> = v.iter().map(|v| v.text.as_str()).collect();
-        assert_eq!(texts, ["он был пуст", "здание", "особняк", ""], "the first «дом» isn't the marked one; «и» came along and goes; as written; repeats; nowhere");
-        assert_eq!(c[v[0].range.clone()].iter().collect::<String>(), "дом был пуст");
-        assert_eq!(c[v[3].range.clone()].iter().collect::<String>(), "дом ", "gone with its space");
-        let (span, alts) = one_span(&c, &v).unwrap();
-        assert_eq!(c[span].iter().collect::<String>(), "дом был пуст");
-        assert_eq!(alts, ["он был пуст", "здание был пуст", "особняк был пуст", "был пуст"]);
+        let v = parse_word_versions(reply, &c, sentence.clone(), mark.clone(), None).unwrap();
+        let shown: Vec<(String, &str)> = v.iter().map(|v| (c[v.range.clone()].iter().collect(), v.text.as_str())).collect();
+        assert_eq!(
+            shown,
+            [
+                ("дом".into(), "он"),
+                ("дом оказался пуст".into(), "здание оказалось пусто"),
+                ("дом ".into(), ""),
+                ("Старый дом нашёлся, и дом оказался пуст".into(), "Старое здание нашлось, и оно оказалось пусто")
+            ],
+            "as written, a repeat, a change away from the mark and another sentence are dropped; the earlier word may change instead"
+        );
+        let first = 23..26;
+        assert_eq!(c[first.clone()].iter().collect::<String>(), "дом");
+        let earlier = r#"{"versions":[{"sentence":"Старый особняк нашёлся, и дом оказался пуст до самой крыши."}]}"#;
+        assert!(parse_word_versions(earlier, &c, sentence.clone(), mark.clone(), None).unwrap().is_empty(), "not the marked word");
+        let v2 = parse_word_versions(earlier, &c, sentence, mark, Some(first)).unwrap();
+        assert_eq!(v2[0].text, "особняк", "an echo's earlier word may change instead");
+        let (span, alts) = one_span(&c, &v[..3]).unwrap();
+        assert_eq!(c[span].iter().collect::<String>(), "дом оказался пуст");
+        assert_eq!(alts, ["он оказался пуст", "здание оказалось пусто", "оказался пуст"]);
+    }
+
+    #[test]
+    fn agreement_may_carry_a_version_across_the_sentence() {
+        let t = "Лампа светила тускло, но мама была довольна лампой.";
+        let c: Vec<char> = t.chars().collect();
+        let all = 0..c.len();
+        let (first, mark) = (0..5, 44..50);
+        assert_eq!(c[mark.clone()].iter().collect::<String>(), "лампой");
+        let reply = r#"{"versions":[{"sentence":"Она светила тускло, но мама была ею довольна."}]}"#;
+        let v = parse_word_versions(reply, &c, all, mark, Some(first)).unwrap();
+        assert_eq!(c[v[0].range.clone()].iter().collect::<String>(), "Лампа светила тускло, но мама была довольна лампой");
+        assert_eq!(v[0].text, "Она светила тускло, но мама была ею довольна");
+    }
+
+    #[test]
+    fn what_changed_is_in_whole_words_and_keeps_its_spaces() {
+        let diff = |a: &str, b: &str| {
+            let (a, b): (Vec<char>, Vec<char>) = (a.chars().collect(), b.chars().collect());
+            let (x, y) = changed(&a, &b);
+            (a[x].iter().collect::<String>(), b[y].iter().collect::<String>())
+        };
+        assert_eq!(diff("Der Tisch war schwer, und der Tisch passte.", "Der Tisch war schwer und passte."), (", und der Tisch".into(), " und".into()));
+        assert_eq!(diff("a super deep sorrow he had", "a sorrow that ran deep he had"), ("super deep sorrow".into(), "sorrow that ran deep".into()));
+        assert_eq!(diff("the house was", "the houses were"), ("house was".into(), "houses were".into()), "never half a word");
+        assert_eq!(diff("“Quoted” word.", "\"Quoted\" term."), ("word".into(), "term".into()), "curly and straight quotes alike");
+        assert_eq!(diff("same", "same"), (String::new(), String::new()));
     }
 
     #[test]
@@ -546,7 +620,7 @@ mod tests {
             count: 3,
         };
         let r = word_versions_request("m", &a);
-        assert!(r.system.contains("Suggest 3 replacements") && r.system.contains("agreement"));
+        assert!(r.system.contains("Suggest 3 versions of that sentence") && r.system.contains("agreement"));
         assert!(r.user.contains("They repeat \"дом\"") && r.user.contains("The marked words: дом"));
         assert!(r.schema.unwrap().1.to_string().contains("\"versions\""));
     }

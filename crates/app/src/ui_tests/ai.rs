@@ -640,16 +640,18 @@ fn lab_tone_suggests_alternatives() {
         {"sentence": 4, "quote": "basically", "note": "too casual"}
     ]}));
     // `candidates at once disappear`: the words either side of `quietly` came along.
-    // One reply for both asks (they run at once): each word keeps the versions that quote it.
+    // One reply for both asks (they run at once): each word keeps the versions of its sentence.
+    let s3 = |w: &str| format!("You pick teh word and the other candidates {w} disappear.");
+    let s4 = |w: &str| format!("It is, in a way, {w} a one-way street, really.");
     let ideas = json_reply(serde_json::json!({"versions": [
-        {"quote": "quietly", "text": "silently"},
-        {"quote": "basically", "text": "silently"},
-        {"quote": "quietly", "text": "simply"},
-        {"quote": "basically a kind of", "text": "simply"},
-        {"quote": "quietly", "text": "quietly"},
-        {"quote": "basically", "text": "quietly"},
-        {"quote": "quietly", "text": "candidates at once disappear"},
-        {"quote": "quietly", "text": "for good"}
+        {"sentence": s3("silently")},
+        {"sentence": s4("silently a kind of")},
+        {"sentence": s3("simply")},
+        {"sentence": s4("simply")},
+        {"sentence": s3("quietly")},
+        {"sentence": s4("quietly a kind of")},
+        {"sentence": s3("at once")},
+        {"sentence": s3("for good")}
     ]}));
     let f = fake(vec![marks_reply, ideas]);
     let mut ui = Ui::open(DOC);
@@ -665,7 +667,7 @@ fn lab_tone_suggests_alternatives() {
     assert_eq!(ui.text(), before, "the originals still show");
     let groups = ui.groups();
     assert_eq!(groups.len(), 2);
-    assert_eq!(ui.variants(groups[0].id), ["quietly", "silently", "simply", "at once"], "cleaned, no repeat of the original or the words around it, three at most");
+    assert_eq!(ui.variants(groups[0].id), ["quietly", "silently", "simply", "at once"], "what changed in each sentence, not the original, three at most");
     assert_eq!(ui.variants(groups[1].id), ["basically a kind of", "silently a kind of", "simply"], "one stretch for all, the widest; “quietly” would echo the paragraph before");
     assert!(marks(&ui).is_empty(), "the marks became groups");
     let reqs = f.requests.lock().unwrap().clone();
@@ -683,7 +685,10 @@ fn lab_suggest_for_one_mark() {
         {"sentence": 3, "quote": "quietly", "note": "too soft"},
         {"sentence": 4, "quote": "basically", "note": "too casual"}
     ]}));
-    let ideas = json_reply(serde_json::json!({"versions": [{"quote": "basically", "text": "silently"}, {"quote": "basically", "text": "simply"}]}));
+    let ideas = json_reply(serde_json::json!({"versions": [
+        {"sentence": "It is, in a way, silently a kind of a one-way street, really."},
+        {"sentence": "It is, in a way, simply a kind of a one-way street, really."}
+    ]}));
     let f = fake(vec![marks_reply, ideas]);
     let mut ui = Ui::open(DOC);
     use_fake(&mut ui, &f.base);
@@ -790,7 +795,12 @@ fn review_versions_keep_and_close() {
         {"sentence": 3, "quote": "quietly", "note": "too soft"},
         {"sentence": 4, "quote": "basically", "note": "too casual"}
     ]}));
-    let ideas = json_reply(serde_json::json!({"versions": [{"quote": "quietly", "text": "silently"}, {"quote": "basically", "text": "simply"}, {"quote": "quietly", "text": "simply"}, {"quote": "basically", "text": "silently"}]}));
+    let ideas = json_reply(serde_json::json!({"versions": [
+        {"sentence": "You pick teh word and the other candidates silently disappear."},
+        {"sentence": "It is, in a way, simply a kind of a one-way street, really."},
+        {"sentence": "You pick teh word and the other candidates simply disappear."},
+        {"sentence": "It is, in a way, silently a kind of a one-way street, really."}
+    ]}));
     let f = fake(vec![marks_reply, ideas.clone(), ideas]);
     let mut ui = Ui::open(DOC);
     use_fake(&mut ui, &f.base);
@@ -1153,7 +1163,15 @@ fn review_fits_its_panel() {
             {"sentence": 3, "quote": "quietly", "note": "Too soft for the rest of the paragraph, which is plain and direct and doesn't hedge anywhere else."},
             {"sentence": 4, "quote": "basically", "note": "too casual"}
         ]}));
-        let versions: Vec<serde_json::Value> = ["silently", "simply", "at once"].iter().flat_map(|t| [serde_json::json!({"quote": "quietly", "text": t}), serde_json::json!({"quote": "basically", "text": t})]).collect();
+        let versions: Vec<serde_json::Value> = ["silently", "simply", "at once"]
+            .iter()
+            .flat_map(|t| {
+                [
+                    serde_json::json!({"sentence": format!("You pick teh word and the other candidates {t} disappear.")}),
+                    serde_json::json!({"sentence": format!("It is, in a way, {t} a kind of a one-way street, really.")}),
+                ]
+            })
+            .collect();
         let ideas = json_reply(serde_json::json!({ "versions": versions }));
         let cuts = json_reply(serde_json::json!({"cuts": [{"sentence": 4, "quote": "It is, in a way, basically a kind of a one-way street"}, {"sentence": 4, "quote": "really"}, {"sentence": 3, "quote": "quietly"}]}));
         let f = fake(vec![marks_reply, ideas.clone(), ideas, cuts]);
@@ -1361,10 +1379,10 @@ fn lab_word_choice_marks_echoes() {
 fn an_echos_versions_leave_no_echo() {
     let doc = "# Keep Them\n\nMost of the friction in writing comes from choosing too early. You pick a word, the sentence moves on, and the other candidates quietly disappear. A week later you can’t remember those words, only that one of them was better.\n";
     let versions = json_reply(serde_json::json!({"versions": [
-        {"quote": "words", "text": "word choices"},
-        {"quote": "words", "text": "candidates"},
-        {"quote": "those words", "text": "them"},
-        {"quote": "those words", "text": "the ones you lost"}
+        {"sentence": "A week later you can’t remember those word choices, only that one of them was better."},
+        {"sentence": "A week later you can’t remember those candidates, only that one of them was better."},
+        {"sentence": "A week later you can’t remember them, only that one of them was better."},
+        {"sentence": "A week later you can’t remember the ones you lost, only that one of them was better."}
     ]}));
     let f = fake(vec![json_reply(serde_json::json!({"marks": []})), versions]);
     let mut ui = Ui::open(doc);

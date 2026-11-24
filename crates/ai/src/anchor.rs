@@ -4,26 +4,13 @@ use crate::segment::Sentence;
 
 /// Char range in `hay`: an exact match first, then ignoring case, curly quotes and runs of spaces.
 pub fn find(hay: &str, quote: &str) -> Option<Range<usize>> {
-    find_where(hay, quote, |_| true)
-}
-
-/// As [`find`], the first match that takes in all of `inner` (char range in `hay`): a quote
-/// that also occurs earlier in the sentence still finds the words it was about.
-pub fn find_covering(hay: &str, quote: &str, inner: Range<usize>) -> Option<Range<usize>> {
-    find_where(hay, quote, |r| r.start <= inner.start && inner.end <= r.end)
-}
-
-fn find_where(hay: &str, quote: &str, ok: impl Fn(&Range<usize>) -> bool) -> Option<Range<usize>> {
     let quote = quote.trim();
     if quote.is_empty() {
         return None;
     }
-    let exact = hay.match_indices(quote).map(|(b, _)| {
+    if let Some(b) = hay.find(quote) {
         let start = hay[..b].chars().count();
-        start..start + quote.chars().count()
-    });
-    if let Some(r) = exact.into_iter().find(|r| ok(r)) {
-        return Some(r);
+        return Some(start..start + quote.chars().count());
     }
     // `map[i]` is the char index in `hay` of normalised char `i`.
     let (h, map) = normalise(hay);
@@ -33,7 +20,10 @@ fn find_where(hay: &str, quote: &str, ok: impl Fn(&Range<usize>) -> bool) -> Opt
     }
     let hc: Vec<char> = h.chars().collect();
     let qc: Vec<char> = q.chars().collect();
-    (0..=hc.len().checked_sub(qc.len())?).filter(|&i| hc[i..i + qc.len()] == qc[..]).map(|at| map[at]..map[at + qc.len() - 1] + 1).find(|r| ok(r))
+    let at = (0..=hc.len().checked_sub(qc.len())?).find(|&i| hc[i..i + qc.len()] == qc[..])?;
+    let start = map[at];
+    let end = map[at + qc.len() - 1] + 1;
+    Some(start..end)
 }
 
 fn normalise(s: &str) -> (String, Vec<usize>) {
@@ -112,14 +102,6 @@ mod tests {
         assert_eq!(find("It is,  in a way", "IS, IN A"), Some(3..12));
         assert_eq!(find("hello", "bye"), None);
         assert_eq!(find("hello", "  "), None);
-    }
-
-    #[test]
-    fn a_quote_found_where_it_covers() {
-        let s = "The house by the house.";
-        assert_eq!(find_covering(s, "house", 17..22), Some(17..22));
-        assert_eq!(find_covering(s, "the House", 17..22), Some(13..22), "loosely too");
-        assert_eq!(find_covering(s, "house by", 17..22), None);
     }
 
     #[test]

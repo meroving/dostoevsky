@@ -1256,7 +1256,9 @@ impl Workspace {
             };
             let Some(range) = refind(&text, &k.range, &k.quote) else { continue };
             if scope == ai::ideas::Scope::Word {
-                let versions = match ai::lab::parse_word_versions(&reply, &text, self.sentence_at(&whole, &range, cx), range.clone()) {
+                let echo = k.found == ai::lab::Found::Echo;
+                let first = reader.as_ref().filter(|_| echo).and_then(|r| echo_first(&text, &range, r)).map(|(r, _)| r);
+                let versions = match ai::lab::parse_word_versions(&reply, &text, self.sentence_at(&whole, &range, cx), range.clone(), first) {
                     Ok(v) => v,
                     Err(e) => {
                         failed.get_or_insert(e);
@@ -1264,7 +1266,6 @@ impl Workspace {
                     }
                 };
                 // Only versions that fix the echo and bring none of their own.
-                let echo = k.found == ai::lab::Found::Echo;
                 let clean: Vec<ai::lab::WordVersion> = versions.into_iter().filter(|v| reader.as_ref().is_none_or(|r| reads_clean(&text, v, &range, echo, r))).take(SUGGESTIONS).collect();
                 if let Some((span, alts)) = ai::lab::one_span(&text, &clean) {
                     notes.push((span.start, k.note.clone()));

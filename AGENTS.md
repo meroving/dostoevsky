@@ -17,6 +17,7 @@ cargo run --release -p doc-model --example bench_large                     # lat
 cargo run --release -p doc-format --example bench_format                   # save/load at 100k words
 cargo run -p export --example sample                                   # every export format → target/export-sample
 OPENROUTER_API_KEY=… cargo run -p ai --example eval                        # real prompts against a real model (costs money)
+OPENROUTER_API_KEY=… cargo run -p ai --example word_versions               # Word choice alternatives, old ask vs new, judged blind (~$0.10)
 scripts/run_flows.sh [flow…]                 # PRD §7 flows against the real app → target/flows/*.png
 scripts/e2e_bundle.sh                        # bundled .app via LaunchServices: save, recent, folder, kill -9, FSEvents
 scripts/check_private_api.sh target/release/dostoevsky   # no private Apple API in the binary (vendor/gpui-pre-macos)
