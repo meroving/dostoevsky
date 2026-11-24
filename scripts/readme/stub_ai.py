@@ -17,6 +17,9 @@ MARKS = {
          "Two ideas joined by “and”; the colon hides the point at the end."),
         ("Version control keeps history, but history is the wrong shape: it remembers when you changed something, not what you were choosing between.",
          "Two turns in one sentence; split at the colon."),
+        # The demo video's Crime and Punishment (scripts/demo).
+        ("The landlady who provided him with garret, dinners, and attendance, lived on the floor below, and every time he went out he was obliged to pass her kitchen, the door of which invariably stood open.",
+         "35 words, three clauses; a full stop after “below” lets it breathe."),
     ],
     "tone": [("Honestly", "Chatty next to the plain voice around it.")],
     "mistakes": [("teh", "the", "spelling"), ("dissapear", "disappear", "spelling")],
@@ -39,6 +42,9 @@ CUTS = [
 IDEAS = {
     "suggestion": ["counterpoint", "margin note", "gentler word", "query", "second opinion"],
     "friction": ["drag", "hesitation", "doubt", "trouble", "stalling"],
+    "quietly": ["softly", "one by one", "without a trace", "unnoticed", "slowly"],
+    "silently": ["softly", "one by one", "without a trace", "unnoticed", "slowly"],
+    "indecision": ["doubt", "reluctance", "a daze", "uncertainty", "dread"],
 }
 DEFAULT_IDEAS = ["choice", "option", "turn", "version", "path"]
 

@@ -34,8 +34,9 @@
 //! {"ai_key": {"gemini": "test"}}          a service's key (by slug); only with DOSTOEVSKY_SECRETS=memory
 //! {"export": {"format": "docx", "style": "book", "whole_book": true, "text_open": true, "page": 2}}
 //!                                          set the open Export sheet's choices
-//! {"typing": "Quiet.", "cps": 18}         type a char at a time (`"into": "comment"`: the comment)
-//! {"glide": {"group": 1}, "ms": 500}      move the pointer there smoothly (a target, as `hover`)
+//! {"typing": "Quiet.", "cps": 18}         type a char at a time (`"into"`: `"comment"`, `"field"`)
+//! {"glide": {"group": 1}, "ms": 500}      move the pointer there smoothly (a target, as `hover`;
+//!                                         any target takes `"offset": [dx, dy]`)
 //! {"record": "target/x.mp4", "fps": 30}  start a video of the window (ffmpeg on PATH), the
 //! {"record_stop": true}                   pointer drawn in (`{"pointer": false}` hides it)
 //! {"shot": "target/x.png"}                  render the window to a PNG
@@ -90,8 +91,8 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
                 continue;
             }
             if let Some(t) = step.get("typing").and_then(Value::as_str) {
-                let comment = step.get("into").and_then(Value::as_str) == Some("comment");
-                type_slowly(t, step.get("cps").and_then(Value::as_f64).unwrap_or(14.), comment, &ws, window, cx).await;
+                let into = step.get("into").and_then(Value::as_str).unwrap_or("page");
+                type_slowly(t, step.get("cps").and_then(Value::as_f64).unwrap_or(14.), into, &ws, window, cx).await;
                 continue;
             }
             if let Some(v) = step.get("glide") {
@@ -150,20 +151,25 @@ pub fn run(ws: WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut App) {
 }
 
 /// Types `text` a char at a time, about `cps` chars a second, pausing a little after
-/// spaces and longer after punctuation, as a person would; into the page, or with `comment`
-/// into the comment being written.
-async fn type_slowly(text: &str, cps: f64, comment: bool, ws: &WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut AsyncApp) {
+/// spaces and longer after punctuation, as a person would; `into` the page, the comment being
+/// written (`comment`) or the Alternatives panel's add field (`field`).
+async fn type_slowly(text: &str, cps: f64, into: &str, ws: &WeakEntity<Workspace>, window: AnyWindowHandle, cx: &mut AsyncApp) {
     let mut seed: u32 = 0x9e37_79b9;
     let base = 1000. / cps.max(1.);
     // Paced by the clock, not by sleeps, so slow frames (a recording) don't slow the typing.
     let mut due = Instant::now();
+    let mut typed = String::new();
     for ch in text.chars() {
+        typed.push(ch);
         let ws = ws.clone();
         let r = window.update(cx, |_, window, cx| {
             let Some(ws) = ws.upgrade() else { return false };
-            if comment {
+            if into == "comment" {
                 let Some(editor) = ws.read(cx).comment_edit.as_ref().map(|e| e.editor.clone()) else { return false };
                 editor.update(cx, |v, cx| v.insert_text(&ch.to_string(), cx));
+            } else if into == "field" {
+                let Some(input) = ws.read(cx).sidebar.as_ref().map(|s| s.input.clone()) else { return false };
+                input.update(cx, |i, cx| i.set_field_text(&typed, cx));
             } else {
                 let page = ws.read(cx).page.clone();
                 page.update(cx, |p, cx| p.insert_text(&ch.to_string(), cx));
@@ -418,6 +424,13 @@ fn range_of(v: &Value, ws: &Entity<Workspace>, cx: &App) -> Option<std::ops::Ran
 /// A window position named by `[x, y]`, `{"group": n}` or `{"text": …}`: inside the glyph
 /// cell at the middle of the group or text.
 fn target(v: &Value, ws: &Entity<Workspace>, cx: &App) -> Option<Point<Pixels>> {
+    // `"offset": [dx, dy]` moves any target (a button over a selection, say).
+    if let Some(d) = v.get("offset").and_then(point_of) {
+        let mut base = v.clone();
+        base.as_object_mut()?.remove("offset");
+        let p = target(&base, ws, cx)?;
+        return Some(point(p.x + d.x, p.y + d.y));
+    }
     if let Some(p) = point_of(v) {
         return Some(p);
     }
