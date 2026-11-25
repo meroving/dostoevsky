@@ -411,6 +411,43 @@ impl KeystrokeLike for KeybindingKeystroke {
 }
 
 pub fn format_keystroke(m: &Modifiers, key: &str) -> String {
+    if cfg!(target_os = "macos") {
+        mac_keystroke(m, key)
+    } else {
+        pc_keystroke(m, key)
+    }
+}
+
+/// "Ctrl+Shift+A", "Alt+↓", "Ctrl+Home", as Windows and GNOME write them.
+fn pc_keystroke(m: &Modifiers, key: &str) -> String {
+    let mut parts: Vec<String> = Vec::new();
+    for (on, name) in [(m.control, "Ctrl"), (m.alt, "Alt"), (m.shift, "Shift"), (m.platform, "Super")] {
+        if on {
+            parts.push(name.into());
+        }
+    }
+    parts.push(match key {
+        "up" => "↑".into(),
+        "down" => "↓".into(),
+        "left" => "←".into(),
+        "right" => "→".into(),
+        "enter" => "Enter".into(),
+        "backspace" => "Backspace".into(),
+        "delete" => "Del".into(),
+        "escape" => "Esc".into(),
+        "tab" => "Tab".into(),
+        "space" => "Space".into(),
+        "pageup" => "PgUp".into(),
+        "pagedown" => "PgDn".into(),
+        "home" => "Home".into(),
+        "end" => "End".into(),
+        k if k.chars().count() == 1 => k.to_uppercase(),
+        k => k.to_uppercase(),
+    });
+    parts.join("+")
+}
+
+fn mac_keystroke(m: &Modifiers, key: &str) -> String {
     let mut s = String::new();
     if m.control {
         s.push('⌃');

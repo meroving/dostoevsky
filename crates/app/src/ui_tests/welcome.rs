@@ -30,7 +30,8 @@ fn win_19_opens_as_an_unedited_copy_in_writing() {
     let intro_end = text.find("appear in the margin.").unwrap() + "appear in the margin.".len();
     assert_eq!(ui.selection(), text[..intro_end].chars().count()..text[..intro_end].chars().count());
     assert!(!text.contains("[key:"), "keys are filled in");
-    assert!(text.contains("⌘2") && text.contains("⌥⌘N") && text.contains("⇧⌘H") && text.contains("⌘="), "the default keys, as the keymap has them");
+    let has = |mac: &str| text.contains(&crate::ui_tests::key_label(mac));
+    assert!(has("⌘2") && has("⌥⌘N") && has("⇧⌘H") && has("⌘="), "the default keys, as the keymap has them");
     ui.draw();
     assert!(drawn(&ui).is_empty(), "no comments in writing");
 }

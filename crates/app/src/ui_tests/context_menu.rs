@@ -3,7 +3,7 @@ use crate::ui_tests::{MenuItem, Ui};
 const DOC: &str = "Most of the friction in writing comes from choosing too early.\n";
 
 fn item(label: &str, shortcut: Option<&str>) -> MenuItem {
-    MenuItem { label: label.into(), enabled: true, badge: None, shortcut: shortcut.map(String::from) }
+    MenuItem { label: label.into(), enabled: true, badge: None, shortcut: shortcut.map(crate::ui_tests::key_label) }
 }
 
 #[test]
@@ -237,7 +237,7 @@ fn kb_1_shortcut_labels_include_context_bindings() {
             [Box::new(GhostToggle), Box::new(StashToOverflow), Box::new(CycleAtCaretNext), Box::new(Undo), Box::new(InsertOverflowNote)];
         actions.iter().map(|a| crate::context_menu::shortcut_label(a.as_ref(), cx)).collect()
     });
-    assert_eq!(got, [Some("⌘/"), Some("⇧⌘X"), Some("⌥⌘↓"), Some("⌘Z"), Some("⌘↩")].map(|s| s.map(String::from)));
+    assert_eq!(got, [Some("⌘/"), Some("⇧⌘X"), Some("⌥⌘↓"), Some("⌘Z"), Some("⌘↩")].map(|s| s.map(crate::ui_tests::key_label)));
 }
 
 #[test]

@@ -40,6 +40,38 @@ use crate::prefs::{Effects, Prefs};
 use crate::view::TextView;
 use crate::workspace::Workspace;
 
+/// A shortcut label as the Mac shows it ("⇧⌘A"), as this system shows it: the same off the
+/// Mac's keys through `actions::off_mac` ("Ctrl+Shift+A").
+pub fn key_label(mac: &str) -> String {
+    if cfg!(target_os = "macos") {
+        return mac.to_string();
+    }
+    let mut keys = String::new();
+    let mut rest = mac;
+    for (glyph, m) in [('⌃', "ctrl-"), ('⌥', "alt-"), ('⇧', "shift-"), ('⌘', "cmd-")] {
+        if let Some(r) = rest.strip_prefix(glyph) {
+            keys.push_str(m);
+            rest = r;
+        }
+    }
+    let key = match rest {
+        "↑" => "up".to_string(),
+        "↓" => "down".into(),
+        "←" => "left".into(),
+        "→" => "right".into(),
+        "↩" => "enter".into(),
+        "⌫" => "backspace".into(),
+        "⌦" => "delete".into(),
+        "⇥" => "tab".into(),
+        "−" => "-".into(),
+        k => k.to_lowercase(),
+    };
+    keys.push_str(&key);
+    let pc = crate::actions::off_mac(&keys).unwrap_or_else(|| panic!("{mac} has no key off the Mac"));
+    let k = gpui_kit::Keystroke::parse(&pc).expect("a keystroke");
+    crate::context_menu::format_keystroke(&k.modifiers, &k.key)
+}
+
 #[derive(Debug, PartialEq)]
 pub struct MenuItem {
     pub label: String,
@@ -203,10 +235,12 @@ impl Ui {
         self.read(|ws, _| ws.model.clone())
     }
 
-    /// Space-separated, as in a keymap: `"cmd-shift-a"`, `"alt-cmd-down down"`.
+    /// Space-separated, as in a keymap: `"cmd-shift-a"`, `"alt-cmd-down down"`. Mac keys; off the
+    /// Mac each goes through `actions::off_mac`, as the default bindings do.
     pub fn keys(&mut self, keys: &str) {
         for k in keys.split_whitespace() {
-            self.win.simulate_keystroke(k);
+            let k = if cfg!(target_os = "macos") { k.to_string() } else { crate::actions::off_mac(k).unwrap_or_else(|| panic!("{k} has no binding off the Mac")) };
+            self.win.simulate_keystroke(&k);
             self.draw();
         }
     }

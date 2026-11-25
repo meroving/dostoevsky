@@ -110,8 +110,8 @@ fn shift_cmd_h_toggles_it_and_the_view_menu_follows() {
     assert!(mask(&ui).is_none());
 
     let label = |ui: &Ui, a: &dyn gpui_kit::Action| ui.read(|_, cx| crate::context_menu::shortcut_label(a, cx));
-    assert_eq!(label(&ui, &TogglePrivate).as_deref(), Some("⇧⌘H"));
-    assert_eq!(label(&ui, &Hide).as_deref(), Some("⌘H"), "⌘H stays Hide");
+    assert_eq!(label(&ui, &TogglePrivate), Some(crate::ui_tests::key_label("⇧⌘H")));
+    assert_eq!(label(&ui, &Hide).as_deref(), cfg!(target_os = "macos").then_some("⌘H"), "⌘H stays Hide; Hide is the Mac's");
     let sheet = crate::actions::shortcut_groups();
     let (_, items) = sheet.iter().find(|(_, items)| items.iter().any(|(_, a)| a.partial_eq(&TogglePrivate))).expect("on the shortcuts sheet");
     let i = items.iter().position(|(_, a)| a.partial_eq(&TogglePrivate)).unwrap();

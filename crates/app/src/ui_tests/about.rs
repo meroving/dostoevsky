@@ -112,7 +112,7 @@ fn about_acknowledgements_and_back() {
 fn about_closes_with_cmd_w() {
     let mut ui = AboutUi::open();
     let before = ui.app.windows().len();
-    ui.win.simulate_keystroke("cmd-w");
+    ui.win.simulate_keystroke(if cfg!(target_os = "macos") { "cmd-w" } else { "ctrl-w" });
     ui.app.run_until_parked();
     assert_eq!(ui.app.windows().len(), before - 1);
 }
