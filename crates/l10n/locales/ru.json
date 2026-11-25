@@ -149,6 +149,7 @@
   "Couldn't move it to the Trash: {error}": "Не удалось переместить в Корзину: {error}",
   "Couldn't open {path}: {error}": "Не удалось открыть {path}: {error}",
   "Couldn't save the key: {e}": "Не удалось сохранить ключ: {e}",
+  "no keyring is running (GNOME Keyring or KWallet)": "не запущена связка ключей (GNOME Keyring или KWallet)",
   "Couldn't save the project’s type: {error}": "Не удалось сохранить тип проекта: {error}",
   "Couldn't save {path}": "Не удалось сохранить {path}",
   "Couldn't undo: {error}": "Не удалось отменить: {error}",
