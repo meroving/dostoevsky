@@ -194,7 +194,7 @@ pub fn apply(fixes: Vec<Fix>) {
     save(&list);
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 fn restore_all() -> Vec<PathBuf> {
     let (reachable, fixes) = resolve(load());
     apply(fixes);
@@ -267,8 +267,7 @@ mod platform {
 
 #[cfg(test)]
 mod tests {
-    use super::{hex, last_place, load, moved, remember, remember_place, restore_all, restore_now, restore_rest, save, unhex, Entry, KEPT};
-    use std::fs;
+    use super::{hex, unhex};
 
     #[test]
     fn hex_round_trips() {
@@ -280,6 +279,8 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn remembered_paths_come_back_after_a_relaunch() {
+        use super::{last_place, load, moved, remember, remember_place, restore_all, restore_now, restore_rest, save, Entry, KEPT};
+        use std::fs;
         super::PRETEND_SANDBOX.set(true);
         let dir = std::env::temp_dir().join(format!("dsky-bookmarks-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);

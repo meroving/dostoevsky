@@ -330,11 +330,35 @@ fn macos_version() -> Option<String> {
     plist_string(&plist, "ProductVersion")
 }
 
+/// The system and the chip: "macOS 15.1, Apple silicon", "Ubuntu 24.04 LTS, x86_64".
+fn system_and_chip() -> String {
+    if cfg!(target_os = "macos") {
+        let chip = if cfg!(target_arch = "aarch64") { "Apple silicon" } else { "Intel" };
+        let macos = macos_version().map(|v| format!("macOS {v}")).unwrap_or_else(|| "macOS".into());
+        return format!("{macos}, {chip}");
+    }
+    let system = match std::env::consts::OS {
+        "linux" => linux_name().unwrap_or_else(|| "Linux".into()),
+        "windows" => "Windows".into(),
+        other => other.into(),
+    };
+    format!("{system}, {}", std::env::consts::ARCH)
+}
+
+/// PRETTY_NAME from os-release, the one file every current distribution has.
+fn linux_name() -> Option<String> {
+    let text = std::fs::read_to_string("/etc/os-release").or_else(|_| std::fs::read_to_string("/usr/lib/os-release")).ok()?;
+    os_release_name(&text)
+}
+
+fn os_release_name(text: &str) -> Option<String> {
+    let value = text.lines().find_map(|l| l.strip_prefix("PRETTY_NAME="))?;
+    Some(value.trim().trim_matches('"').to_string()).filter(|s| !s.is_empty())
+}
+
 /// In English, not translated: it is for whoever reads the bug report.
 pub fn version_details() -> String {
-    let chip = if cfg!(target_arch = "aarch64") { "Apple silicon" } else { "Intel" };
-    let macos = macos_version().map(|v| format!("macOS {v}")).unwrap_or_else(|| "macOS".into());
-    format!("Dostoevsky {}, {}, {macos}, {chip}", version_label(), channel())
+    format!("Dostoevsky {}, {}, {}", version_label(), channel(), system_and_chip())
 }
 
 fn licences_file() -> Option<PathBuf> {
@@ -343,7 +367,7 @@ fn licences_file() -> Option<PathBuf> {
 
 #[cfg(test)]
 mod tests {
-    use super::{plist_string, version_details, version_label};
+    use super::{os_release_name, plist_string, version_details, version_label};
 
     #[test]
     fn reads_a_string_from_a_plist() {
@@ -357,6 +381,16 @@ mod tests {
     fn a_cargo_run_says_dev() {
         assert_eq!(version_label(), format!("{} (dev)", env!("CARGO_PKG_VERSION")));
         let d = version_details();
-        assert!(d.starts_with(&format!("Dostoevsky {} (dev), dev, macOS ", env!("CARGO_PKG_VERSION"))), "{d}");
+        let system = if cfg!(target_os = "macos") { "macOS " } else { "" };
+        assert!(d.starts_with(&format!("Dostoevsky {} (dev), dev, {system}", env!("CARGO_PKG_VERSION"))), "{d}");
+        assert!(cfg!(target_os = "macos") || !d.contains("macOS"), "{d}");
+    }
+
+    #[test]
+    fn names_the_linux_distribution() {
+        let text = "NAME=\"Ubuntu\"\nPRETTY_NAME=\"Ubuntu 24.04.1 LTS\"\nID=ubuntu\n";
+        assert_eq!(os_release_name(text).as_deref(), Some("Ubuntu 24.04.1 LTS"));
+        assert_eq!(os_release_name("PRETTY_NAME=Arch Linux"), Some("Arch Linux".into()));
+        assert_eq!(os_release_name("ID=alpine"), None);
     }
 }

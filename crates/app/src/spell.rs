@@ -24,6 +24,8 @@ pub struct Spelling {
 impl Global for Spelling {}
 
 impl Spelling {
+    // Only the Mac has a speller so far (Linux and Windows: dsky-fbso.4).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn set(cx: &mut App, speller: Box<dyn Speller>) {
         let generation = Spelling::generation(cx) + 1;
         cx.set_global(Spelling { speller, generation });
@@ -76,6 +78,7 @@ impl Spelling {
 }
 
 /// Char offset of each UTF-16 offset in `text` (macOS reports ranges in UTF-16).
+#[cfg(any(target_os = "macos", test))]
 fn utf16_to_char(text: &str) -> Vec<usize> {
     let mut map = Vec::with_capacity(text.len() + 1);
     for (i, ch) in text.chars().enumerate() {

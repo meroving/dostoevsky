@@ -1546,6 +1546,7 @@ dependencies = [
  "export",
  "gpui-kit",
  "gpui-pre-apple",
+ "gpui-pre-wgpu",
  "image",
  "l10n",
  "notify",

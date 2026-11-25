@@ -24,6 +24,37 @@ jobs:
       - uses: actions/checkout@v4
       - uses: EmbarkStudios/cargo-deny-action@v2
 
+  linux:
+    # The app builds and its tests pass off the Mac (dsky-fbso); tests that need what only
+    # macOS has so far (PDF, hyphenation, the word tagger, dates in other languages) are
+    # ignored there, each naming its bead.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: GPUI's Linux libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev \
+            libasound2-dev libzstd-dev
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked -p dostoevsky --features shots -- -D warnings
+
+      - name: Tests (unit, behaviour, property, headless app)
+        run: cargo test --locked --workspace
+
   macos:
     runs-on: macos-15
     timeout-minutes: 75
