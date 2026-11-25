@@ -60,3 +60,7 @@ gpui-kit = { version = "=0.8.0", default-features = false, features = ["assets",
 # headless UI tests shape text exactly like the app (src/ui_tests).
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-pre-apple = "=0.3.9"
+
+# Off the Mac, the cosmic-text system GPUI's Linux and Windows platforms shape with (dsky-fbso.12).
+[target.'cfg(not(target_os = "macos"))'.dev-dependencies]
+gpui-pre-wgpu = "=0.3.9"

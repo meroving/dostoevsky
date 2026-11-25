@@ -143,7 +143,11 @@ impl Ui {
     fn app() -> TestApp {
         // Keys never touch the real Keychain in tests (ai::secrets keeps them per thread).
         std::env::set_var("DOSTOEVSKY_SECRETS", "memory");
+        #[cfg(target_os = "macos")]
         let text_system = Arc::new(gpui_apple::AppleTextSystem::new());
+        // The bundled fonts are loaded below; Quattro stands in for a missing system UI font.
+        #[cfg(not(target_os = "macos"))]
+        let text_system = Arc::new(gpui_wgpu::CosmicTextSystem::new(crate::theme::QUATTRO));
         let mut app = TestApp::with_text_system_and_assets(text_system, Arc::new(crate::theme::Assets));
         app.update(|cx| {
             gpui_kit::init(cx);

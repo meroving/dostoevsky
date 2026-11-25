@@ -815,6 +815,7 @@ fn a_file_can_grow_into_its_folder() {
 }
 
 #[test]
+#[cfg_attr(not(target_os = "macos"), ignore = "the sandbox is the Mac App Store's")]
 fn enclosing_folder_asks_under_the_sandbox() {
     use std::os::unix::fs::PermissionsExt;
     let d = book();
@@ -1237,6 +1238,7 @@ fn new_project_makes_a_journal_and_refuses_a_taken_name() {
 
 /// PROJ-1
 #[test]
+#[cfg_attr(not(target_os = "macos"), ignore = "the sandbox is the Mac App Store's")]
 fn new_project_asks_once_for_a_place_the_sandbox_hasnt_granted() {
     use std::os::unix::fs::PermissionsExt;
     let place = TempDir::new("writing-sandbox");

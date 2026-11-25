@@ -181,6 +181,7 @@ mod tests {
     use l10n::Lang;
 
     #[test]
+    #[cfg_attr(not(target_os = "macos"), ignore = "dates in other languages: dsky-fbso.15")]
     fn the_mac_writes_the_date_in_each_language() {
         assert_eq!(format_in(Lang::En, 2026, 11, 15, Form::Long).as_deref(), Some("Sunday, 15 November 2026"));
         assert_eq!(format_in(Lang::En, 2026, 11, 15, Form::Short).as_deref(), Some("15 Nov 2026"));
@@ -192,6 +193,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(not(target_os = "macos"), ignore = "dates in other languages: dsky-fbso.15")]
     fn a_date_reads_as_itself_in_any_language_and_form() {
         for lang in Lang::ALL {
             for form in [Form::Long, Form::Short, Form::MonthYear] {

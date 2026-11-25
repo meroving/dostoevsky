@@ -1,4 +1,7 @@
 //! Runs off the main thread: TextKit objects owned by one thread are fine.
+// The page composition below is plain Rust; off the Mac only the tests use it until a
+// cross-platform renderer does (dsky-fbso.3).
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
 
 #[allow(unused_imports)]
 use export::Book;

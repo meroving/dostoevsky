@@ -381,6 +381,7 @@ fn file_11_export_markdown() {
 }
 
 #[test]
+#[cfg_attr(not(target_os = "macos"), ignore = "no PDF: dsky-fbso.3")]
 fn file_11_export_pdf_word_and_epub() {
     let dir = TempDir::new("export-formats");
     let mut ui = Ui::open_file(&dir.file("essay.md", "# The garret\n\nOn an exceptionally hot evening.\n"));
