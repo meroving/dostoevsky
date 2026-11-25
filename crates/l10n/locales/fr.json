@@ -144,6 +144,7 @@
   "Couldn't move it to the Trash: {error}": "Impossible de le placer dans la corbeille : {error}",
   "Couldn't open {path}: {error}": "Impossible d’ouvrir {path} : {error}",
   "Couldn't save the key: {e}": "Impossible d’enregistrer la clé : {e}",
+  "no keyring is running (GNOME Keyring or KWallet)": "aucun trousseau n’est lancé (GNOME Keyring ou KWallet)",
   "Couldn't save the project’s type: {error}": "Impossible d’enregistrer le type du projet : {error}",
   "Couldn't save {path}": "Impossible d’enregistrer {path}",
   "Couldn't undo: {error}": "Impossible d’annuler : {error}",

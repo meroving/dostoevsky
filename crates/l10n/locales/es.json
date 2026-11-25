@@ -144,6 +144,7 @@
   "Couldn't move it to the Trash: {error}": "No se ha podido trasladar a la Papelera: {error}",
   "Couldn't open {path}: {error}": "No se ha podido abrir {path}: {error}",
   "Couldn't save the key: {e}": "No se ha podido guardar la clave: {e}",
+  "no keyring is running (GNOME Keyring or KWallet)": "no hay ningún llavero en marcha (GNOME Keyring o KWallet)",
   "Couldn't save the project’s type: {error}": "No se ha podido guardar el tipo del proyecto: {error}",
   "Couldn't save {path}": "No se ha podido guardar {path}",
   "Couldn't undo: {error}": "No se ha podido deshacer: {error}",

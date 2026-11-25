@@ -144,6 +144,7 @@
   "Couldn't move it to the Trash: {error}": "Konnte nicht in den Papierkorb gelegt werden: {error}",
   "Couldn't open {path}: {error}": "{path} konnte nicht geöffnet werden: {error}",
   "Couldn't save the key: {e}": "Der Schlüssel konnte nicht gesichert werden: {e}",
+  "no keyring is running (GNOME Keyring or KWallet)": "kein Schlüsselbund läuft (GNOME Keyring oder KWallet)",
   "Couldn't save the project’s type: {error}": "Der Projekttyp konnte nicht gesichert werden: {error}",
   "Couldn't save {path}": "{path} konnte nicht gesichert werden",
   "Couldn't undo: {error}": "Widerrufen fehlgeschlagen: {error}",

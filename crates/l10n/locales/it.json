@@ -144,6 +144,7 @@
   "Couldn't move it to the Trash: {error}": "Impossibile spostarlo nel Cestino: {error}",
   "Couldn't open {path}: {error}": "Impossibile aprire {path}: {error}",
   "Couldn't save the key: {e}": "Impossibile salvare la chiave: {e}",
+  "no keyring is running (GNOME Keyring or KWallet)": "nessun portachiavi è attivo (GNOME Keyring o KWallet)",
   "Couldn't save the project’s type: {error}": "Impossibile salvare il tipo del progetto: {error}",
   "Couldn't save {path}": "Impossibile salvare {path}",
   "Couldn't undo: {error}": "Impossibile annullare: {error}",

@@ -50,7 +50,7 @@ The product spec and decision records are maintained separately and aren't publi
   (.docx) / ePub writers, a small zip. No UI; PDF is the app's.
 - `crates/ai`: v2 AI with no UI (TECH-NOTES §11): one OpenAI-compatible Chat Completions client
   (ureq, blocking, SSE), services and models, prompts for ideas / Lab passes / trims, anchoring
-  replies to numbered sentences, Keychain keys (`DOSTOEVSKY_SECRETS=memory` in tests), OpenRouter PKCE.
+  replies to numbered sentences, keys in the Keychain (Secret Service / Credential Manager off the Mac; `DOSTOEVSKY_SECRETS=memory` in tests), OpenRouter PKCE.
 - `crates/app` (binary `dostoevsky`, gpui-kit 0.8): `view.rs` is the custom text element
   (`TextView` + `PageElement`) used for the page, Overflow notes and fields; `workspace.rs`
   is the window; `panels.rs` (which side each panel tab lives on, dragging tabs between the headers, what a side shows), `sidebar.rs`, `overflow.rs` (the Drawer panel; `drawer.rs` keeps a project's drawer), `context_menu.rs`, `panel_foot.rs` (the left panel's foot: Open, Save, Finder, Settings; the Project tab with no project), `sheets.rs` (source view,

@@ -20,4 +20,15 @@ base64 = "0.22"
 [target.'cfg(target_os = "macos")'.dependencies]
 security-framework = "3"
 
+# Keys off the Mac (dsky-fbso.6): the Secret Service on Linux (GNOME Keyring, KWallet) over a
+# pure-Rust D-Bus, the Credential Manager on Windows.
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+keyring-core = "1.1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+zbus-secret-service-keyring-store = { version = "1.0", features = ["rt-async-io-crypto-rust"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-native-keyring-store = { version = "1.1", default-features = false }
+
 [dev-dependencies]
