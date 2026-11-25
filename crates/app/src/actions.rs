@@ -186,8 +186,94 @@ actions!(find, [ToggleMatchCase, ToggleWholeWords]);
 /// Title and (label, action) rows.
 pub type ShortcutGroup = (&'static str, Vec<(&'static str, Box<dyn Action>)>);
 
-/// (keys, context, action) for every default binding.
-pub fn default_bindings_spec() -> Vec<(&'static str, Option<&'static str>, Box<dyn Action>)> {
+/// (keys, context, action) for every default binding on this system: the Mac's as written below,
+/// elsewhere each keystroke through [`off_mac`] (dsky-fbso.8).
+pub fn default_bindings_spec() -> Vec<(String, Option<&'static str>, Box<dyn Action>)> {
+    if cfg!(target_os = "macos") {
+        mac_bindings().into_iter().map(|(k, c, a)| (k.to_string(), c, a)).collect()
+    } else {
+        bindings_off_mac()
+    }
+}
+
+/// The Mac's bindings translated, duplicates dropped (⌘← is Home, already bound), then what
+/// Windows and Linux add: Delete moves a project's file to the Trash.
+fn bindings_off_mac() -> Vec<(String, Option<&'static str>, Box<dyn Action>)> {
+    let mut out: Vec<(String, Option<&'static str>, Box<dyn Action>)> = Vec::new();
+    let extras = [("delete", Some("ProjectList"), Box::new(ListTrash) as Box<dyn Action>)];
+    let translated = mac_bindings().into_iter().filter_map(|(k, c, a)| Some((off_mac(k)?, c, a)));
+    for (k, c, a) in translated.chain(extras.into_iter().map(|(k, c, a)| (k.to_string(), c, a))) {
+        if !out.iter().any(|(k2, c2, a2)| *k2 == k && *c2 == c && a2.name() == a.name()) {
+            out.push((k, c, a));
+        }
+    }
+    out
+}
+
+/// A Mac keystroke as Windows and Linux would press it, or `None` where it has no counterpart.
+/// Context-free, so tests written with Mac keys press the same bindings elsewhere.
+/// ⌘ → Ctrl; ⌥⌘ → Alt (the app's own keys: alternatives, marks, comments); ⌃⌘ → Alt+Shift
+/// (sentences, Zen, typewriter); ⌥ on arrows and erase keys → Ctrl (words and paragraphs, as
+/// Windows and GNOME move); ⌘ on arrows → Home/End. The Emacs ⌃ keys go: they would shadow the
+/// Ctrl shortcuts. Hide, Minimize and the character palette are the Mac's.
+pub fn off_mac(keystroke: &str) -> Option<String> {
+    let special = match keystroke {
+        "cmd-left" => Some("home"),
+        "cmd-right" => Some("end"),
+        "cmd-shift-left" => Some("shift-home"),
+        "cmd-shift-right" => Some("shift-end"),
+        "cmd-up" => Some("ctrl-home"),
+        "cmd-down" => Some("ctrl-end"),
+        "cmd-shift-up" => Some("ctrl-shift-home"),
+        "cmd-shift-down" => Some("ctrl-shift-end"),
+        "cmd-backspace" => Some("ctrl-shift-backspace"),
+        "cmd-delete" => Some("ctrl-shift-delete"),
+        // Each system's own: Replace, View Source, Print, Full Screen.
+        "alt-cmd-f" => Some("ctrl-h"),
+        "alt-cmd-u" => Some("ctrl-u"),
+        "alt-cmd-p" => Some("ctrl-p"),
+        "cmd-p" => Some("ctrl-shift-p"),
+        "ctrl-cmd-f" => Some("f11"),
+        "cmd-h" | "alt-cmd-h" | "cmd-m" | "ctrl-cmd-space" => return None,
+        _ => None,
+    };
+    if let Some(s) = special {
+        return Some(s.to_string());
+    }
+    let (mut ctrl, mut alt, mut shift, mut cmd) = (false, false, false, false);
+    let mut key = keystroke;
+    while let Some((m, rest)) = key.split_once('-').filter(|(_, rest)| !rest.is_empty()) {
+        match m {
+            "ctrl" => ctrl = true,
+            "alt" => alt = true,
+            "shift" => shift = true,
+            "cmd" => cmd = true,
+            _ => break,
+        }
+        key = rest;
+    }
+    let erase_or_arrow = matches!(key, "left" | "right" | "up" | "down" | "backspace" | "delete");
+    let (ctrl, alt, shift) = match (ctrl, alt, cmd) {
+        (false, false, false) => (false, false, shift),
+        (false, false, true) => (true, false, shift),
+        (false, true, true) => (false, true, shift),
+        (true, false, true) if !shift => (false, true, true),
+        (false, true, false) if erase_or_arrow => (true, false, shift),
+        (false, true, false) => (false, true, shift),
+        _ => return None,
+    };
+    let mut out = String::new();
+    for (on, m) in [(ctrl, "ctrl-"), (alt, "alt-"), (shift, "shift-")] {
+        if on {
+            out.push_str(m);
+        }
+    }
+    out.push_str(key);
+    Some(out)
+}
+
+/// (keys, context, action) as on the Mac.
+fn mac_bindings() -> Vec<(&'static str, Option<&'static str>, Box<dyn Action>)> {
     let t = Some("TextView");
     let p = Some("Page");
     vec![
@@ -725,4 +811,68 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
             MenuItem::action(tr!("Dostoevsky Support"), ShowSupport),
         ]),
     ]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{bindings_off_mac, mac_bindings, off_mac};
+
+    #[test]
+    fn mac_keys_as_windows_and_linux_press_them() {
+        let cases = [
+            ("cmd-s", Some("ctrl-s")),
+            ("cmd-shift-z", Some("ctrl-shift-z")),
+            ("cmd--", Some("ctrl--")),
+            ("cmd-+", Some("ctrl-+")),
+            ("alt-left", Some("ctrl-left")),
+            ("alt-shift-down", Some("ctrl-shift-down")),
+            ("alt-backspace", Some("ctrl-backspace")),
+            ("alt-cmd-down", Some("alt-down")),
+            ("alt-cmd-a", Some("alt-a")),
+            ("alt-cmd-[", Some("alt-[")),
+            ("ctrl-cmd-left", Some("alt-shift-left")),
+            ("ctrl-cmd-z", Some("alt-shift-z")),
+            ("cmd-left", Some("home")),
+            ("cmd-shift-down", Some("ctrl-shift-end")),
+            ("alt-cmd-p", Some("ctrl-p")),
+            ("ctrl-cmd-f", Some("f11")),
+            ("shift-enter", Some("shift-enter")),
+            ("escape", Some("escape")),
+            ("ctrl-a", None),
+            ("ctrl-shift-cmd-left", None),
+            ("cmd-h", None),
+        ];
+        for (mac, pc) in cases {
+            assert_eq!(off_mac(mac).as_deref(), pc, "{mac}");
+        }
+    }
+
+    /// Off the Mac no two default bindings share keys in one context (unless they're the same
+    /// action twice), and no global or page binding hides another of the page's.
+    #[test]
+    fn off_the_mac_no_two_bindings_collide() {
+        let all = bindings_off_mac();
+        let editor = |c: Option<&str>| matches!(c, None | Some("TextView") | Some("Page"));
+        for (i, (k, c, a)) in all.iter().enumerate() {
+            for (k2, c2, a2) in &all[i + 1..] {
+                if k != k2 || a.name() == a2.name() {
+                    continue;
+                }
+                assert!(c != c2, "{k} in {c:?}: {} and {}", a.name(), a2.name());
+                assert!(!(editor(*c) && editor(*c2)), "{k}: {} in {c:?}, {} in {c2:?}", a.name(), a2.name());
+            }
+        }
+    }
+
+    /// The keys that have no counterpart off the Mac, so none is lost by accident.
+    #[test]
+    fn what_stays_on_the_mac() {
+        let mut gone: Vec<&str> = mac_bindings().into_iter().filter(|(k, _, _)| off_mac(k).is_none()).map(|(k, _, _)| k).collect();
+        gone.sort();
+        gone.dedup();
+        assert_eq!(
+            gone,
+            ["alt-cmd-h", "cmd-h", "cmd-m", "ctrl-a", "ctrl-b", "ctrl-cmd-space", "ctrl-d", "ctrl-e", "ctrl-f", "ctrl-h", "ctrl-k", "ctrl-n", "ctrl-p", "ctrl-shift-cmd-left", "ctrl-shift-cmd-right", "ctrl-t"]
+        );
+    }
 }

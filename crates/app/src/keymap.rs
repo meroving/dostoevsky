@@ -5,6 +5,7 @@ use gpui_kit::*;
 use l10n::tr;
 use serde_json::Value;
 
+#[cfg(target_os = "macos")]
 pub const TEMPLATE: &str = r#"// Dostoevsky key bindings. Saved changes apply immediately.
 // Each section has an optional "context" (Page, TextView, Note, Field, Workspace, Sheet)
 // and "bindings": keystrokes → action name. Use null to remove a default binding.
@@ -14,6 +15,21 @@ pub const TEMPLATE: &str = r#"// Dostoevsky key bindings. Saved changes apply im
     "context": "Page",
     "bindings": {
       // "cmd-k": "page::GhostToggle"
+    }
+  }
+]
+"#;
+
+#[cfg(not(target_os = "macos"))]
+pub const TEMPLATE: &str = r#"// Dostoevsky key bindings. Saved changes apply immediately.
+// Each section has an optional "context" (Page, TextView, Note, Field, Workspace, Sheet)
+// and "bindings": keystrokes → action name. Use null to remove a default binding.
+// Action names: see the shortcuts sheet (Ctrl+Shift+K) or the Help menu.
+[
+  {
+    "context": "Page",
+    "bindings": {
+      // "ctrl-k": "page::GhostToggle"
     }
   }
 ]
@@ -163,7 +179,7 @@ pub fn apply_text(text: &str, cx: &mut App) -> Vec<String> {
     let defaults = crate::actions::default_bindings_spec()
         .into_iter()
         .filter(|(keys, ctx, _)| !removed.iter().any(|(k, c)| k == keys && c.as_deref() == *ctx))
-        .map(|(keys, ctx, action)| KeyBinding::load(keys, action, ctx.and_then(|c| KeyBindingContextPredicate::parse(c).ok()).map(Rc::new), false, None, &DummyKeyboardMapper))
+        .map(|(keys, ctx, action)| KeyBinding::load(&keys, action, ctx.and_then(|c| KeyBindingContextPredicate::parse(c).ok()).map(Rc::new), false, None, &DummyKeyboardMapper))
         .filter_map(Result::ok)
         .collect::<Vec<_>>();
     cx.bind_keys(defaults);

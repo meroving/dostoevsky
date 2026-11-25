@@ -249,6 +249,7 @@ fn ed_6_find_next_and_previous() {
 }
 
 #[test]
+#[cfg_attr(not(target_os = "macos"), ignore = "the Emacs keys are Cocoa's; off the Mac they'd shadow Ctrl shortcuts")]
 fn ed_3_cocoa_text_keys() {
     let mut ui = Ui::open(DOC);
     let second = ui.find("Editors").start;

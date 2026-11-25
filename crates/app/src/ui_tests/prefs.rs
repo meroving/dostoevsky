@@ -356,15 +356,17 @@ fn view_menu_checks_the_current_settings() {
 #[test]
 fn kb_2_user_keymap() {
     let mut ui = Ui::open(DOC);
-    let errors = ui.with_app(|cx| {
-        crate::keymap::apply_text(
-            r#"// my keys
+    // Written in this system's keys, as its user would.
+    let key = |k: &str| crate::actions::off_mac(k).filter(|_| !cfg!(target_os = "macos")).unwrap_or(k.to_string());
+    let json = format!(
+        r#"// my keys
             [
-              { "context": "Page", "bindings": { "cmd-k": "page::GhostToggle", "cmd-/": null } },
+              {{ "context": "Page", "bindings": {{ "{}": "page::GhostToggle", "{}": null }} }},
             ]"#,
-            cx,
-        )
-    });
+        key("cmd-k"),
+        key("cmd-/")
+    );
+    let errors = ui.with_app(|cx| crate::keymap::apply_text(&json, cx));
     assert!(errors.is_empty(), "{errors:?}");
     ui.select_text("friction");
     ui.keys("cmd-/");
@@ -372,17 +374,17 @@ fn kb_2_user_keymap() {
     ui.keys("cmd-k");
     assert_eq!(ui.ghosts(), [ui.find("friction")]);
     let label = ui.read(|_, cx| crate::context_menu::shortcut_label(&crate::actions::GhostToggle, cx));
-    assert_eq!(label.as_deref(), Some("⌘K"));
+    assert_eq!(label, Some(crate::ui_tests::key_label("⌘K")));
 }
 
 #[test]
 fn kb_2_bad_entries_are_reported() {
     let mut ui = Ui::open(DOC);
-    let errors = ui.with_app(|cx| {
-        crate::keymap::apply_text(r#"[{ "bindings": { "cmd-k": "page::NoSuchAction", "cmd-j": "page::GhostToggle" } }]"#, cx)
-    });
+    let key = |k: &str| crate::actions::off_mac(k).filter(|_| !cfg!(target_os = "macos")).unwrap_or(k.to_string());
+    let json = format!(r#"[{{ "bindings": {{ "{}": "page::NoSuchAction", "{}": "page::GhostToggle" }} }}]"#, key("cmd-k"), key("cmd-j"));
+    let errors = ui.with_app(|cx| crate::keymap::apply_text(&json, cx));
     assert_eq!(errors.len(), 1, "{errors:?}");
-    assert!(errors[0].starts_with("cmd-k"), "{errors:?}");
+    assert!(errors[0].starts_with(&key("cmd-k")), "{errors:?}");
     ui.select_text("friction");
     ui.keys("cmd-j");
     assert_eq!(ui.ghosts().len(), 1);
@@ -504,9 +506,10 @@ fn text_size_shortcut_rows() {
             crate::context_menu::shortcut_label(&crate::actions::TextDefaultSize, cx),
         )
     });
-    assert_eq!(bigger.as_deref(), Some("⌘="));
-    assert_eq!(smaller.as_deref(), Some("⌘−"));
-    assert_eq!(default.as_deref(), Some("⌘0"));
+    use crate::ui_tests::key_label;
+    assert_eq!(bigger, Some(key_label("⌘=")));
+    assert_eq!(smaller, Some(key_label("⌘−")));
+    assert_eq!(default, Some(key_label("⌘0")));
 
     let app = crate::actions::shortcut_groups()
         .into_iter()

@@ -20,7 +20,13 @@ fn ed_10_walk_by_sentence() {
     assert_eq!(ui.selection().start, ui.find("His garret").start, "the start of this sentence first");
 
     ui.caret_at(ui.find("His garret").start);
-    ui.keys("ctrl-shift-cmd-right ctrl-shift-cmd-right");
+    if cfg!(target_os = "macos") {
+        ui.keys("ctrl-shift-cmd-right ctrl-shift-cmd-right");
+    } else {
+        // No key off the Mac: Ctrl+Alt+Shift+arrows move windows between GNOME's workspaces.
+        ui.action(crate::actions::SelectNextSentence);
+        ui.action(crate::actions::SelectNextSentence);
+    }
     assert_eq!(ui.selection(), ui.find("His garret").start..and);
 }
 
