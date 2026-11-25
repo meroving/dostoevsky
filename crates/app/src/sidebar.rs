@@ -178,7 +178,7 @@ pub(crate) fn keys_footer(keys: Vec<FooterKey>) -> impl IntoElement {
                 .flex()
                 .gap(px(5.))
                 .when(lit, |d| d.text_color(c(theme::accent())))
-                .child(div().text_color(c(if lit { theme::accent() } else { theme::muted() })).child(k))
+                .child(div().text_color(c(if lit { theme::accent() } else { theme::muted() })).child(crate::os_text::key(k)))
                 .child(what)
         }))
         .test_support()

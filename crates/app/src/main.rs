@@ -28,6 +28,7 @@ mod list_panel;
 mod markdown;
 mod memory;
 mod model;
+mod os_text;
 mod overflow;
 mod panel_foot;
 mod panels;

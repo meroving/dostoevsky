@@ -40,36 +40,9 @@ use crate::prefs::{Effects, Prefs};
 use crate::view::TextView;
 use crate::workspace::Workspace;
 
-/// A shortcut label as the Mac shows it ("⇧⌘A"), as this system shows it: the same off the
-/// Mac's keys through `actions::off_mac` ("Ctrl+Shift+A").
+/// A shortcut label as the Mac shows it ("⇧⌘A"), as this system shows it ("Ctrl+Shift+A").
 pub fn key_label(mac: &str) -> String {
-    if cfg!(target_os = "macos") {
-        return mac.to_string();
-    }
-    let mut keys = String::new();
-    let mut rest = mac;
-    for (glyph, m) in [('⌃', "ctrl-"), ('⌥', "alt-"), ('⇧', "shift-"), ('⌘', "cmd-")] {
-        if let Some(r) = rest.strip_prefix(glyph) {
-            keys.push_str(m);
-            rest = r;
-        }
-    }
-    let key = match rest {
-        "↑" => "up".to_string(),
-        "↓" => "down".into(),
-        "←" => "left".into(),
-        "→" => "right".into(),
-        "↩" => "enter".into(),
-        "⌫" => "backspace".into(),
-        "⌦" => "delete".into(),
-        "⇥" => "tab".into(),
-        "−" => "-".into(),
-        k => k.to_lowercase(),
-    };
-    keys.push_str(&key);
-    let pc = crate::actions::off_mac(&keys).unwrap_or_else(|| panic!("{mac} has no key off the Mac"));
-    let k = gpui_kit::Keystroke::parse(&pc).expect("a keystroke");
-    crate::context_menu::format_keystroke(&k.modifiers, &k.key)
+    crate::os_text::key(mac)
 }
 
 #[derive(Debug, PartialEq)]
