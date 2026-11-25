@@ -419,7 +419,7 @@ pub fn format_keystroke(m: &Modifiers, key: &str) -> String {
 }
 
 /// "Ctrl+Shift+A", "Alt+↓", "Ctrl+Home", as Windows and GNOME write them.
-fn pc_keystroke(m: &Modifiers, key: &str) -> String {
+pub fn pc_keystroke(m: &Modifiers, key: &str) -> String {
     let mut parts: Vec<String> = Vec::new();
     for (on, name) in [(m.control, "Ctrl"), (m.alt, "Alt"), (m.shift, "Shift"), (m.platform, "Super")] {
         if on {
@@ -593,7 +593,7 @@ impl Workspace {
                 None => div().h(px(1.)).my(px(5.)).mx(px(6.)).bg(c(theme::menu_sep())).into_any_element(),
                 Some(it) => {
                     let enabled = it.command.is_some();
-                    let keys = it.shortcut.as_ref().and_then(|a| shortcut_label(a.as_ref(), cx)).or(it.keys.map(String::from));
+                    let keys = it.shortcut.as_ref().and_then(|a| shortcut_label(a.as_ref(), cx)).or(it.keys.map(crate::os_text::key));
                     div()
                         .id(("menu", i))
                         .flex()
