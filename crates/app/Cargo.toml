@@ -19,6 +19,9 @@ english = { path = "../english" }
 prose = { path = "../prose" }
 gpui-kit = { version = "=0.8.0", default-features = false, features = ["assets"] }
 unicode-segmentation = "1"
+# Spelling off the Mac: Hunspell dictionaries (pure Rust), read in the encoding they name.
+spellbook = "0.4"
+encoding_rs = "0.8"
 rodio = { version = "0.21", default-features = false, features = ["playback"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"

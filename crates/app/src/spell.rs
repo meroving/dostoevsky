@@ -24,8 +24,6 @@ pub struct Spelling {
 impl Global for Spelling {}
 
 impl Spelling {
-    // Only the Mac has a speller so far (Linux and Windows: dsky-fbso.4).
-    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     pub fn set(cx: &mut App, speller: Box<dyn Speller>) {
         let generation = Spelling::generation(cx) + 1;
         cx.set_global(Spelling { speller, generation });
@@ -35,8 +33,20 @@ impl Spelling {
     pub fn init(cx: &mut App) {
         #[cfg(target_os = "macos")]
         Spelling::set(cx, Box::new(mac::MacSpeller::new()));
+        // Off the Mac, Hunspell's dictionaries are read off the main thread (a big one takes a
+        // moment); with none installed nothing is underlined.
         #[cfg(not(target_os = "macos"))]
-        let _ = cx;
+        {
+            let (dirs, languages) = (crate::hunspell::dictionary_dirs(), crate::hunspell::wanted_languages());
+            let learned = crate::files::support_dir().map(|d| d.join("Spelling").join("learned.txt"));
+            cx.spawn(async move |cx| {
+                let speller = cx.background_executor().spawn(async move { crate::hunspell::Hunspell::load(&dirs, &languages, learned) }).await;
+                if let Some(speller) = speller {
+                    cx.update(|cx| Spelling::set(cx, Box::new(speller)));
+                }
+            })
+            .detach();
+        }
     }
 
     /// Deferred past the first frame: loading frameworks and checking every line would delay it.

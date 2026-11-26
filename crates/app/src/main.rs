@@ -20,6 +20,7 @@ mod external;
 mod files;
 mod find;
 mod format;
+mod hunspell;
 mod hyphen;
 mod ideas;
 mod keymap;
