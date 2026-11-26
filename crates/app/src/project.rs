@@ -1043,7 +1043,6 @@ mod tests {
 
     /// PROJ-6
     #[test]
-    #[cfg_attr(not(target_os = "macos"), ignore = "dates in other languages: dsky-fbso.15")]
     fn a_day_has_a_heading_in_each_form() {
         let day = Day { year: 2026, month: 11, day: 15 };
         assert_eq!(day.heading(DateHeading::Long).as_deref(), Some("Sunday, 15 November 2026"));

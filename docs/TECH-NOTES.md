@@ -283,7 +283,14 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   (`dates::says`) takes the date as any shipped language writes it, words in any order,
   punctuation aside, abbreviations as a name's start: a day written under another UI language,
   an older macOS or Dostoevsky 1.0 (whose catalogs spelt dates) still reads as its date. Tests
-  pin the region to Britain.
+  pin the region to Britain. Off the Mac (dsky-fbso.15) ICU4X writes the same forms from its own
+  CLDR, in the UI's language and the locale's region (`LC_ALL` / `LC_TIME` / `LANG`): each
+  form's locale pattern comes from the field set the template asks for (YMDE long for
+  `EEEEdMMMMy`, YMD medium for `dMMMy` — or the long one with its month abbreviated where the
+  medium is numeric, as German's — YM, M, DE, MD), and every pattern is written through
+  `FixedCalendarDateTimeNames::include_for_pattern`: ICU4X 2.4's own formatters leave out the
+  number formatter for Russian's month and year and Brazilian Portuguese's month alone. A Mac
+  test holds the two against each other word for word, CLDR versions' abbreviations aside.
 - **The AI button** (once LAB, the Lab) says AI in each language's word: ИИ, KI, IA. German
   addresses the user with *du*, as Apple's German macOS does.
 - **What stays English:** file and folder names the app writes (notes/, Backups, untitled.md),
