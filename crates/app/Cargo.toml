@@ -19,6 +19,8 @@ english = { path = "../english" }
 prose = { path = "../prose" }
 gpui-kit = { version = "=0.8.0", default-features = false, features = ["assets"] }
 unicode-segmentation = "1"
+# Hyphenation off the Mac: TeX's patterns for the languages the app reads (hyphen.rs).
+hypher = { version = "0.1", default-features = false, features = ["alloc", "english", "russian", "german", "french", "spanish", "italian", "portuguese"] }
 # Spelling off the Mac: Hunspell dictionaries (pure Rust), read in the encoding they name.
 spellbook = "0.4"
 encoding_rs = "0.8"

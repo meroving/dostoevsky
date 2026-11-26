@@ -1,7 +1,8 @@
 //! The final text as pages: a PDF, the Export sheet's preview bitmaps, printing. On the Mac
 //! TextKit sets the `pdf` crate's page composition and PDFKit prints (runs off the main thread:
 //! TextKit objects owned by one thread are fine); elsewhere the crate's own engine sets and draws
-//! the pages (dsky-fbso.3), and printing waits for its own bead.
+//! the pages (dsky-fbso.3), hyphenated by `hyphen.rs`'s patterns, and printing waits for its
+//! own bead.
 
 #[cfg(not(target_os = "macos"))]
 use std::sync::Arc;
@@ -41,8 +42,13 @@ mod engine {
     }
 
     pub fn render(book: &Book, o: &Options) -> Pdf {
-        // Hyphenation points come with dsky-fbso.5; until then words break whole.
-        let pdf = ::pdf::render(book, o, fonts(), &|_| Vec::new());
+        // The book's language hyphenates, as the page does (hyphen.rs).
+        let lang = book.language.as_deref().and_then(|code| {
+            let primary = code.split(['-', '_']).next().unwrap_or("");
+            prose::Lang::ALL.into_iter().find(|l| l.code().eq_ignore_ascii_case(primary))
+        });
+        let hyphenate = |word: &str| lang.map(|l| crate::hyphen::breaks(word, l).to_vec()).unwrap_or_default();
+        let pdf = ::pdf::render(book, o, fonts(), &hyphenate);
         Pdf { pages: pdf.pages(), bytes: pdf.bytes, laid: Some(pdf.laid) }
     }
 

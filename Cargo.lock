@@ -1622,6 +1622,7 @@ dependencies = [
  "gpui-kit",
  "gpui-pre-apple",
  "gpui-pre-wgpu",
+ "hypher",
  "icu_calendar",
  "icu_datetime",
  "icu_locale_core",
@@ -3652,6 +3653,12 @@ dependencies = [
  "tower-service",
  "tracing",
 ]
+
+[[package]]
+name = "hypher"
+version = "0.1.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "45f2b4f6b5da34d400d4c112eadcc14512cc5d04307a8eee182586d9bebd7ce6"
 
 [[package]]
 name = "iana-time-zone"
