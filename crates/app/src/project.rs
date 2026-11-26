@@ -913,7 +913,7 @@ mod tests {
 
         fn names(&self) -> Vec<String> {
             let mut out: Vec<String> =
-                walk(&self.0).into_iter().map(|(p, _)| p.strip_prefix(&self.0).unwrap().to_string_lossy().into_owned()).collect();
+                walk(&self.0).into_iter().map(|(p, _)| p.strip_prefix(&self.0).unwrap().to_string_lossy().replace('\\', "/")).collect();
             out.sort();
             out
         }

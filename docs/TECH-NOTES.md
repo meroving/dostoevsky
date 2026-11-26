@@ -352,7 +352,7 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   copies; faces are ordered by what they are, never by address, so the same pages give the same
   bytes. `raster.rs` draws the preview from the laid-out glyphs' outlines with tiny-skia instead
   of reading the PDF back (`Pdf` keeps the layout). Its tests read the files back with a small
-  reader of their own (`tests/common/read.rs`); `cargo run -p pdf --example sample` writes each
+  reader of their own (`tests/common/read.rs`); `cargo run -p pdf --example pdf_sample` writes each
   style's PDF and first pages as .bmp to `target/pdf-sample/`. Print off the Mac is not there
   yet: `print` returns false.
 - **Copy Final Text** writes one pasteboard item with `public.html`, `public.rtf` (AppKit's HTML

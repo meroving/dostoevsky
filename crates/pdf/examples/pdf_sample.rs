@@ -1,4 +1,4 @@
-//! `cargo run -p pdf --example sample` → each style's PDF and its first pages as bitmaps (.bmp)
+//! `cargo run -p pdf --example pdf_sample` → each style's PDF and its first pages as bitmaps (.bmp)
 //! in `target/pdf-sample/`, set in the app's own faces: to look at what the engine makes.
 
 #[path = "../tests/common/mod.rs"]
