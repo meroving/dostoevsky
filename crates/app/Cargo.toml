@@ -12,6 +12,8 @@ l10n = { path = "../l10n" }
 doc-model = { path = "../doc-model" }
 doc-format = { path = "../doc-format" }
 export = { path = "../export" }
+# The page composition, and off the Mac the engine that sets and draws the pages.
+pdf = { path = "../pdf" }
 ai = { path = "../ai" }
 english = { path = "../english" }
 prose = { path = "../prose" }

@@ -16,6 +16,7 @@ scripts/perf_check.sh                        # NFR-1 budgets (frames, open, cold
 cargo run --release -p doc-model --example bench_large                     # latency check
 cargo run --release -p doc-format --example bench_format                   # save/load at 100k words
 cargo run -p export --example sample                                   # every export format → target/export-sample
+cargo run -p pdf --example sample                                      # the PDF engine (off the Mac's) → target/pdf-sample: PDFs and page bitmaps
 OPENROUTER_API_KEY=… cargo run -p ai --example eval                        # real prompts against a real model (costs money)
 OPENROUTER_API_KEY=… cargo run -p ai --example word_versions               # Word choice alternatives, old ask vs new, judged blind (~$0.10)
 scripts/run_flows.sh [flow…]                 # PRD §7 flows against the real app → target/flows/*.png
@@ -48,6 +49,10 @@ The product spec and decision records are maintained separately and aren't publi
 - `crates/export`: the final text leaves the app (TECH-NOTES §13): Markdown → blocks with where
   alternatives were, three styles and their Text settings, Markdown / plain text / HTML / Word
   (.docx) / ePub writers, a small zip. No UI; PDF is the app's.
+- `crates/pdf`: the final text's pages with no UI (TECH-NOTES §13): the page composition both
+  engines share, and off the Mac the whole engine: fonts (bundled, then the system's), rustybuzz
+  shaping, lines and pages by TextKit's measured rules, a PDF with subset fonts (pdf-writer,
+  subsetter), the preview's bitmaps (tiny-skia).
 - `crates/ai`: v2 AI with no UI (TECH-NOTES §11): one OpenAI-compatible Chat Completions client
   (ureq, blocking, SSE), services and models, prompts for ideas / Lab passes / trims, anchoring
   replies to numbered sentences, keys in the Keychain (Secret Service / Credential Manager off the Mac; `DOSTOEVSKY_SECRETS=memory` in tests), OpenRouter PKCE.
@@ -58,7 +63,7 @@ The product spec and decision records are maintained separately and aren't publi
   `effects.rs`, `sound.rs`, `spell.rs` (NSSpellChecker), `keymap.rs`, `memory.rs`,
   `sentence_keys.rs` (walk, grow and move by sentence and paragraph, ED-10…12; no UI),
   `export_ui.rs` (Copy Final Text, the Export sheet, Print), `pdf.rs` (TextKit pages into a PDF, the
-  preview's bitmaps, PDFKit printing),
+  preview's bitmaps, PDFKit printing; off the Mac `crates/pdf` does the pages),
   `bookmarks.rs` (security-scoped bookmarks: the sandboxed build reopens files after a relaunch); `project.rs`
   reads a folder from its file names and plans renames (no UI), `project_ui.rs` is a window on a
   project (the list, parked documents; TECH-NOTES "Projects"); `welcome.rs` builds the welcome page (WIN-19) from `assets/welcome/<lang>.md`; `shots.rs` is a dev-only script runner

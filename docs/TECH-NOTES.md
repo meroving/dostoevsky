@@ -299,8 +299,8 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   manuscript's running head is a header with a PAGE field; ePub 3 has nav, ncx, a cover and the
   Text as CSS without font or size (the reader's). `cargo run -p export --example sample` writes
   every format to `target/export-sample/`.
-- **PDF (`app/src/pdf.rs`)**: `compose()` turns blocks into paragraphs with looks (tested without
-  AppKit); on the Mac they become an `NSAttributedString` (fixed line height = size × spacing,
+- **PDF (`app/src/pdf.rs`, `crates/pdf`)**: `pdf::compose::compose()` turns blocks into paragraphs
+  with looks (no fonts in it, so both engines set the same paragraphs); on the Mac they become an `NSAttributedString` (fixed line height = size × spacing,
   `hyphenationFactor` with `NSLanguage` set to the text's language, so hyphens follow the same
   dictionaries as the page), laid out by TextKit 1 (`NSTextStorage` → `NSLayoutManager` → one
   `NSTextContainer` per page, a chapter per layout manager so each starts a page; a manuscript's
@@ -309,6 +309,26 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   objects owned by one thread are fine). The preview is that PDF: a page drawn into a BGRA bitmap
   (`rasterize`) shown as a GPUI `RenderImage`; Word's and ePub's previews are PDFs of their type.
   Print hands the PDF to PDFKit's print operation on the window (sandbox: `com.apple.security.print`).
+- **PDF off the Mac** (dsky-fbso.3): `crates/pdf` is its own engine, with no system text engine.
+  `font.rs` finds a family in the bundled files, then the system's font folders (read in pieces:
+  the `name` and `cmap` tables, not the outlines, until a face is used), then a stand-in
+  (Liberation Serif for Times New Roman…), then a bundled face of the same kind; a face without
+  bold or italic is stroked or leaned, and a face whose licence forbids embedding is skipped.
+  `shape.rs` shapes with rustybuzz, split by writing system, a missing character taking the first
+  face that has it. `layout.rs` breaks lines (UAX #14, `unicode-linebreak`) and pages by TextKit's
+  rules as measured on the Mac — baseline at line height − round(descender), pitch = line height
+  + the face's line gap, space before kept at a page's top except at a chapter's start, a line
+  ending at a forced break not justified — plus three of a typesetter's: no heading ends a page,
+  no paragraph leaves one line alone either side of a page, a paragraph's last word is never
+  hyphenated (hyphenation points come from a callback; dsky-fbso.5 supplies them). `write.rs`
+  writes the file with `pdf-writer`: each face once as a subset (`subsetter`; a variable face at
+  its default instance) in a Type0/Identity-H font with a ToUnicode map, so the text selects and
+  copies; faces are ordered by what they are, never by address, so the same pages give the same
+  bytes. `raster.rs` draws the preview from the laid-out glyphs' outlines with tiny-skia instead
+  of reading the PDF back (`Pdf` keeps the layout). Its tests read the files back with a small
+  reader of their own (`tests/common/read.rs`); `cargo run -p pdf --example sample` writes each
+  style's PDF and first pages as .bmp to `target/pdf-sample/`. Print off the Mac is not there
+  yet: `print` returns false.
 - **Copy Final Text** writes one pasteboard item with `public.html`, `public.rtf` (AppKit's HTML
   reader, then RTF) and the Markdown as `public.utf8-plain-text`; apps take the richest they read.
 - **The sheet (`app/src/export_ui.rs`)**: state in `Sheet::Export(ExportForm)`; every change bumps

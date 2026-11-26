@@ -604,7 +604,7 @@ impl Workspace {
                 .background_spawn(async move {
                     let pdf = crate::pdf::render(&book, &o);
                     let page = page.min(pdf.pages.saturating_sub(1));
-                    let image = crate::pdf::rasterize(&pdf.bytes, page, PREVIEW_PX);
+                    let image = crate::pdf::rasterize(&pdf, page, PREVIEW_PX);
                     (pdf, image)
                 })
                 .await;
@@ -634,7 +634,7 @@ impl Workspace {
         let version = f.preview.version;
         cx.notify();
         cx.spawn(async move |this, cx| {
-            let image = cx.background_spawn(async move { crate::pdf::rasterize(&pdf.bytes, page, PREVIEW_PX) }).await;
+            let image = cx.background_spawn(async move { crate::pdf::rasterize(&pdf, page, PREVIEW_PX) }).await;
             let _ = this.update(cx, |this, cx| {
                 if let Some(f) = this.export_form().filter(|f| f.preview.version == version && f.preview.page == page) {
                     f.preview.image_size = image.as_ref().map_or((0, 0), |b| (b.width, b.height));
