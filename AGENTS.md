@@ -16,7 +16,7 @@ scripts/perf_check.sh                        # NFR-1 budgets (frames, open, cold
 cargo run --release -p doc-model --example bench_large                     # latency check
 cargo run --release -p doc-format --example bench_format                   # save/load at 100k words
 cargo run -p export --example sample                                   # every export format → target/export-sample
-cargo run -p pdf --example sample                                      # the PDF engine (off the Mac's) → target/pdf-sample: PDFs and page bitmaps
+cargo run -p pdf --example pdf_sample                                    # the PDF engine (off the Mac's) → target/pdf-sample: PDFs and page bitmaps
 OPENROUTER_API_KEY=… cargo run -p ai --example eval                        # real prompts against a real model (costs money)
 OPENROUTER_API_KEY=… cargo run -p ai --example word_versions               # Word choice alternatives, old ask vs new, judged blind (~$0.10)
 scripts/run_flows.sh [flow…]                 # PRD §7 flows against the real app → target/flows/*.png

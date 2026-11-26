@@ -527,6 +527,9 @@ fn lab_hard_to_read_shows_long_sentences_at_once() {
     assert_eq!(marks(&ui), std::slice::from_ref(&long));
     assert!(ui.read(|ws, cx| ws.page.read(cx).lab.marks.len()) == 1, "the page draws the mark");
     assert!(ui.has_element("mark-kind") && ui.has_element(("review-row", 0usize)), "the list, not a busy line");
+    // The model's half fails on the refused port; Windows retries a refused connection for a
+    // couple of seconds, and esc during a request stops it rather than going back.
+    assert!(ui.wait_for(10., |ui| !lab_running(ui)), "the model's half has ended");
     ui.keys("escape");
     assert!(!ui.read(|ws, _| ws.lab.showing_results()), "esc goes back to the passes");
     assert_eq!(marks(&ui), std::slice::from_ref(&long), "and keeps the results");

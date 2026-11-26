@@ -47,7 +47,8 @@ fn names(root: &Path) -> Vec<String> {
             if e.path().is_dir() {
                 dirs.push(e.path());
             } else {
-                out.push(e.path().strip_prefix(root).unwrap().to_string_lossy().into_owned());
+                // As the tests write them, on Windows too.
+                out.push(e.path().strip_prefix(root).unwrap().to_string_lossy().replace('\\', "/"));
             }
         }
     }
