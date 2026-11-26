@@ -188,7 +188,7 @@ fn deleting_a_theme_of_ones_own_restores_dostoevsky() {
     let path = crate::files::support_dir().unwrap().join("Themes/temporary.json");
 
     right_click(&mut ui, "theme-temporary");
-    assert_eq!(ui.menu_labels(), ["Edit…", "Duplicate", "Show in Finder", "Delete…"]);
+    assert_eq!(ui.menu_labels(), ["Edit…", "Duplicate", crate::os_text::show_in_file_manager(), "Delete…"]);
     ui.menu("Delete…");
     ui.answer_prompt("Keep");
     assert!(path.is_file());

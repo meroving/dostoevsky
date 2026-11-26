@@ -47,7 +47,13 @@ impl ServiceKind {
             ServiceKind::Gemini => tr!("API key, has a free tier"),
             ServiceKind::Mistral => tr!("API key, strong beyond English"),
             ServiceKind::Groq => tr!("API key, very fast"),
-            ServiceKind::Ollama | ServiceKind::LmStudio => tr!("on this Mac"),
+            ServiceKind::Ollama | ServiceKind::LmStudio => {
+                if cfg!(target_os = "macos") {
+                    tr!("on this Mac")
+                } else {
+                    tr!("on this computer")
+                }
+            }
             ServiceKind::Custom => tr!("any compatible address: llama.cpp, Jan, MLX…"),
         }
     }

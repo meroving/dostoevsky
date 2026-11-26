@@ -481,7 +481,7 @@ impl Workspace {
                 .pt_3()
                 .text_size(px(11.))
                 .text_color(c(theme::faint()))
-                .child(if in_folder { tr!("saved in the folder") } else { tr!("kept on this Mac") })
+                .child(if in_folder { tr!("saved in the folder") } else { crate::os_text::kept_on_this_computer() })
                 .into_any_element(),
         ])
         .collect()
@@ -562,7 +562,7 @@ impl Workspace {
             lines.push(("  notes/".into(), ""));
         }
         if form.kind != Kind::Folder {
-            lines.push(("  .dostoevsky".into(), tr!("the type, hidden in Finder")));
+            lines.push(("  .dostoevsky".into(), crate::os_text::file_type_hidden_in_file_manager()));
         }
         (root, lines)
     }

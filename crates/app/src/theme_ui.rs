@@ -163,7 +163,7 @@ fn theme_menu(id: &str, builtin: bool, at: Point<Pixels>) -> ContextMenu {
     } else {
         let mut items = vec![entry(tr!("Edit…"), ThemeOp::Edit), entry(tr!("Duplicate"), ThemeOp::Duplicate)];
         if let Some(path) = theme::path(id) {
-            items.push(Some(Item { label: tr!("Show in Finder").into(), shortcut: None, keys: None, command: Some(Command::ShowInFinder(path)), badge: None }));
+            items.push(Some(Item { label: crate::os_text::show_in_file_manager().into(), shortcut: None, keys: None, command: Some(Command::ShowInFinder(path)), badge: None }));
         }
         items.extend([None, entry(tr!("Delete…"), ThemeOp::Delete)]);
         items

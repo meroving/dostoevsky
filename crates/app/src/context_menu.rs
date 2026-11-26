@@ -270,10 +270,10 @@ impl ContextMenu {
         items.extend([
             None,
             plain(tr!("Open in New Window"), Some(Command::OpenInWindow(path.clone()))),
-            plain(tr!("Show in Finder"), Some(Command::ShowInFinder(path.clone()))),
+            plain(crate::os_text::show_in_file_manager(), Some(Command::ShowInFinder(path.clone()))),
             None,
             Some(Item {
-                label: tr!("Move to Trash").into(),
+                label: crate::os_text::move_to_trash().into(),
                 shortcut: Some(ListTrash.boxed_clone()),
                 keys: None,
                 command: Some(Command::TrashRow(path)),
@@ -328,12 +328,12 @@ impl ContextMenu {
             items.extend([
                 None,
                 plain(tr!("Rename…"), Some(Command::RenameRow(p.clone()))),
-                Some(Item { label: tr!("Move to Trash").into(), shortcut: Some(ListTrash.boxed_clone()), keys: None, command: Some(Command::TrashRow(p.clone())), badge: None }),
+                Some(Item { label: crate::os_text::move_to_trash().into(), shortcut: Some(ListTrash.boxed_clone()), keys: None, command: Some(Command::TrashRow(p.clone())), badge: None }),
             ]);
         }
         items.extend([None, item(tr!("Copy Final Text"), CopyFinalMarkdown), item(tr!("Export…"), Export), item(tr!("Print…"), Print)]);
         if let Some(p) = path {
-            items.extend([None, plain(tr!("Show in Finder"), Some(Command::ShowInFinder(p)))]);
+            items.extend([None, plain(crate::os_text::show_in_file_manager(), Some(Command::ShowInFinder(p)))]);
         }
         items.extend([None, item(tr!("Settings…"), ShowPreferences), item(tr!("Keyboard Shortcuts"), ShowShortcuts)]);
         ContextMenu { at, heading: Some(heading), items, up: false }

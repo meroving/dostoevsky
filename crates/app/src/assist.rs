@@ -448,10 +448,10 @@ pub fn privacy_line(cx: &App) -> &'static str {
     let p = &Prefs::get(cx).ai;
     let local = |m: &Option<ModelRef>| m.as_ref().map(|m| m.service.local());
     match (local(&p.quick), local(&p.deep)) {
-        (Some(true), Some(true)) => tr!("Both models run on this Mac. Nothing leaves it."),
-        (Some(true), Some(false)) => tr!("Quick stays on this Mac. Deep sends text out when you ask."),
-        (Some(false), Some(true)) => tr!("Deep stays on this Mac. Quick sends text out when you ask."),
-        _ => tr!("Text leaves this Mac only when you ask for something."),
+        (Some(true), Some(true)) => crate::os_text::both_models_local_privacy(),
+        (Some(true), Some(false)) => crate::os_text::quick_local_privacy(),
+        (Some(false), Some(true)) => crate::os_text::deep_local_privacy(),
+        _ => crate::os_text::cloud_privacy(),
     }
 }
 

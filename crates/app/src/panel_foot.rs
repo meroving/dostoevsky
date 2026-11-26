@@ -100,9 +100,9 @@ impl Workspace {
             })
             .on_click(|_, w, cx| w.dispatch_action(Box::new(Save), cx))
             .test_support();
-        let finder = foot_button("foot-finder", "chrome/finder.svg", tr!("Show in Finder"), path.is_some())
+        let finder = foot_button("foot-finder", "chrome/finder.svg", crate::os_text::show_in_file_manager(), path.is_some())
             .when_some(path, move |d, p| {
-                d.tooltip(plain_tip(tr!("Show in Finder"))).on_click(move |e: &ClickEvent, _, cx| {
+                d.tooltip(plain_tip(crate::os_text::show_in_file_manager())).on_click(move |e: &ClickEvent, _, cx| {
                     let target = if e.modifiers().alt { root.clone().unwrap_or_else(|| p.clone()) } else { p.clone() };
                     cx.reveal_path(&target);
                 })
