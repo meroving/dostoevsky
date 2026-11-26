@@ -147,7 +147,7 @@ impl Workspace {
         });
         let f = self.page.read(cx).focus.clone();
         window.focus(&f, cx);
-        self.flash_status(tr!("Comment deleted · ⌘Z brings it back"), cx);
+        self.flash_status(tr!("Comment deleted · {undo} brings it back", undo = crate::os_text::key("⌘Z")), cx);
     }
 
     pub fn delete_page_comments(&mut self, _: &DeleteAllComments, window: &mut Window, cx: &mut Context<Self>) {
@@ -160,7 +160,7 @@ impl Workspace {
         let rx = window.prompt(
             PromptLevel::Warning,
             &if n == 0 { tr!("Delete the comments on this page?").to_string() } else { trn!("Delete the comment on this page?", "Delete all {n} comments on this page?", n) },
-            Some(tr!("You can undo this with ⌘Z.")),
+            Some(tr!("You can undo this with {undo}.", undo = crate::os_text::key("⌘Z")).as_str()),
             &[tr!("Delete"), tr!("Cancel")],
             cx,
         );
@@ -226,7 +226,7 @@ impl Workspace {
                     m.doc.break_undo_group();
                     let _ = m.edit(cx, |d| d.delete_comment(id));
                 });
-                self.flash_status(tr!("Comment deleted · ⌘Z brings it back"), cx);
+                self.flash_status(tr!("Comment deleted · {undo} brings it back", undo = crate::os_text::key("⌘Z")), cx);
             }
         }
     }
@@ -373,7 +373,11 @@ fn card(id: &'static str, tick: Bounds<Pixels>, lh: Pixels) -> Stateful<Div> {
 }
 
 fn hints(writing: bool) -> Div {
-    let line = if writing { tr!("↩ done · ⇧↩ new line · ⌘⌫ delete") } else { tr!("Click to edit · right-click for more") };
+    let line = if writing {
+        tr!("{enter} done · {new_line} new line · {delete} delete", delete = crate::os_text::key("⌘⌫"), new_line = crate::os_text::key("⇧↩"), enter = crate::os_text::key("↩"))
+    } else {
+        tr!("Click to edit · right-click for more").to_string()
+    };
     div().text_size(px(11.)).text_color(ca(theme::muted(), 1.)).child(line)
 }
 
@@ -663,12 +667,12 @@ impl Workspace {
                                 .px(px(8.))
                                 .text_color(c(theme::faint()))
                                 .text_size(px(12.))
-                                .child(tr!("Notes about the text wait here, each on its words. Select some and press ⌥⌘M."))
+                                .child(tr!("Notes about the text wait here, each on its words. Select some and press {comment}.", comment = crate::os_text::key("⌥⌘M")))
                                 .test_support(),
                         )
                     }),
             )
-            .child(div().pl(px(8.)).text_size(px(11.)).text_color(c(theme::faint())).child(tr!("⌥⌘M comments on the selection")))
+            .child(div().pl(px(8.)).text_size(px(11.)).text_color(c(theme::faint())).child(tr!("{comment} comments on the selection", comment = crate::os_text::key("⌥⌘M"))))
             .children(foot)
             .into_any_element()
     }

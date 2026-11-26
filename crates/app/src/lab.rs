@@ -1141,7 +1141,7 @@ impl Workspace {
         match kept {
             Ok(_) => {
                 self.drop_mark(Outcome::Comment, cx);
-                self.flash_status(tr!("Kept as a comment · ⌘Z takes it back"), cx);
+                self.flash_status(tr!("Kept as a comment · {undo} takes it back", undo = crate::os_text::key("⌘Z")), cx);
             }
             Err(_) => self.flash_status(tr!("A cut's text can't have a comment"), cx),
         }
@@ -1457,7 +1457,7 @@ impl Workspace {
         if self.model.update(cx, |m, cx| m.edit(cx, |d| d.cut_many(&ranges, Some(batch)))).is_ok() {
             self.lab.trim = None;
             self.lab_tidy(cx);
-            self.flash_status(trn!("{n} word cut · ⌘Z brings it back · ⌘/ puts it back", "{n} words cut · ⌘Z brings them back · ⌘/ puts one back", words), cx);
+            self.flash_status(trn!("{n} word cut · {undo} brings it back · {put_back} puts it back", "{n} words cut · {undo} brings them back · {put_back} puts one back", words, undo = crate::os_text::key("⌘Z"), put_back = crate::os_text::key("⌘/")), cx);
         }
     }
 

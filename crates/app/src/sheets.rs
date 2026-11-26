@@ -374,7 +374,7 @@ pub(crate) fn heading(t: &'static str) -> AnyElement {
     div().pt_4().pb_1().text_size(px(10.5)).text_color(c(theme::faint())).child(t).into_any_element()
 }
 
-pub(crate) fn row(label: &'static str, hint: Option<&'static str>, control: impl IntoElement) -> impl IntoElement {
+pub(crate) fn row(label: impl Into<SharedString>, hint: Option<&'static str>, control: impl IntoElement) -> impl IntoElement {
     div()
         .flex()
         .flex_wrap()
@@ -390,7 +390,7 @@ pub(crate) fn row(label: &'static str, hint: Option<&'static str>, control: impl
                 .min_w_0()
                 .flex()
                 .flex_col()
-                .child(div().text_color(c(theme::text())).child(label))
+                .child(div().text_color(c(theme::text())).child(label.into()))
                 .children(hint.map(|h| div().text_size(px(11.)).text_color(c(theme::muted())).child(h))),
         )
         .child(control)
@@ -463,7 +463,7 @@ impl Workspace {
 
     fn discard_detached(&mut self, i: usize, cx: &mut Context<Self>) {
         if self.model.update(cx, |m, cx| m.discard_detached(cx, i)) {
-            self.flash_status(tr!("Discarded. ⌘Z to undo"), cx);
+            self.flash_status(tr!("Discarded. {undo} to undo", undo = crate::os_text::key("⌘Z")), cx);
         }
     }
 
@@ -638,7 +638,7 @@ impl Workspace {
                         let keys = match (action.partial_eq(&CycleNext), wheel) {
                             (false, _) => keys,
                             (true, WheelSwitch::Always) => tr!("↑ ↓ or scroll (hover)").to_string(),
-                            (true, WheelSwitch::WithOption) => tr!("↑ ↓ or ⌥ scroll (hover)").to_string(),
+                            (true, WheelSwitch::WithOption) => tr!("↑ ↓ or {alt} scroll (hover)", alt = crate::os_text::key("⌥")).to_string(),
                             (true, WheelSwitch::Off) => tr!("↑ ↓ (hover)").to_string(),
                         };
                         (label, keys)
@@ -700,7 +700,7 @@ impl Workspace {
             .items_center()
             .child(Self::hand_tab("prefs", tr!("Preferences"), true))
             .child(div().flex_1())
-            .child(div().text_color(c(theme::faint())).child("⌘,"))
+            .children(shortcut_label(&ShowPreferences, cx).map(|k| div().text_color(c(theme::faint())).child(k)))
             .into_any_element();
         let nav_item = |id: &'static str, label: &'static str, s: PrefSection, badge: Option<&'static str>| {
             let on = s == section;
@@ -964,7 +964,7 @@ impl Workspace {
             )
             .into_any_element(),
             heading(tr!("KEYBOARD")),
-            row(tr!("Tap ⇧ to select"), Some(tr!("word, sentence, paragraph")), toggle("tap-shift", p.tap_shift, |p, v| p.tap_shift = v)).into_any_element(),
+            row(tr!("Tap {shift} to select", shift = crate::os_text::key("⇧")), Some(tr!("word, sentence, paragraph")), toggle("tap-shift", p.tap_shift, |p, v| p.tap_shift = v)).into_any_element(),
             row(
                 tr!("Shortcuts"),
                 None,
@@ -1145,10 +1145,13 @@ impl Workspace {
                 None,
                 segmented(
                     "wheel",
-                    [(WheelSwitch::Always, tr!("Always")), (WheelSwitch::WithOption, tr!("With ⌥ held")), (WheelSwitch::Off, tr!("Off"))]
-                        .into_iter()
-                        .map(|(v, l)| (v, l.to_string()))
-                        .collect(),
+                    [
+                        (WheelSwitch::Always, tr!("Always").to_string()),
+                        (WheelSwitch::WithOption, tr!("With {alt} held", alt = crate::os_text::key("⌥"))),
+                        (WheelSwitch::Off, tr!("Off").to_string()),
+                    ]
+                    .into_iter()
+                    .collect(),
                     p.wheel,
                     |p, v| p.wheel = v,
                 ),

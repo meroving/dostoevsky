@@ -3910,9 +3910,10 @@ impl Element for PageElement {
                 let title = tr!("Title");
                 let line = window.text_system().shape_line(title.into(), m.font_size, &[run(title, FontWeight::BOLD)], None);
                 let _ = line.paint(layout.origin, lh, TextAlign::Left, None, window, cx);
-                let hint = tr!("Start writing. Select anything and press ⇧⌘A to keep other versions of it.");
+                let hint = tr!("Start writing. Select anything and press {alternatives} to keep other versions of it.", alternatives = crate::os_text::key("⇧⌘A"));
                 let at = point(layout.origin.x, layout.origin.y + lh * 2.);
-                if let Ok(lines) = window.text_system().shape_text(hint.into(), m.font_size, &[run(hint, FontWeight::NORMAL)], Some(layout.column_width), None) {
+                let runs = [run(&hint, FontWeight::NORMAL)];
+                if let Ok(lines) = window.text_system().shape_text(hint.into(), m.font_size, &runs, Some(layout.column_width), None) {
                     for l in lines {
                         let _ = l.paint(at, lh, TextAlign::Left, None, window, cx);
                     }

@@ -62,7 +62,7 @@ impl Workspace {
     pub(crate) fn on_cut(&mut self, id: CutId, cx: &mut Context<Self>) {
         let m = self.model.read(cx);
         self.last_cut = Some(LastCut { id, uid: m.uid, version: m.version, sel: self.page.read(cx).selection() });
-        self.hold_status(tr!("Cut · ⌘V moves it · esc puts it back"), cx);
+        self.hold_status(tr!("Cut · {paste} moves it · esc puts it back", paste = crate::os_text::key("⌘V")), cx);
     }
 
     pub(crate) fn esc_puts_back(&mut self, cx: &mut Context<Self>) -> bool {
@@ -162,7 +162,7 @@ impl Workspace {
             });
             let f = self.page.read(cx).focus.clone();
             window.focus(&f, cx);
-            self.hold_status(tr!("Moved · ⌘Z puts it back"), cx);
+            self.hold_status(tr!("Moved · {undo} puts it back", undo = crate::os_text::key("⌘Z")), cx);
             cx.notify();
         }
     }
@@ -320,7 +320,7 @@ impl Workspace {
                 .child(label)
                 .test_support()
         };
-        let put_back = button("peek-put-back", tr!("Put Back ⌘/").into(), TraceOp::PutBack, cx);
+        let put_back = button("peek-put-back", tr!("Put Back {put_back}", put_back = crate::os_text::key("⌘/")).into(), TraceOp::PutBack, cx);
         let show = button("peek-show-text", tr!("Show the Text").into(), TraceOp::ShowText, cx);
         let in_cuts = button("peek-show-in-cuts", tr!("Show in Cuts").into(), TraceOp::ShowInCuts, cx);
         Some(

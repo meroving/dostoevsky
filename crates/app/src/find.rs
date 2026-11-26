@@ -817,7 +817,7 @@ impl FindBar {
                     .text_size(px(10.5))
                     .text_color(c(theme::faint()))
                     .child(tr!("↑ ↓ go to"))
-                    .child(tr!("↩ fold"))
+                    .child(tr!("{enter} fold", enter = crate::os_text::key("↩")))
                     .child(tr!("esc fold, then close")),
             )
             .test_support()
