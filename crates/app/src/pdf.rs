@@ -1,260 +1,59 @@
-//! Runs off the main thread: TextKit objects owned by one thread are fine.
-// The page composition below is plain Rust; off the Mac only the tests use it until a
-// cross-platform renderer does (dsky-fbso.3).
-#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
+//! The final text as pages: a PDF, the Export sheet's preview bitmaps, printing. On the Mac
+//! TextKit sets the `pdf` crate's page composition and PDFKit prints (runs off the main thread:
+//! TextKit objects owned by one thread are fine); elsewhere the crate's own engine sets and draws
+//! the pages (dsky-fbso.3), and printing waits for its own bead.
 
-#[allow(unused_imports)]
-use export::Book;
-use export::{Block, Inline, Options, Run};
+#[cfg(not(target_os = "macos"))]
+use std::sync::Arc;
+
+#[cfg(target_os = "macos")]
+use ::pdf::compose::{Align, Para, ParaLook, RunLook, compose, opening_drop};
+
+pub use ::pdf::Bitmap;
 
 #[derive(Clone, Default)]
 pub struct Pdf {
     pub bytes: Vec<u8>,
     pub pages: usize,
-}
-
-/// BGRA, premultiplied, `width × height`.
-pub struct Bitmap {
-    pub width: u32,
-    pub height: u32,
-    pub bgra: Vec<u8>,
+    /// The pages as the engine laid them out, for the preview's bitmaps.
+    #[cfg(not(target_os = "macos"))]
+    laid: Option<Arc<::pdf::Document>>,
 }
 
 #[cfg(target_os = "macos")]
 pub use mac::{print, rasterize, render};
 
 #[cfg(not(target_os = "macos"))]
-pub fn render(_: &Book, _: &Options) -> Pdf {
-    Pdf::default()
-}
+pub use engine::{print, rasterize, render};
 
 #[cfg(not(target_os = "macos"))]
-pub fn rasterize(_: &[u8], _: usize, _: u32) -> Option<Bitmap> {
-    None
-}
+mod engine {
+    use std::sync::OnceLock;
 
-#[cfg(not(target_os = "macos"))]
-pub fn print(_: &[u8], _: &str, _: &gpui_kit::Window) -> bool {
-    false
-}
+    use export::{Book, Options};
 
-#[derive(Clone, Copy, PartialEq)]
-struct ParaLook {
-    align: Align,
-    first_indent: f64,
-    head_indent: f64,
-    before: f64,
-    after: f64,
-    line: f64,
-    hyphenate: bool,
-}
+    use super::{Bitmap, Pdf};
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-enum Align {
-    Left,
-    Center,
-    Justified,
-}
-
-#[derive(Clone, Copy, PartialEq)]
-struct RunLook {
-    size: f64,
-    bold: bool,
-    italic: bool,
-    mono: bool,
-    heading: bool,
-    strike: bool,
-    underline: bool,
-    grey: bool,
-    kern: f64,
-}
-
-#[derive(Clone, PartialEq)]
-struct Para {
-    look: ParaLook,
-    pieces: Vec<(String, RunLook)>,
-}
-
-/// A share of the text area's height.
-fn opening_drop(o: &Options, starts_with_heading: bool) -> f64 {
-    match o.style {
-        export::Style::Manuscript => 1. / 3.,
-        export::Style::Book if starts_with_heading => 0.2,
-        _ => 0.,
+    /// The app's own faces first, then the system's: read once, kept for the app's life.
+    fn fonts() -> &'static ::pdf::Fonts {
+        static FONTS: OnceLock<::pdf::Fonts> = OnceLock::new();
+        FONTS.get_or_init(|| ::pdf::Fonts::new(&crate::theme::FONT_FILES))
     }
-}
 
-fn compose(blocks: &[Block], o: &Options) -> Vec<Para> {
-    let t = &o.text;
-    let size = t.size as f64;
-    let line = size * t.line_spacing as f64;
-    let indented = t.paragraphs == export::Paragraphs::Indented;
-    let manuscript = o.style == export::Style::Manuscript;
-    let book = o.style == export::Style::Book;
-    let base = ParaLook {
-        align: if t.align == export::Align::Justified { Align::Justified } else { Align::Left },
-        first_indent: if indented { if manuscript { 36. } else { size * 1.5 } } else { 0. },
-        head_indent: 0.,
-        before: 0.,
-        after: if indented { 0. } else { size },
-        line,
-        hyphenate: t.hyphenate,
-    };
-    let body = RunLook { size, bold: false, italic: false, mono: false, heading: false, strike: false, underline: false, grey: false, kern: 0. };
-    let mut out = Vec::new();
-    let mut after_heading = true;
-    walk(blocks, o, base, body, 0, &mut after_heading, &mut out);
-    if book {
-        if let Some(p) = out.iter_mut().find(|p| p.pieces.iter().any(|(_, r)| !r.heading)) {
-            small_caps_opening(p, size);
-        }
+    pub fn render(book: &Book, o: &Options) -> Pdf {
+        // Hyphenation points come with dsky-fbso.5; until then words break whole.
+        let pdf = ::pdf::render(book, o, fonts(), &|_| Vec::new());
+        Pdf { pages: pdf.pages(), bytes: pdf.bytes, laid: Some(pdf.laid) }
     }
-    out
-}
 
-fn small_caps_opening(p: &mut Para, size: f64) {
-    let Some(first) = p.pieces.iter().position(|(t, _)| !t.trim().is_empty()) else { return };
-    let (text, look) = p.pieces[first].clone();
-    let mut words = 0;
-    let mut cut = text.len();
-    for (i, c) in text.char_indices() {
-        if c.is_whitespace() && i > 0 && !text[..i].ends_with(char::is_whitespace) {
-            words += 1;
-            if words == 4 {
-                cut = i;
-                break;
-            }
-        }
+    /// `index` from 0; `width` in pixels.
+    pub fn rasterize(pdf: &Pdf, index: usize, width: u32) -> Option<Bitmap> {
+        ::pdf::raster::rasterize(pdf.laid.as_ref()?, index, width)
     }
-    let (head, rest) = text.split_at(cut);
-    let caps = RunLook { size: size * 0.82, kern: size * 0.04, ..look };
-    let mut pieces = vec![(head.to_uppercase(), caps)];
-    if !rest.is_empty() {
-        pieces.push((rest.to_string(), look));
-    }
-    p.pieces.splice(first..=first, pieces);
-}
 
-#[allow(clippy::too_many_arguments)]
-fn walk(blocks: &[Block], o: &Options, base: ParaLook, body: RunLook, depth: usize, after_heading: &mut bool, out: &mut Vec<Para>) {
-    let t = &o.text;
-    let size = t.size as f64;
-    let manuscript = o.style == export::Style::Manuscript;
-    let book = o.style == export::Style::Book;
-    for b in blocks {
-        match b {
-            Block::Heading { level, inlines } => {
-                let (scale, align) = match (o.style, level) {
-                    (export::Style::Manuscript, _) => (1., Align::Center),
-                    (export::Style::Book, 1) => (1.75, Align::Center),
-                    (export::Style::Book, _) => (1.2, Align::Center),
-                    (_, 1) => (if t.heading_font.is_some() { 1.9 } else { 1.5 }, Align::Left),
-                    (_, 2) => (if t.heading_font.is_some() { 1.5 } else { 1.25 }, Align::Left),
-                    _ => (if t.heading_font.is_some() { 1.25 } else { 1.1 }, Align::Left),
-                };
-                let hsize = size * scale;
-                let look = ParaLook {
-                    align,
-                    first_indent: 0.,
-                    head_indent: 0.,
-                    before: if out.is_empty() { 0. } else { size * if book { 2. } else { 1.2 } },
-                    after: if manuscript { size * t.line_spacing as f64 } else if book { size * 2.5 } else { size * 0.8 },
-                    line: if manuscript { base.line } else { hsize * 1.25 },
-                    hyphenate: false,
-                };
-                let run = RunLook { size: hsize, bold: !manuscript && !book && t.heading_font.is_none(), italic: book && *level == 1, heading: true, ..body };
-                out.push(Para { look, pieces: pieces(inlines, run) });
-                *after_heading = true;
-                continue;
-            }
-            Block::Paragraph(inlines) => {
-                let mut look = base;
-                if *after_heading {
-                    look.first_indent = 0.;
-                }
-                if depth > 0 {
-                    look.first_indent = 0.;
-                    look.head_indent = size * 2.;
-                    look.after = if t.paragraphs == export::Paragraphs::Spaced { size } else { size * 0.5 };
-                }
-                let run = if depth > 0 && !manuscript { RunLook { grey: true, ..body } } else { body };
-                out.push(Para { look, pieces: pieces(inlines, run) });
-            }
-            Block::Quote(inner) => {
-                let mut ah = false;
-                walk(inner, o, base, body, depth + 1, &mut ah, out);
-                if let Some(p) = out.last_mut() {
-                    p.look.after = p.look.after.max(size);
-                }
-            }
-            Block::List { start, items } => {
-                for (i, item) in items.iter().enumerate() {
-                    let marker = match start {
-                        Some(n) => format!("{}.\u{a0}", n + i as u64),
-                        None => "•\u{a0}\u{a0}".into(),
-                    };
-                    let mut first = true;
-                    for b in item {
-                        match b {
-                            Block::Paragraph(inl) | Block::Heading { inlines: inl, .. } => {
-                                let look = ParaLook { first_indent: size * 0.5, head_indent: size * 1.6, after: if t.paragraphs == export::Paragraphs::Spaced { size * 0.4 } else { 0. }, ..base };
-                                let mut ps = Vec::new();
-                                if first {
-                                    ps.push((marker.clone(), body));
-                                }
-                                ps.extend(pieces(inl, body));
-                                out.push(Para { look, pieces: ps });
-                                first = false;
-                            }
-                            other => {
-                                let mut ah = false;
-                                walk(std::slice::from_ref(other), o, base, body, depth + 1, &mut ah, out);
-                            }
-                        }
-                    }
-                }
-                if let Some(p) = out.last_mut() {
-                    p.look.after = p.look.after.max(if t.paragraphs == export::Paragraphs::Spaced { size } else { size * 0.5 });
-                }
-            }
-            Block::Code(s) => {
-                let look = ParaLook { align: Align::Left, first_indent: 0., head_indent: size, after: size * 0.8, line: size * 1.3, hyphenate: false, before: 0. };
-                out.push(Para { look, pieces: vec![(s.replace('\n', "\u{2028}"), RunLook { mono: true, size: size * 0.86, ..body })] });
-            }
-            Block::Rule => {
-                let mark = if manuscript { "#" } else { "*\u{a0}\u{a0}\u{a0}*\u{a0}\u{a0}\u{a0}*" };
-                let look = ParaLook { align: Align::Center, first_indent: 0., head_indent: 0., before: if manuscript { 0. } else { size * 0.6 }, after: if manuscript { 0. } else { size * 1.2 }, ..base };
-                out.push(Para { look, pieces: vec![(mark.into(), body)] });
-                *after_heading = true;
-                continue;
-            }
-        }
-        *after_heading = false;
-    }
-}
-
-fn pieces(inlines: &[Inline], base: RunLook) -> Vec<(String, RunLook)> {
-    let mut v = Vec::new();
-    for i in inlines {
-        match i {
-            Inline::Run(r) => v.push((r.text.clone(), run_look(r, base))),
-            // U+2028 keeps the paragraph's style.
-            Inline::Break => v.push(("\u{2028}".into(), base)),
-            Inline::NoteStart(_) | Inline::NoteEnd(_) => {}
-        }
-    }
-    v
-}
-
-fn run_look(r: &Run, base: RunLook) -> RunLook {
-    RunLook {
-        bold: base.bold || r.bold,
-        italic: base.italic || r.italic,
-        mono: r.code,
-        size: if r.code { base.size * 0.9 } else { base.size },
-        strike: r.strike,
-        underline: r.link.is_some(),
-        ..base
+    /// No print dialog off the Mac yet: false, as when the Mac's panel couldn't open.
+    pub fn print(_: &[u8], _: &str, _: &gpui_kit::Window) -> bool {
+        false
     }
 }
 
@@ -272,7 +71,7 @@ mod mac {
     use objc2_core_graphics::{CGBitmapContextCreate, CGColorSpace, CGContext, CGDataConsumer, CGDataProvider, CGFont, CGImageAlphaInfo, CGImageByteOrderInfo, CGPDFBox, CGPDFContextBeginPage, CGPDFContextClose, CGPDFContextCreate, CGPDFContextEndPage, CGPDFDocument, CGPDFPage};
     use objc2_foundation::{NSAttributedString, NSAttributedStringKey, NSMutableAttributedString, NSMutableDictionary, NSNumber, NSPoint, NSRange, NSString};
 
-    use super::{compose, opening_drop, Align, Bitmap, Para, ParaLook, Pdf, RunLook};
+    use super::{Align, Bitmap, Para, ParaLook, Pdf, RunLook, compose, opening_drop};
     use export::{Book, Options};
 
     /// So TextKit finds the app's fonts the way the page does.
@@ -579,9 +378,9 @@ mod mac {
     }
 
     /// `index` from 0; `width` in pixels.
-    pub fn rasterize(pdf: &[u8], index: usize, width: u32) -> Option<Bitmap> {
+    pub fn rasterize(pdf: &Pdf, index: usize, width: u32) -> Option<Bitmap> {
         objc2::rc::autoreleasepool(|_| {
-            let doc = document(pdf)?;
+            let doc = document(&pdf.bytes)?;
             let page: CFRetained<CGPDFPage> = CGPDFDocument::page(Some(&doc), index + 1)?;
             let mb = CGPDFPage::box_rect(Some(&page), CGPDFBox::MediaBox);
             if mb.size.width <= 0. {
@@ -645,66 +444,25 @@ mod mac {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "macos"))]
 mod tests {
     use super::*;
-    use export::{Paper, Style, Text};
+    use export::{Book, Options, Paper, Style, Text};
 
-    fn opts(style: Style) -> Options {
-        let text = match style {
-            Style::Manuscript => Text::manuscript(),
-            Style::Book => Text::book(Paper::A5),
-            Style::Page => Text::page("IBM Plex Mono", 19., 1.8, true, true, None),
-        };
-        Options::new(style, text, Paper::A4)
-    }
-
-    #[test]
-    fn paragraphs_follow_the_style() {
-        let blocks = export::ir::parse("# One\n\nFirst para.\n\nSecond para.\n\n---\n\nAfter.\n", &[]);
-        let book = compose(&blocks, &opts(Style::Book));
-        assert!(book[0].pieces[0].1.heading && book[0].pieces[0].1.italic);
-        assert_eq!(book[1].look.first_indent, 0., "the opening paragraph is flush");
-        assert_eq!(book[1].pieces[0].0, "FIRST PARA.", "small capitals open the chapter");
-        assert!(book[2].look.first_indent > 0.);
-        assert!(book[2].look.hyphenate && book[2].look.align == Align::Justified);
-        assert_eq!(book[3].pieces[0].0, "*\u{a0}\u{a0}\u{a0}*\u{a0}\u{a0}\u{a0}*");
-        assert_eq!(book[4].look.first_indent, 0., "flush after a scene break");
-
-        let ms = compose(&blocks, &opts(Style::Manuscript));
-        assert_eq!(ms[0].look.align, Align::Center);
-        assert_eq!(ms[2].look.first_indent, 36., "half an inch");
-        assert_eq!(ms[2].look.line, 24., "double-spaced 12 pt");
-        assert!(!ms[2].look.hyphenate);
-        assert_eq!(ms[3].pieces[0].0, "#");
-
-        let page = compose(&blocks, &opts(Style::Page));
-        assert_eq!(page[2].look.first_indent, 0.);
-        assert!(page[2].look.after > 0., "spaced paragraphs");
-    }
-
-    #[test]
-    fn chapters_open_lower_in_a_manuscript_and_a_book() {
-        assert_eq!(opening_drop(&opts(Style::Manuscript), false), 1. / 3.);
-        assert_eq!(opening_drop(&opts(Style::Book), true), 0.2);
-        assert_eq!(opening_drop(&opts(Style::Page), true), 0.);
-    }
-
-    #[cfg(target_os = "macos")]
     #[test]
     fn a_book_becomes_pages() {
         let md = "# The garret\n\n".to_string() + &"On an exceptionally hot evening early in July a young man came out of the garret in which he lodged. ".repeat(60);
         let book = Book { title: "Crime and Punishment".into(), author: "Fyodor Dostoevsky".into(), language: Some("en".into()), chapters: vec![export::Chapter { markdown: md, ..Default::default() }, export::Chapter { markdown: "# Two\n\nShort.\n".into(), ..Default::default() }] };
-        let mut o = opts(Style::Manuscript);
+        let mut o = Options::new(Style::Manuscript, Text::manuscript(), Paper::A4);
         o.title_page = true;
         let pdf = render(&book, &o);
         assert!(pdf.bytes.starts_with(b"%PDF"));
         assert!(pdf.pages >= 4, "title, chapter one over pages, chapter two: {}", pdf.pages);
-        let page = rasterize(&pdf.bytes, 1, 200).unwrap();
+        let page = rasterize(&pdf, 1, 200).unwrap();
         assert_eq!(page.width, 200);
         assert_eq!(page.bgra.len(), (page.width * page.height * 4) as usize);
         assert!(page.bgra.chunks(4).any(|p| p[0] < 128), "some ink on the page");
-        assert!(rasterize(&pdf.bytes, pdf.pages + 3, 200).is_none());
+        assert!(rasterize(&pdf, pdf.pages + 3, 200).is_none());
     }
 }
 
@@ -712,7 +470,7 @@ mod tests {
 #[cfg(all(test, target_os = "macos"))]
 mod samples {
     use super::*;
-    use export::{Paper, Style, Text};
+    use export::{Book, Options, Paper, Style, Text};
 
     #[test]
     #[ignore]
@@ -732,7 +490,7 @@ mod samples {
             let pdf = render(&book, &o);
             std::fs::write(dir.join(format!("{name}.pdf")), &pdf.bytes).unwrap();
             for i in 0..pdf.pages.min(4) {
-                let b = rasterize(&pdf.bytes, i, 700).unwrap();
+                let b = rasterize(&pdf, i, 700).unwrap();
                 std::fs::write(dir.join(format!("{name}-{i}-{}x{}.bgra", b.width, b.height)), &b.bgra).unwrap();
             }
         }
