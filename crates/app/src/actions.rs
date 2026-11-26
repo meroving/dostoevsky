@@ -521,7 +521,7 @@ pub fn shortcut_groups() -> Vec<ShortcutGroup> {
                 (tr!("Previous file"), Box::new(PreviousFile)),
                 (tr!("Next file"), Box::new(NextFile)),
                 (tr!("Find in the project"), Box::new(FindInProject)),
-                (tr!("Move to Trash"), Box::new(ListTrash)),
+                (crate::os_text::move_to_trash(), Box::new(ListTrash)),
             ],
         ),
         (
@@ -662,7 +662,7 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
         MenuItem::submenu(Menu::new(tr!("Appearance")).items([
             MenuItem::action(tr!("Dark"), AppearanceDark).checked(prefs.appearance == Appearance::Dark),
             MenuItem::action(tr!("Light"), AppearanceLight).checked(prefs.appearance == Appearance::Light),
-            MenuItem::action(tr!("Match macOS"), AppearanceSystem).checked(prefs.appearance == Appearance::System),
+            MenuItem::action(crate::os_text::match_system(), AppearanceSystem).checked(prefs.appearance == Appearance::System),
             MenuItem::separator(),
             MenuItem::action(tr!("Toggle Dark / Light"), ToggleAppearance),
         ])),
@@ -706,7 +706,7 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
         MenuItem::action(tr!("Print…"), Print),
     ]);
     if project.is_some() {
-        file_items.extend([MenuItem::separator(), MenuItem::action(tr!("Move to Trash"), ListTrash)]);
+        file_items.extend([MenuItem::separator(), MenuItem::action(crate::os_text::move_to_trash(), ListTrash)]);
     }
     let mut find_items = vec![
         MenuItem::action(tr!("Find…"), Find),

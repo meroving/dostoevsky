@@ -158,7 +158,7 @@ fn chips<T: std::marker::Copy + PartialEq + 'static>(
 /// Choice 0 follows macOS; the others are `l10n::Lang::ALL`.
 fn language_picker(p: &Prefs, open: bool) -> impl IntoElement {
     const BOX_HEIGHT: f32 = 30.;
-    let mut options = vec![tr!("Match macOS").to_string()];
+    let mut options = vec![crate::os_text::match_system().to_string()];
     options.extend(l10n::Lang::ALL.iter().map(|l| l.native_name().to_string()));
     let current = p.language.as_deref().and_then(l10n::Lang::from_code).and_then(|l| l10n::Lang::ALL.iter().position(|x| *x == l)).map_or(0, |i| i + 1);
     let toggle = move |_: &ClickEvent, _: &mut Window, cx: &mut App| {
@@ -843,7 +843,7 @@ impl Workspace {
                 None,
                 segmented_with(
                     "appearance",
-                    [(Appearance::Dark, tr!("Dark")), (Appearance::Light, tr!("Light")), (Appearance::System, tr!("Match macOS"))]
+                    [(Appearance::Dark, tr!("Dark")), (Appearance::Light, tr!("Light")), (Appearance::System, crate::os_text::match_system())]
                         .into_iter()
                         .map(|(a, l)| (a, l.to_string(), Some(swatch(a)), None))
                         .collect(),
@@ -926,7 +926,7 @@ impl Workspace {
                                     cx.reveal_path(&b);
                                 }
                             })
-                            .child(tr!("Show in Finder"))
+                            .child(crate::os_text::show_in_file_manager())
                             .test_support(),
                     ),
             )

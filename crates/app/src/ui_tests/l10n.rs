@@ -104,7 +104,7 @@ fn choosing_a_language_in_settings() {
     ui.keys("cmd-,");
     // Language is General's first row.
     let ru = 1 + Lang::ALL.iter().position(|l| *l == Lang::Ru).unwrap();
-    assert_eq!(ui.element("language").label(), Some("Match macOS"), "macOS to begin with");
+    assert_eq!(ui.element("language").label(), Some(crate::os_text::match_system()), "the system's own to begin with");
     assert!(!ui.has_element(("language", 0usize)), "the list is closed");
 
     ui.click_id("language");

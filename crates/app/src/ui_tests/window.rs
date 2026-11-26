@@ -252,7 +252,7 @@ fn win_7_document_menu() {
     ui.click_id("title");
     assert_eq!(
         ui.menu_labels(),
-        ["Save", "Save As…", "Open…", "Copy Final Text", "Export…", "Print…", "Show in Finder", "Settings…", "Keyboard Shortcuts"]
+        ["Save", "Save As…", "Open…", "Copy Final Text", "Export…", "Print…", crate::os_text::show_in_file_manager(), "Settings…", "Keyboard Shortcuts"]
     );
     assert_eq!(ui.read(|ws, _| ws.context_menu.as_ref().and_then(|m| m.heading.clone())).map(|h| h.0.to_string()).as_deref(), Some("unsaved changes · autosave is off"));
     ui.menu("Save");

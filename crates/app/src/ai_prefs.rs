@@ -29,7 +29,7 @@ impl Workspace {
         let on = assist::on(cx);
         let mut rows: Vec<AnyElement> = vec![row(tr!("Use AI"), None, toggle_with("ai-on", on, |cx, v| assist::set_on(v, cx))).into_any_element()];
         if !on {
-            rows.push(div().pt_3().text_size(px(11.5)).text_color(c(theme::muted())).child(tr!("AI is off. Nothing leaves this Mac.")).into_any_element());
+            rows.push(div().pt_3().text_size(px(11.5)).text_color(c(theme::muted())).child(crate::os_text::ai_off_privacy()).into_any_element());
             return rows;
         }
         let services: Vec<ServiceKind> = Prefs::get(cx).ai.services.iter().map(|s| s.kind).collect();
@@ -100,7 +100,7 @@ impl Workspace {
             ServiceKind::OpenRouter => {
                 let (connecting, pasting) = assist::get(cx).map(|a| (a.connecting.is_some(), a.awaiting_paste.is_some())).unwrap_or_default();
                 if assist::key(kind, cx).is_some() {
-                    div().flex().items_center().gap_2().child(ok_mark()).child(div().text_color(c(theme::text())).child(tr!("Connected"))).child(muted(tr!("key in Keychain")).mr_2()).child(remove(tr!("Disconnect"))).into_any_element()
+                    div().flex().items_center().gap_2().child(ok_mark()).child(div().text_color(c(theme::text())).child(tr!("Connected"))).child(muted(crate::os_text::key_in_keyring()).mr_2()).child(remove(tr!("Disconnect"))).into_any_element()
                 } else if pasting {
                     div()
                         .flex()
@@ -157,7 +157,7 @@ impl Workspace {
                     .flex()
                     .items_center()
                     .gap_2()
-                    .when(has, |d| d.child(ok_mark()).child(div().text_color(c(theme::text())).child(tr!("Key saved"))).child(muted(tr!("in Keychain")).mr_2()))
+                    .when(has, |d| d.child(ok_mark()).child(div().text_color(c(theme::text())).child(tr!("Key saved"))).child(muted(crate::os_text::in_keyring()).mr_2()))
                     .when(!has, |d| d.child(button("ai-paste-key", tr!("Paste key"), true).on_click(move |_, _, cx| assist::paste_key(kind, cx)).test_support()).child(muted(tr!("copy it first"))))
                     .when_some(page.filter(|_| !has), |d, url| {
                         d.child(
@@ -201,7 +201,7 @@ impl Workspace {
                     .when(!address.is_empty(), |d| {
                         d.child(div().text_color(c(theme::text())).child(address))
                             .when(!has_key, |d| d.child(button("ai-paste-key", tr!("Paste key"), false).on_click(move |_, _, cx| assist::paste_key(kind, cx)).test_support()))
-                            .when(has_key, |d| d.child(muted(tr!("key in Keychain"))))
+                            .when(has_key, |d| d.child(muted(crate::os_text::key_in_keyring())))
                     })
                     .child(remove(tr!("Remove")))
                     .into_any_element()

@@ -1377,7 +1377,7 @@ impl Workspace {
         let to = match crate::platform::trash(path) {
             Ok(to) => to,
             Err(e) => {
-                self.flash_status(tr!("Couldn't move it to the Trash: {error}", error = e), cx);
+                self.flash_status(crate::os_text::couldn_move_to_trash(&e), cx);
                 return;
             }
         };
@@ -1406,7 +1406,7 @@ impl Workspace {
             }
         }
         self.focus_list(window, cx);
-        self.flash_status(tr!("Moved to the Trash. {undo} to undo", undo = crate::os_text::key("⌘Z")), cx);
+        self.flash_status(crate::os_text::moved_to_trash(&crate::os_text::key("⌘Z")), cx);
     }
 
     pub fn list_trash(&mut self, _: &ListTrash, window: &mut Window, cx: &mut Context<Self>) {
@@ -1431,7 +1431,7 @@ impl Workspace {
                 Ok(()) => {
                     self.rescan(cx);
                     self.switch_to(&from, window, cx);
-                    self.flash_status(tr!("Brought back from the Trash"), cx);
+                    self.flash_status(crate::os_text::brought_back_from_trash(), cx);
                 }
                 Err(e) => self.flash_status(tr!("Couldn't bring it back: {error}", error = e), cx),
             },

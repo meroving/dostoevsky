@@ -327,7 +327,7 @@ fn view_menu_checks_the_current_settings() {
             _ => None,
         })
         .expect("View → Appearance");
-    let marks: Vec<_> = ["Dark", "Light", "Match macOS"].iter().map(|n| checked(&appearance.items, n)).collect();
+    let marks: Vec<_> = ["Dark", "Light", crate::os_text::match_system()].iter().map(|n| checked(&appearance.items, n)).collect();
     assert_eq!(marks, [Some(false), Some(true), Some(false)]);
     let themes = view
         .items

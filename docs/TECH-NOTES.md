@@ -258,6 +258,13 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   key per project kind ("New Chapter", "New Day"). `{count}` is a number already grouped
   (thousands: a comma in English, a no-break space elsewhere). "one"/"them" choices are plain
   keys picked by `n == 1`, not plurals: Russian's "one" form also serves 21.
+- **Each system's words** (`os_text.rs`): the English itself differs by system, chosen at
+  runtime as whole phrases: "Show in Finder" / "Show in File Explorer" / "Show in the file
+  manager"; the Trash / the Recycle Bin; "in Keychain" / "in Credential Manager" / "in the
+  keyring"; "this Mac" / "this computer"; "Match macOS" / "Match Windows" / "Match the system".
+  Each variant is its own key in every catalog (the Mac's strings are unchanged);
+  `cfg!(target_os)` picks the branch, so a catalog never names a system. The UI tests expect
+  such a label through `os_text` as well, as they do a key through `key_label`.
 - **Dates come from macOS** (`dates.rs`): NSDateFormatter with a template (`EEEEdMMMMy`,
   `LLLL`…) in the UI's language and the Mac's region, so English on a Mac set to Russia writes
   "23 November", and no catalog holds a month or weekday. Reading a journal day's heading back
