@@ -58,6 +58,32 @@ jobs:
       - name: Spelling with the system's Hunspell dictionaries
         run: cargo test --locked -p dostoevsky -- --ignored hunspell::tests::system_dictionaries
 
+  windows:
+    # The app on Windows (dsky-fbso.12): clippy and every test, as on Linux; a test that needs
+    # what Windows lacks so far is ignored there, naming its bead.
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout as the repository has it (LF; tests compare text files)
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Clippy
+        run: |
+          cargo clippy --locked --all-targets -- -D warnings
+          cargo clippy --locked -p dostoevsky --features shots -- -D warnings
+
+      - name: Tests (unit, behaviour, property, headless app)
+        run: cargo test --locked --workspace --no-fail-fast
+
   macos:
     runs-on: macos-15
     timeout-minutes: 75
