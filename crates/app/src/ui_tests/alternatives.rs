@@ -3,7 +3,7 @@ use gpui_kit::px;
 
 use crate::actions::ToggleLayer;
 use crate::prefs::{Effects, WheelSwitch};
-use crate::ui_tests::Ui;
+use crate::ui_tests::{Ui, key_label};
 
 const DOC: &str = "Most of the friction in writing comes from choosing too early. You pick a word and move on.\n\n\
 Editors have always known this. They write a suggestion in the margin.\n";
@@ -536,7 +536,8 @@ fn alt_18_last_alternative_dissolves_the_group() {
     ui.keys("cmd-shift-a cmd-backspace");
     assert!(ui.groups().is_empty());
     assert!(starts(&ui, "Most of the friction"));
-    assert!(ui.status().is_some_and(|s| s.starts_with("Removed. ⌘Z")), "{:?}", ui.status());
+    let status = format!("Removed. {}", key_label("⌘Z"));
+    assert!(ui.status().is_some_and(|s| s.starts_with(&status)), "{:?}", ui.status());
 }
 
 #[test]
