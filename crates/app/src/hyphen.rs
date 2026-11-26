@@ -125,13 +125,30 @@ mod sys {
 }
 
 #[cfg(not(target_os = "macos"))]
-mod sys {
-    pub fn breaks(_: &str, _: prose::Lang) -> Vec<usize> {
-        Vec::new()
+use patterns as sys;
+
+/// Off the Mac (dsky-fbso.5): TeX's hyphenation patterns, through `hypher`, with each
+/// language's own least letters before and after a break. On the Mac only its tests.
+#[cfg(any(not(target_os = "macos"), test))]
+mod patterns {
+    use prose::Lang;
+
+    pub fn breaks(word: &str, lang: Lang) -> Vec<usize> {
+        let Some(lang) = lang.code().as_bytes().try_into().ok().and_then(hypher::Lang::from_iso) else { return Vec::new() };
+        let mut out = Vec::new();
+        let mut at = 0;
+        let mut syllables = hypher::hyphenate(word, lang).peekable();
+        while let Some(s) = syllables.next() {
+            at += s.chars().count();
+            if syllables.peek().is_some() {
+                out.push(at);
+            }
+        }
+        out
     }
 }
 
-#[cfg(all(test, target_os = "macos"))]
+#[cfg(test)]
 mod tests {
     use prose::Lang;
 
@@ -149,6 +166,24 @@ mod tests {
         let ru = shown("непременно", Lang::Ru);
         assert!(ru.contains('-') && ru.replace('-', "") == "непременно", "{ru}");
         assert!(breaks("a", Lang::En).is_empty());
+    }
+
+    /// What every system's page and PDF break by off the Mac.
+    #[test]
+    fn the_patterns_break_each_language() {
+        let shown = |word: &str, lang: Lang| -> String {
+            let b = super::patterns::breaks(word, lang);
+            word.chars().enumerate().flat_map(|(i, c)| if b.contains(&i) { vec!['-', c] } else { vec![c] }).collect()
+        };
+        assert_eq!(shown("hesitation", Lang::En), "hes-i-ta-tion");
+        assert_eq!(shown("Hypochondria", Lang::En), "Hypochon-dria");
+        assert_eq!(shown("непременно", Lang::Ru), "непре-мен-но");
+        assert_eq!(shown("Rechtschreibung", Lang::De), "Recht-schrei-bung");
+        for lang in [Lang::Fr, Lang::Es, Lang::It, Lang::Pt] {
+            assert!(shown("communication", lang).contains('-'), "{lang:?}");
+        }
+        assert!(super::patterns::breaks("a", Lang::En).is_empty());
+        assert!(super::patterns::breaks("", Lang::Ru).is_empty());
     }
 
     #[test]

@@ -394,7 +394,6 @@ fn editing_and_off_draw_no_mask_with_a_selection() {
 }
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "no hyphenation: dsky-fbso.5")]
 fn a_selection_reads_with_its_hyphens() {
     use crate::prefs::Alignment;
     const BOOK: &str = "# Chapter One\n\nHe was hopelessly in debt to his landlady, and was afraid of meeting her. \

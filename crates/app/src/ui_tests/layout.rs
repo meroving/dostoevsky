@@ -272,7 +272,6 @@ fn find_fits_a_narrow_window() {
 
 /// WIN-18
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "no hyphenation: dsky-fbso.5")]
 fn justified_and_hyphenated_paragraphs() {
     use crate::prefs::Alignment;
     const BOOK: &str = "# Chapter One\n\nHe was hopelessly in debt to his landlady, and was afraid of meeting her. \
