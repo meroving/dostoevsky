@@ -46,6 +46,13 @@ objc2-core-graphics = "0.3"
 objc2-core-text = "0.3"
 objc2-pdf-kit = "0.3"
 
+# Dates off the Mac: CLDR's patterns and names in each language (dates.rs; dsky-fbso.15).
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+icu_datetime = "2.4"
+icu_calendar = "2.4"
+icu_locale_core = "2.4"
+writeable = "0.6"
+
 # Screenshot comparison for scripts/run_flows.sh (visual regression, dsky-65y.19).
 [[bin]]
 name = "imgdiff"
@@ -65,6 +72,11 @@ gpui-kit = { version = "=0.8.0", default-features = false, features = ["assets",
 # headless UI tests shape text exactly like the app (src/ui_tests).
 [target.'cfg(target_os = "macos")'.dev-dependencies]
 gpui-pre-apple = "=0.3.9"
+# The Mac's tests hold ICU4X's dates (the other systems') against NSDateFormatter's.
+icu_datetime = "2.4"
+icu_calendar = "2.4"
+icu_locale_core = "2.4"
+writeable = "0.6"
 
 # Off the Mac, the cosmic-text system GPUI's Linux and Windows platforms shape with (dsky-fbso.12).
 [target.'cfg(not(target_os = "macos"))'.dev-dependencies]

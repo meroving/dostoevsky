@@ -1,5 +1,6 @@
 //! Dates as the Mac writes them in the UI's language and the Mac's region (TECH-NOTES §12): no
-//! month or weekday names in the catalogs, so a new language needs only its `l10n::Lang`.
+//! month or weekday names in the catalogs, so a new language needs only its `l10n::Lang`. Off
+//! the Mac ICU4X writes them from CLDR, with the locale's region (dsky-fbso.15).
 //! Always the Gregorian calendar: a journal's file names are.
 
 use l10n::Lang;
@@ -156,22 +157,104 @@ mod platform {
 }
 
 #[cfg(not(target_os = "macos"))]
-mod platform {
-    use l10n::Lang;
+use icu as platform;
 
-    /// English only, as Britain writes it.
-    pub fn format(_: Lang, pattern: &'static str, _: bool, unix: i64) -> String {
-        let Some(d) = chrono::DateTime::from_timestamp(unix, 0) else { return String::new() };
-        d.format(match pattern {
-            "EEEEdMMMMy" => "%A, %-d %B %Y",
-            "dMMMy" => "%-d %b %Y",
-            "LLLLy" => "%B %Y",
-            "LLLL" | "MMMM" => "%B",
-            "EEEd" => "%a %-d",
-            "MMMd" => "%-d %b",
-            _ => "%b",
+/// Off the Mac: CLDR's dates through ICU4X, in the UI's language and the locale's region
+/// (`LC_ALL`, `LC_TIME`, `LANG`). On the Mac only its tests, against NSDateFormatter.
+#[cfg(any(not(target_os = "macos"), test))]
+mod icu {
+    use std::cell::RefCell;
+    use std::collections::HashMap;
+
+    use icu_calendar::{Date, Gregorian};
+    use icu_datetime::FixedCalendarDateTimeFormatter as Formatter;
+    use icu_datetime::fieldsets::enums::CompositeDateTimeFieldSet;
+    use icu_datetime::fieldsets::{DE, M, MD, YM, YMD, YMDE};
+    use icu_datetime::input::{DateTime, Time};
+    use icu_datetime::pattern::{DateTimePattern, FixedCalendarDateTimeNames};
+    use l10n::Lang;
+    use writeable::TryWriteable;
+
+    type Names = FixedCalendarDateTimeNames<Gregorian, CompositeDateTimeFieldSet>;
+
+    /// The locale's pattern for a form and the names it needs. Not ICU4X 2.4's formatters
+    /// themselves: some leave out the number formatter their pattern needs (Russian's month and
+    /// year, Brazilian Portuguese's month alone): a debug assertion, and no year in release.
+    struct Fmt(Box<Names>, DateTimePattern);
+
+    /// (language, pattern, whether it's a template).
+    type Key = (Lang, &'static str, bool);
+
+    thread_local! {
+        /// The journal list asks for thousands.
+        static FORMATTERS: RefCell<HashMap<Key, Option<Fmt>>> = RefCell::new(HashMap::new());
+    }
+
+    /// The region dates follow: the locale's, as `en_US.UTF-8` names it. Tests use Britain's.
+    fn region() -> Option<String> {
+        if cfg!(test) {
+            return Some("GB".into());
+        }
+        let locale = ["LC_ALL", "LC_TIME", "LANG"].iter().filter_map(|v| std::env::var(v).ok()).find(|v| !v.is_empty())?;
+        let region = locale.split(['.', '@']).next()?.split(['_', '-']).nth(1)?;
+        (region.len() == 2 && region.chars().all(|c| c.is_ascii_alphabetic())).then(|| region.to_uppercase())
+    }
+
+    /// A form's pattern from the formatter ICU4X makes for its fields; the pattern doesn't
+    /// depend on the day.
+    macro_rules! pattern_of {
+        ($prefs:expr, $set:expr) => {{
+            let sample = Date::try_new_gregorian(2000, 1, 1).ok()?;
+            Formatter::<Gregorian, _>::try_new($prefs, $set).ok()?.format(&sample).pattern()
+        }};
+    }
+
+    fn make(lang: Lang, pattern: &str, template: bool) -> Option<Fmt> {
+        let code = lang.code();
+        let tag = match region() {
+            Some(r) if !code.contains('-') => format!("{code}-{r}"),
+            _ => code.to_string(),
+        };
+        let locale: icu_locale_core::Locale = tag.parse().or_else(|_| code.parse()).ok()?;
+        let prefs = || locale.clone().into();
+        // A template lets the locale order the fields. As exact patterns, "MMMM" and "MMM" are a
+        // month as it stands in a date (Russian's genitive), "LLLL" and "LLL" as it stands alone.
+        let pattern: DateTimePattern = match (pattern, template) {
+            ("EEEEdMMMMy", true) => pattern_of!(prefs(), YMDE::long()),
+            // The Mac's "dMMMy" is CLDR's yMMMd; ICU4X's medium date is numeric for some
+            // (German's 23.11.2026), so then its long one with the month abbreviated.
+            ("dMMMy", true) => {
+                let medium = pattern_of!(prefs(), YMD::medium());
+                if medium.to_string().contains("MMM") {
+                    medium
+                } else {
+                    pattern_of!(prefs(), YMD::long()).to_string().replace("MMMM", "MMM").parse().ok()?
+                }
+            }
+            ("LLLLy", true) => pattern_of!(prefs(), YM::long()),
+            ("LLLL", true) => pattern_of!(prefs(), M::long()),
+            ("EEEd", true) => pattern_of!(prefs(), DE::short()),
+            ("MMMd", true) => pattern_of!(prefs(), MD::medium()),
+            (exact, false) => exact.parse().ok()?,
+            _ => return None,
+        };
+        let mut names = Box::new(Names::try_new(prefs()).ok()?);
+        names.include_for_pattern(&pattern).ok()?;
+        Some(Fmt(names, pattern))
+    }
+
+    /// As the Mac's `format`: the UTC day of `unix`.
+    pub fn format(lang: Lang, pattern: &'static str, template: bool, unix: i64) -> String {
+        use chrono::Datelike;
+        let Some(day) = chrono::DateTime::from_timestamp(unix, 0).map(|d| d.date_naive()) else { return String::new() };
+        let Ok(date) = Date::try_new_gregorian(day.year(), day.month() as u8, day.day() as u8) else { return String::new() };
+        FORMATTERS.with(|f| {
+            let mut f = f.borrow_mut();
+            let Some(Fmt(names, pattern)) = f.entry((lang, pattern, template)).or_insert_with(|| make(lang, pattern, template)) else { return String::new() };
+            let mut out = String::new();
+            let _ = names.with_pattern_unchecked(pattern).format(&DateTime { date, time: Time::start_of_day() }).try_write_to(&mut out);
+            out
         })
-        .to_string()
     }
 }
 
@@ -181,8 +264,7 @@ mod tests {
     use l10n::Lang;
 
     #[test]
-    #[cfg_attr(not(target_os = "macos"), ignore = "dates in other languages: dsky-fbso.15")]
-    fn the_mac_writes_the_date_in_each_language() {
+    fn the_date_is_written_in_each_language() {
         assert_eq!(format_in(Lang::En, 2026, 11, 15, Form::Long).as_deref(), Some("Sunday, 15 November 2026"));
         assert_eq!(format_in(Lang::En, 2026, 11, 15, Form::Short).as_deref(), Some("15 Nov 2026"));
         assert_eq!(format_in(Lang::En, 2026, 11, 15, Form::Month).as_deref(), Some("November"));
@@ -193,7 +275,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(not(target_os = "macos"), ignore = "dates in other languages: dsky-fbso.15")]
     fn a_date_reads_as_itself_in_any_language_and_form() {
         for lang in Lang::ALL {
             for form in [Form::Long, Form::Short, Form::MonthYear] {
@@ -211,5 +292,31 @@ mod tests {
         for not in ["Monday, 23 November 2025", "Tuesday 2026", "23 2026", "Trip to the river", "23 November", "Sunday, 22 November 2026 notes", "2026-11-22"] {
             assert!(!says(not, 2026, 11, 23), "{not}");
         }
+    }
+
+    /// Off the Mac dates come from ICU4X: in every language and form it writes what the Mac
+    /// does (both from CLDR), so a journal reads the same on every system. Word for word, as
+    /// `says` reads them: CLDR's versions differ in an abbreviation (Russian's "мар." for
+    /// "марта"), a comma, a capital.
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn icu_writes_what_the_mac_does() {
+        use super::{icu, noon, platform, MONTH_PATTERNS};
+        let mut differ = Vec::new();
+        for (y, m, d) in [(2026, 11, 23), (2027, 1, 4), (2026, 3, 5), (2026, 5, 31)] {
+            let at = noon(y, m, d).unwrap();
+            for lang in Lang::ALL {
+                let forms = Form::ALL.into_iter().map(|f| (f.template(), true)).chain(MONTH_PATTERNS.into_iter().map(|p| (p, false)));
+                for (pattern, template) in forms {
+                    let (mac, other) = (platform::format(lang, pattern, template, at), icu::format(lang, pattern, template, at));
+                    let (a, b) = (super::words(&mac), super::words(&other));
+                    let same = a.len() == b.len() && a.iter().zip(&b).all(|(a, b)| a.starts_with(b.as_str()) || b.starts_with(a.as_str()));
+                    if !same || other.is_empty() {
+                        differ.push(format!("{lang:?} {pattern}: Mac {mac:?}, ICU4X {other:?}"));
+                    }
+                }
+            }
+        }
+        assert!(differ.is_empty(), "{}", differ.join("\n"));
     }
 }
