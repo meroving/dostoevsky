@@ -311,7 +311,7 @@ impl Workspace {
             if let Some(dir) = p.tree.notes_dir.clone() {
                 let renames = into_notes(&p.tree, &form.loose, &dir);
                 if self.apply_renames(renames, true, window, cx) {
-                    self.flash_status(tr!("Moved into the notes folder. ⌘Z to undo"), cx);
+                    self.flash_status(tr!("Moved into the notes folder. {undo} to undo", undo = crate::os_text::key("⌘Z")), cx);
                 }
             }
         }

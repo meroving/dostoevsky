@@ -1276,7 +1276,7 @@ impl Workspace {
         let r = project::plan_to_notes(&p.tree, path, &dir);
         let name = p.tree.notes_name().unwrap_or_else(|| "notes/".into());
         if self.apply_renames(vec![r], true, window, cx) {
-            self.flash_status(tr!("Moved to {name}. ⌘Z to undo", name = name), cx);
+            self.flash_status(tr!("Moved to {name}. {undo} to undo", name = name, undo = crate::os_text::key("⌘Z")), cx);
         }
     }
 
@@ -1287,9 +1287,9 @@ impl Workspace {
             return;
         }
         let done = match p.tree.kind {
-            Kind::Book => tr!("Added to the book. ⌘Z to undo"),
-            Kind::Journal => tr!("Added to the journal. ⌘Z to undo"),
-            Kind::Folder => tr!("Added to the folder. ⌘Z to undo"),
+            Kind::Book => tr!("Added to the book. {undo} to undo", undo = crate::os_text::key("⌘Z")),
+            Kind::Journal => tr!("Added to the journal. {undo} to undo", undo = crate::os_text::key("⌘Z")),
+            Kind::Folder => tr!("Added to the folder. {undo} to undo", undo = crate::os_text::key("⌘Z")),
         };
         if self.apply_renames(vec![r], true, window, cx) {
             self.flash_status(done, cx);
@@ -1406,7 +1406,7 @@ impl Workspace {
             }
         }
         self.focus_list(window, cx);
-        self.flash_status(tr!("Moved to the Trash. ⌘Z to undo"), cx);
+        self.flash_status(tr!("Moved to the Trash. {undo} to undo", undo = crate::os_text::key("⌘Z")), cx);
     }
 
     pub fn list_trash(&mut self, _: &ListTrash, window: &mut Window, cx: &mut Context<Self>) {
@@ -1466,7 +1466,7 @@ impl Workspace {
                 Ok(r) if !r.as_os_str().is_empty() => format!("{}/", r.display()),
                 _ => project::folder_name(&tree.root),
             };
-            Some(tr!("Moved to {name}. ⌘Z to undo", name = name).to_string())
+            Some(tr!("Moved to {name}. {undo} to undo", name = name, undo = crate::os_text::key("⌘Z")).to_string())
         };
         // Within the notes, or a plain folder's own folders, a file keeps its name.
         let keep_name = |dir: &Path| -> Option<(Vec<Rename>, Option<String>)> {
@@ -1489,7 +1489,7 @@ impl Workspace {
         match tree.kind {
             Kind::Book => {
                 let plan = project::plan_move(tree, from, &dir, before.as_deref());
-                (!plan.is_empty()).then(|| (plan, joins.then(|| tr!("Added to the book. ⌘Z to undo").to_string())))
+                (!plan.is_empty()).then(|| (plan, joins.then(|| tr!("Added to the book. {undo} to undo", undo = crate::os_text::key("⌘Z")).to_string())))
             }
             // A folder keeps its own order, newest first: a drop only moves a file to another
             // of its folders.
@@ -1498,7 +1498,7 @@ impl Workspace {
             // Journal dates it.
             Kind::Journal => {
                 let r = project::plan_to_list(tree, from);
-                (joins && r.to != r.from).then(|| (vec![r], Some(tr!("Added to the journal. ⌘Z to undo").to_string())))
+                (joins && r.to != r.from).then(|| (vec![r], Some(tr!("Added to the journal. {undo} to undo", undo = crate::os_text::key("⌘Z")).to_string())))
             }
         }
     }

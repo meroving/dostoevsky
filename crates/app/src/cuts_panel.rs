@@ -792,7 +792,7 @@ impl Workspace {
                                     .id("cuts-empty")
                                     .text_color(c(theme::faint()))
                                     .text_size(px(12.))
-                                    .child(tr!("What you cut waits here, with its place. ⌘X fades the text where it was; ⇧⌘X leaves no trace."))
+                                    .child(tr!("What you cut waits here, with its place. {cut} fades the text where it was; {stash} leaves no trace.", stash = crate::os_text::key("⇧⌘X"), cut = crate::os_text::key("⌘X")))
                                     .test_support(),
                             )
                         }),
@@ -801,7 +801,7 @@ impl Workspace {
                     div()
                         .text_size(px(11.))
                         .text_color(if hot { c(theme::accent()) } else { c(theme::faint()) })
-                        .child(if hot { tr!("release to cut it here · ⌥ keeps it on the page") } else { tr!("⌘V or drag to use · ⌘/ puts back") }),
+                        .child(if hot { tr!("release to cut it here · {alt} keeps it on the page", alt = crate::os_text::key("⌥")) } else { tr!("{paste} or drag to use · {put_back} puts back", paste = crate::os_text::key("⌘V"), put_back = crate::os_text::key("⌘/")) }),
                 )
                 .children(foot)
                 .into_any_element(),

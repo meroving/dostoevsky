@@ -4,7 +4,7 @@ use std::sync::{Arc, Mutex};
 
 use ai::{ModelRef, Service, ServiceKind};
 
-use crate::ui_tests::Ui;
+use crate::ui_tests::{Ui, key_label};
 
 pub const DOC: &str = "# Keep the Words\n\nMost of the friction in writing comes from choosing too early. You pick teh word and the other candidates quietly disappear.\n\nIt is, in a way, basically a kind of a one-way street, really.\n";
 
@@ -264,7 +264,7 @@ fn footer_follows_the_add_field() {
     assert!(ui.has_element("ideas-key") && !ui.has_element("enter-ideas") && !ui.has_element("enter-add"));
     ui.click_id("ideas-key");
     ui.draw();
-    assert_eq!(add_field(&ui), ("?? ".to_string(), "plainer ⇥".to_string()), "a word's first default steer, which ⇥ takes");
+    assert_eq!(add_field(&ui), ("?? ".to_string(), format!("plainer {}", key_label("⇥"))), "a word's first default steer, which ⇥ takes");
     assert!(ui.has_element("enter-ideas") && !ui.has_element("ideas-key"));
     ui.type_text("plainer");
     ui.draw();
@@ -298,7 +298,7 @@ fn steers_are_remembered() {
 
     ui.type_text("?? ");
     ui.draw();
-    assert_eq!(add_field(&ui).1, "more concrete ⇥", "yours first");
+    assert_eq!(add_field(&ui).1, format!("more concrete {}", key_label("⇥")), "yours first");
     ui.keys("tab");
     assert_eq!(add_field(&ui).0, "?? more concrete");
     assert_eq!(ui.read(|ws, cx| ws.sidebar.as_ref().unwrap().input.read(cx).selection()), 3..16, "selected, so typing replaces it");
@@ -306,7 +306,7 @@ fn steers_are_remembered() {
     assert_eq!(add_field(&ui).0, "?? plainer", "⇥ again: the next");
     ui.type_text("w");
     ui.draw();
-    assert_eq!(add_field(&ui), ("?? w".to_string(), "armer ⇥".to_string()), "part of one: the rest of it");
+    assert_eq!(add_field(&ui), ("?? w".to_string(), format!("armer {}", key_label("⇥"))), "part of one: the rest of it");
     ui.keys("tab");
     assert_eq!(add_field(&ui).0, "?? warmer");
 
@@ -324,7 +324,7 @@ fn question_marks_need_no_space() {
     let g = ui.sidebar().unwrap();
     ui.type_text("??");
     ui.draw();
-    assert_eq!(add_field(&ui).1, " plainer ⇥", "a space before the hint when none was typed");
+    assert_eq!(add_field(&ui).1, format!(" plainer {}", key_label("⇥")), "a space before the hint when none was typed");
     ui.type_text("plainer");
     ui.keys("enter");
     assert!(ui.wait_for(5., |ui| !ideas_running(ui) && ui.variants(g).len() == 6), "{:?}", ui.variants(g));

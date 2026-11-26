@@ -618,9 +618,9 @@ impl Workspace {
             self.overlay.explode(o, r.text.chars().take(40).collect::<String>(), mode);
         }
         if r.dissolved {
-            self.flash_status(tr!("Removed. ⌘Z to undo"), cx);
+            self.flash_status(tr!("Removed. {undo} to undo", undo = crate::os_text::key("⌘Z")), cx);
         } else if index == 0 {
-            self.flash_status(tr!("Original removed. ⌘Z to undo"), cx);
+            self.flash_status(tr!("Original removed. {undo} to undo", undo = crate::os_text::key("⌘Z")), cx);
         }
         self.sync_sidebar(cx);
         if self.sidebar.as_ref().is_some_and(|s| s.group.is_none()) {
@@ -664,7 +664,7 @@ impl Workspace {
 
     fn settle_group_from(&mut self, id: GroupId, in_field: bool, window: &mut Window, cx: &mut Context<Self>) {
         if self.model.update(cx, |m, cx| m.edit(cx, |d| d.settle(id)).is_ok()) {
-            self.flash_status(tr!("Settled. ⌘Z to undo"), cx);
+            self.flash_status(tr!("Settled. {undo} to undo", undo = crate::os_text::key("⌘Z")), cx);
             if let Some(s) = self.sidebar.as_mut().filter(|s| s.group == Some(id)) {
                 s.group = None;
             }
@@ -784,7 +784,7 @@ impl Workspace {
                 .text_size(px(12.5))
                 .line_height(px(21.))
                 .text_color(c(theme::muted()))
-                .child(tr!("Select text, then ⇧⌘A."))
+                .child(tr!("Select text, then {alternatives}.", alternatives = crate::os_text::key("⇧⌘A")))
                 .test_support()
                 .into_any_element()
         } else {
@@ -1184,8 +1184,9 @@ impl Workspace {
         let hint: SharedString = match ask {
             Some(steer) if ai => {
                 let candidates = steer_candidates(tab, cx);
+                let tab_key = crate::os_text::key("⇥");
                 if steer.is_empty() {
-                    candidates.first().map(|c| if typed.ends_with(' ') { format!("{c} ⇥") } else { format!(" {c} ⇥") }).unwrap_or_default().into()
+                    candidates.first().map(|c| if typed.ends_with(' ') { format!("{c} {tab_key}") } else { format!(" {c} {tab_key}") }).unwrap_or_default().into()
                 } else if typed.ends_with(char::is_whitespace) || candidates.iter().any(|c| c.to_lowercase() == steer.to_lowercase()) {
                     SharedString::default()
                 } else {
@@ -1193,7 +1194,7 @@ impl Workspace {
                     candidates
                         .iter()
                         .find(|c| c.to_lowercase().starts_with(&low) && c.chars().count() > steer.chars().count())
-                        .map(|c| format!("{} ⇥", c.chars().skip(steer.chars().count()).collect::<String>()))
+                        .map(|c| format!("{} {tab_key}", c.chars().skip(steer.chars().count()).collect::<String>()))
                         .unwrap_or_default()
                         .into()
                 }

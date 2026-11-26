@@ -67,7 +67,7 @@ impl Workspace {
         let rx = window.prompt(
             PromptLevel::Warning,
             &trn!("Delete the cut on this page?", "Delete all {n} cuts on this page?", n),
-            Some(tr!("You can undo this with ⌘Z.")),
+            Some(tr!("You can undo this with {undo}.", undo = crate::os_text::key("⌘Z")).as_str()),
             &[tr!("Delete"), tr!("Cancel")],
             cx,
         );
