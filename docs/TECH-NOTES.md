@@ -265,6 +265,13 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   Each variant is its own key in every catalog (the Mac's strings are unchanged);
   `cfg!(target_os)` picks the branch, so a catalog never names a system. The UI tests expect
   such a label through `os_text` as well, as they do a key through `key_label`.
+- **Other systems' own things** (dsky-fbso.7): on Linux a file goes to the freedesktop.org
+  Trash the file managers share (`trash.rs`: `files/` and a `.trashinfo` saying where it came
+  from; another disk's `.Trash-<uid>`), and ⌘Z moves it back and drops the record. Reduce
+  motion follows GNOME's Animations switch (`gsettings`) or KDE's animation speed
+  (`kdeglobals`), read every few seconds on a thread of its own. Not yet: the Recycle Bin and
+  Windows' motion setting, rich text on the clipboard (GPUI writes plain text only off the
+  Mac), Look Up.
 - **Spelling off the Mac** (`hunspell.rs`, dsky-fbso.4): the Mac's `NSSpellChecker` checks a
   word in any of the writer's languages, so off the Mac a word is right when any of its
   dictionaries knows it: one Hunspell dictionary per language the writer reads (the UI's, the

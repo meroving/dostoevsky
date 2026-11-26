@@ -44,6 +44,8 @@ mod review_text;
 mod sound;
 mod spell;
 mod tagger;
+#[cfg(unix)]
+mod trash;
 mod text;
 #[cfg(feature = "shots")]
 mod shots;

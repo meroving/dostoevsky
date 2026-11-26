@@ -8,9 +8,66 @@ pub fn reduce_motion() -> bool {
     NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion()
 }
 
+/// The desktop's own setting: GNOME's "Animations" off, or KDE's animation speed at instant.
+/// Read on a thread of its own every few seconds, so a change is seen without asking on every
+/// frame. Tests set motion through Prefs::effects; Windows' setting isn't read yet (dsky-fbso.7).
 #[cfg(not(target_os = "macos"))]
 pub fn reduce_motion() -> bool {
-    false
+    #[cfg(any(test, windows))]
+    return false;
+    #[cfg(not(any(test, windows)))]
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static REDUCE: AtomicBool = AtomicBool::new(false);
+        static WATCH: std::sync::Once = std::sync::Once::new();
+        WATCH.call_once(|| {
+            let watch = move || {
+                let mut gsettings = true;
+                loop {
+                    let gnome = gsettings.then(|| std::process::Command::new("gsettings").args(["get", "org.gnome.desktop.interface", "enable-animations"]).output());
+                    let gnome = match gnome {
+                        Some(Ok(out)) if out.status.success() => gnome_reduces_motion(&String::from_utf8_lossy(&out.stdout)),
+                        Some(Err(_)) => {
+                            // No gsettings here: not a GNOME-family desktop.
+                            gsettings = false;
+                            None
+                        }
+                        _ => None,
+                    };
+                    let config = std::env::var_os("XDG_CONFIG_HOME").filter(|v| !v.is_empty()).map(std::path::PathBuf::from).or_else(|| std::env::var_os("HOME").map(|h| std::path::PathBuf::from(h).join(".config")));
+                    let kde = config.and_then(|c| std::fs::read_to_string(c.join("kdeglobals")).ok()).and_then(|t| kde_reduces_motion(&t));
+                    REDUCE.store(gnome.or(kde).unwrap_or(false), Ordering::Relaxed);
+                    std::thread::sleep(std::time::Duration::from_secs(5));
+                }
+            };
+            let _ = std::thread::Builder::new().name("reduce-motion".into()).spawn(watch);
+        });
+        REDUCE.load(Ordering::Relaxed)
+    }
+}
+
+/// `gsettings get org.gnome.desktop.interface enable-animations`: "false" reduces motion.
+#[cfg(any(all(not(target_os = "macos"), not(windows)), test))]
+fn gnome_reduces_motion(output: &str) -> Option<bool> {
+    match output.trim() {
+        "false" => Some(true),
+        "true" => Some(false),
+        _ => None,
+    }
+}
+
+/// KDE's `kdeglobals`: `AnimationDurationFactor=0` under `[KDE]` turns animations off.
+#[cfg(any(all(not(target_os = "macos"), not(windows)), test))]
+fn kde_reduces_motion(kdeglobals: &str) -> Option<bool> {
+    let mut in_kde = false;
+    for line in kdeglobals.lines().map(str::trim) {
+        if line.starts_with('[') {
+            in_kde = line == "[KDE]";
+        } else if let Some(v) = line.strip_prefix("AnimationDurationFactor=").filter(|_| in_kde) {
+            return v.trim().parse::<f64>().ok().map(|f| f == 0.);
+        }
+    }
+    None
 }
 
 #[cfg(test)]
@@ -140,9 +197,12 @@ pub fn open_file(path: &std::path::Path) {
     NSWorkspace::sharedWorkspace().openURL(&url);
 }
 
+/// In the app the system gives the file to: xdg-open's choice, or Windows' (Explorer opens a
+/// file with its associated app).
 #[cfg(not(target_os = "macos"))]
 pub fn open_file(path: &std::path::Path) {
-    let _ = std::process::Command::new("xdg-open").arg(path).spawn();
+    let opener = if cfg!(windows) { "explorer" } else { "xdg-open" };
+    let _ = std::process::Command::new(opener).arg(path).spawn();
 }
 
 /// Returns the path in the Trash, so ⌘Z can bring it back.
@@ -160,7 +220,14 @@ pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
 }
 
 /// Tests use a folder next to the test's data, not the real Trash.
-#[cfg(any(test, not(target_os = "macos")))]
+/// Linux and the other Unixes: the freedesktop.org Trash the file managers share.
+#[cfg(all(unix, not(target_os = "macos"), not(test)))]
+pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    crate::trash::trash(path)
+}
+
+/// Tests, and Windows until its Recycle Bin is wired (dsky-fbso.7): a Trash folder of the app's own.
+#[cfg(any(test, windows))]
 pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
     let base = crate::files::support_dir().ok_or_else(|| std::io::Error::other("no support folder"))?;
     let bin = base.join("Trash");
@@ -168,6 +235,14 @@ pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
     let to = crate::project::unused(&bin.join(path.file_name().unwrap_or_default()));
     std::fs::rename(path, &to)?;
     Ok(to)
+}
+
+/// Brings back what [`trash`] moved to `to`, and has the trash forget it.
+pub fn untrash(to: &std::path::Path, from: &std::path::Path) -> std::io::Result<()> {
+    #[cfg(unix)]
+    return crate::trash::restore(to, from);
+    #[cfg(not(unix))]
+    return std::fs::rename(to, from);
 }
 
 /// Turns off macOS font smoothing, with which GPUI thickens light text on dark. GPUI reads it
@@ -301,5 +376,16 @@ mod tests {
         assert_eq!(locale_languages("", &locales), ["ru-RU"]);
         assert_eq!(locale_languages("de_AT:de:en", &locales), ["de-AT", "de", "en", "ru-RU"]);
         assert_eq!(locale_languages("", &["C.UTF-8".into(), "POSIX".into(), "sr_RS@latin".into()]), ["sr-RS"]);
+    }
+
+    #[test]
+    fn the_desktop_says_whether_to_reduce_motion() {
+        use super::{gnome_reduces_motion, kde_reduces_motion};
+        assert_eq!(gnome_reduces_motion("false\n"), Some(true));
+        assert_eq!(gnome_reduces_motion("true\n"), Some(false));
+        assert_eq!(gnome_reduces_motion("No such schema"), None);
+        assert_eq!(kde_reduces_motion("[General]\nAnimationDurationFactor=0\n[KDE]\nAnimationDurationFactor=0\n"), Some(true));
+        assert_eq!(kde_reduces_motion("[KDE]\nAnimationDurationFactor=0.5\n"), Some(false));
+        assert_eq!(kde_reduces_motion("[General]\nAnimationDurationFactor=0\n"), None, "only under [KDE]");
     }
 }
