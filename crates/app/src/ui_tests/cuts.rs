@@ -1,4 +1,4 @@
-use crate::ui_tests::Ui;
+use crate::ui_tests::{Ui, key_label};
 
 const DOC: &str = "Most of the friction in writing comes from choosing too early. You pick a word and move on.\n\n\
 Editors have always known this. They write a suggestion in the margin.\n";
@@ -13,7 +13,8 @@ fn cut_1_cmd_x_fades_in_place() {
     assert_eq!(ui.ghosts(), std::slice::from_ref(&r));
     assert!(ui.fades().iter().any(|(f, _)| *f == r), "{:?}", ui.fades());
     assert_eq!(ui.clipboard().as_deref(), Some("choosing too early"));
-    assert_eq!(ui.status().as_deref(), Some("Cut · ⌘V moves it · esc puts it back"));
+    let status = format!("Cut · {} moves it · esc puts it back", key_label("⌘V"));
+    assert_eq!(ui.status().as_deref(), Some(status.as_str()));
     assert_eq!(ui.selection(), r.end..r.end);
     assert!(ui.read(|ws, cx| ws.model.read(cx).doc.clean_text()).contains("comes from. You"));
     ui.keys("right");
@@ -31,7 +32,8 @@ fn cut_2_cmd_v_moves_then_copies() {
     assert!(ui.text().contains("in the choosing too early margin"), "{}", ui.text());
     assert!(ui.text().contains("comes from. You"), "the trace went and its space was tidied: {}", ui.text());
     assert!(ui.ghosts().is_empty());
-    assert_eq!(ui.status().as_deref(), Some("Moved · ⌘Z puts it back"));
+    let status = format!("Moved · {} puts it back", key_label("⌘Z"));
+    assert_eq!(ui.status().as_deref(), Some(status.as_str()));
     assert!(ui.read(|ws, cx| ws.model.read(cx).doc.cuts()).is_empty(), "the cut left the panel");
 
     ui.keys("cmd-v");

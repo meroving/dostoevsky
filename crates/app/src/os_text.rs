@@ -84,11 +84,16 @@ pub fn show_in_file_manager() -> &'static str {
     }
 }
 
-/// The Project sheet's note on where the `.dostoevsky` file type is hidden.
+/// The Project sheet's note on the `.dostoevsky` file: the type, hidden in Finder and in Linux's
+/// file managers, which hide dot-files. File Explorer doesn't, so there the note only names it.
 pub fn file_type_hidden_in_file_manager() -> &'static str {
-    match os() {
+    file_type_note(os())
+}
+
+fn file_type_note(os: Os) -> &'static str {
+    match os {
         Os::Mac => tr!("the type, hidden in Finder"),
-        Os::Windows => tr!("the type, hidden in File Explorer"),
+        Os::Windows => tr!("the project’s type"),
         Os::Linux => tr!("the type, hidden in the file manager"),
     }
 }
@@ -194,7 +199,15 @@ pub fn match_system() -> &'static str {
 
 #[cfg(test)]
 mod tests {
-    use super::pc_key;
+    use super::{Os, file_type_note, pc_key};
+
+    #[test]
+    fn only_where_dot_files_are_hidden_does_the_note_say_so() {
+        // A ".dostoevsky" file is not hidden in File Explorer: only the hidden attribute hides there.
+        assert_eq!(file_type_note(Os::Windows), "the project’s type");
+        assert!(file_type_note(Os::Mac).contains("hidden"));
+        assert!(file_type_note(Os::Linux).contains("hidden"));
+    }
 
     #[test]
     fn mac_keys_as_windows_and_linux_write_them() {
