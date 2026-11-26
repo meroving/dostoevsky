@@ -48,6 +48,10 @@ objc2-core-graphics = "0.3"
 objc2-core-text = "0.3"
 objc2-pdf-kit = "0.3"
 
+# The freedesktop.org Trash's other-disk folder is named by the user's id (trash.rs).
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 # Dates off the Mac: CLDR's patterns and names in each language (dates.rs; dsky-fbso.15).
 [target.'cfg(not(target_os = "macos"))'.dependencies]
 icu_datetime = "2.4"

@@ -1427,7 +1427,7 @@ impl Workspace {
                     Err(e) => self.flash_status(tr!("Couldn't undo: {error}", error = e), cx),
                 }
             }
-            Some(FileOp::Trashed { from, to }) => match std::fs::rename(&to, &from) {
+            Some(FileOp::Trashed { from, to }) => match crate::platform::untrash(&to, &from) {
                 Ok(()) => {
                     self.rescan(cx);
                     self.switch_to(&from, window, cx);

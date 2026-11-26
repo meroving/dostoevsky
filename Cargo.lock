@@ -1628,6 +1628,7 @@ dependencies = [
  "icu_locale_core",
  "image",
  "l10n",
+ "libc",
  "notify",
  "objc2 0.6.5",
  "objc2-app-kit 0.3.2",
