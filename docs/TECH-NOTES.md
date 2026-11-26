@@ -265,6 +265,18 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   Each variant is its own key in every catalog (the Mac's strings are unchanged);
   `cfg!(target_os)` picks the branch, so a catalog never names a system. The UI tests expect
   such a label through `os_text` as well, as they do a key through `key_label`.
+- **Spelling off the Mac** (`hunspell.rs`, dsky-fbso.4): the Mac's `NSSpellChecker` checks a
+  word in any of the writer's languages, so off the Mac a word is right when any of its
+  dictionaries knows it: one Hunspell dictionary per language the writer reads (the UI's, the
+  locale's from `LANGUAGE` / `LC_ALL` / `LC_MESSAGES` / `LANG`, English), the nearest country
+  first (`en_GB` when asked, else `de_DE`, `en_US`), from the app's `Dictionaries/` folder, then
+  `DICPATH` and the system's `hunspell` / `myspell` folders. `spellbook` (pure Rust) checks and
+  guesses; a dictionary is read in the encoding its `.aff` names (`SET KOI8-R`), off the main
+  thread. Guesses come from the dictionary whose `TRY` letters the word is written in. Words are
+  UAX #29 words, a curly apostrophe read as a straight one; not words with digits, acronyms in
+  capitals, nor web and mail addresses. Learn writes `Spelling/learned.txt`; Ignore lasts the
+  session. No dictionary found: nothing is underlined. Windows ships none, so a writer adds
+  them to `Dictionaries/` until its own checker (ISpellChecker) is wired.
 - **Dates come from macOS** (`dates.rs`): NSDateFormatter with a template (`EEEEdMMMMy`,
   `LLLL`…) in the UI's language and the Mac's region, so English on a Mac set to Russia writes
   "23 November", and no catalog holds a month or weekday. Reading a journal day's heading back

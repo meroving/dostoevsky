@@ -195,9 +195,25 @@ pub fn preferred_languages() -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// The locale's languages, as the Mac writes them (`ru-RU`): `LANGUAGE`'s list, then `LC_ALL`,
+/// `LC_MESSAGES`, `LANG`; not `C` or `POSIX`.
 #[cfg(not(target_os = "macos"))]
 pub fn preferred_languages() -> Vec<String> {
-    std::env::var("LANG").map(|l| vec![l.split('.').next().unwrap_or("").to_string()]).unwrap_or_default()
+    let var = |name: &str| std::env::var(name).unwrap_or_default();
+    locale_languages(&var("LANGUAGE"), &[var("LC_ALL"), var("LC_MESSAGES"), var("LANG")])
+}
+
+#[cfg(any(not(target_os = "macos"), test))]
+fn locale_languages(language: &str, locales: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for locale in language.split(':').chain(locales.iter().map(String::as_str)) {
+        // `ru_RU.UTF-8@euro` → `ru-RU`.
+        let tag = locale.split(['.', '@']).next().unwrap_or("").replace('_', "-");
+        if !tag.is_empty() && tag != "C" && tag != "POSIX" && !out.contains(&tag) {
+            out.push(tag);
+        }
+    }
+    out
 }
 
 /// Opens the system colour panel on `hex` (sRGB, no alpha). Its choice is read back with
@@ -273,4 +289,17 @@ pub fn colour_panel_colour() -> Option<u32> {
 #[cfg(test)]
 pub fn close_colour_panel() {
     TEST_COLOUR_PANEL.with(|p| p.set(None));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::locale_languages;
+
+    #[test]
+    fn a_locale_names_its_languages_as_the_mac_does() {
+        let locales = ["".to_string(), "".to_string(), "ru_RU.UTF-8".to_string()];
+        assert_eq!(locale_languages("", &locales), ["ru-RU"]);
+        assert_eq!(locale_languages("de_AT:de:en", &locales), ["de-AT", "de", "en", "ru-RU"]);
+        assert_eq!(locale_languages("", &["C.UTF-8".into(), "POSIX".into(), "sr_RS@latin".into()]), ["sr-RS"]);
+    }
 }
