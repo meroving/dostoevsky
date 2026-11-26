@@ -174,8 +174,10 @@ fn moving_between_files_keeps_everything() {
     assert!(page_text(&ui).contains("exceptionally hot"), "undo came back with the file");
 }
 
-/// NFR-1
+/// NFR-1. A folder made unwritable by its mode bits: Windows' read-only attribute doesn't stop
+/// writes into a folder, so the test is Unix's.
 #[test]
+#[cfg(unix)]
 fn a_save_that_fails_on_leaving_keeps_the_words() {
     use std::os::unix::fs::PermissionsExt;
     struct Writable(PathBuf);
@@ -815,6 +817,7 @@ fn a_file_can_grow_into_its_folder() {
 }
 
 #[test]
+#[cfg(unix)]
 #[cfg_attr(not(target_os = "macos"), ignore = "the sandbox is the Mac App Store's")]
 fn enclosing_folder_asks_under_the_sandbox() {
     use std::os::unix::fs::PermissionsExt;
@@ -1238,6 +1241,7 @@ fn new_project_makes_a_journal_and_refuses_a_taken_name() {
 
 /// PROJ-1
 #[test]
+#[cfg(unix)]
 #[cfg_attr(not(target_os = "macos"), ignore = "the sandbox is the Mac App Store's")]
 fn new_project_asks_once_for_a_place_the_sandbox_hasnt_granted() {
     use std::os::unix::fs::PermissionsExt;
