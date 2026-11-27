@@ -312,7 +312,9 @@
   "Match macOS": "Comme macOS",
   "Match Windows": "Comme Windows",
   "Match the system": "Comme le système",
+  "Maximize#window button": "Agrandir",
   "Minimize": "Placer dans le Dock",
+  "Minimize#window button": "Réduire",
   "Mode": "Mode",
   "Editing mode": "Mode révision",
   "Review tab": "Onglet Relire",
@@ -487,6 +489,7 @@
     "{n} remplacements"
   ],
   "Reset to {style}": "Revenir à {style}",
+  "Restore#window button": "Restaurer",
   "Revert to Saved": "Revenir à la version enregistrée",
   "Review": "Examiner",
   "Review#pass menu": "Relire",

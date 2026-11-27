@@ -740,6 +740,10 @@ impl AssetSource for Assets {
             "chrome/comment.svg" => include_bytes!("../assets/chrome/comment.svg"),
             "chrome/axe.svg" => include_bytes!("../assets/chrome/axe.svg"),
             "chrome/spinner.svg" => include_bytes!("../assets/chrome/spinner.svg"),
+            "chrome/window-minimize.svg" => include_bytes!("../assets/chrome/window-minimize.svg"),
+            "chrome/window-maximize.svg" => include_bytes!("../assets/chrome/window-maximize.svg"),
+            "chrome/window-restore.svg" => include_bytes!("../assets/chrome/window-restore.svg"),
+            "chrome/window-close.svg" => include_bytes!("../assets/chrome/window-close.svg"),
             "icon.png" => include_bytes!("../assets/icon.png"),
             _ => return gpui_kit::assets::AllAssets.load(path),
         };

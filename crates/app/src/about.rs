@@ -245,7 +245,7 @@ impl About {
 }
 
 impl Render for About {
-    fn render(&mut self, _: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
+    fn render(&mut self, window: &mut Window, cx: &mut Context<Self>) -> impl IntoElement {
         let body = match self.page {
             Page::About => self.render_about(cx),
             Page::Acknowledgements => self.render_acknowledgements(cx),
@@ -270,6 +270,8 @@ impl Render for About {
             .line_height(px(18.))
             .text_color(c(theme::text_2()))
             .child(body)
+            // Off the Mac the strip is the app's: it moves the window and has its close button.
+            .when(!cfg!(target_os = "macos"), |d| d.child(crate::title_bar::strip(window, 28.)))
     }
 }
 

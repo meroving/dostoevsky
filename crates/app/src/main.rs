@@ -55,6 +55,7 @@ mod sidebar;
 mod theme;
 mod theme_import;
 mod theme_ui;
+mod title_bar;
 #[cfg(test)]
 mod ui_tests;
 mod updates;
@@ -96,8 +97,16 @@ fn window_options(cx: &App) -> WindowOptions {
     let n = cx.windows().len() as f32;
     let mut bounds = Bounds::centered(None, size, cx);
     // Whole points: a .5 origin makes macOS round both edges, and the window comes out 861 pt tall.
-    bounds.origin.x = (bounds.origin.x + px(24. * n)).round();
-    bounds.origin.y = (bounds.origin.y + px(24. * n)).round();
+    bounds.origin.x = (bounds.origin.x + px(title_bar::CASCADE * n)).round();
+    bounds.origin.y = (bounds.origin.y + px(title_bar::CASCADE * n)).round();
+    // Off the Mac nothing moves a window back onto the screen: it opens inside the work area,
+    // clear of the taskbar (dsky-fbso.10). A scripted run keeps the size it asks for.
+    let sized_by_script = cfg!(feature = "shots") && std::env::var_os("DOSTOEVSKY_WINDOW_SIZE").is_some();
+    if !cfg!(target_os = "macos") && !sized_by_script {
+        if let Some(display) = cx.primary_display() {
+            bounds = title_bar::fit_to_work_area(size, display.visible_bounds(), title_bar::CASCADE * n);
+        }
+    }
     WindowOptions {
         window_bounds: Some(WindowBounds::Windowed(bounds)),
         titlebar: Some(TitlebarOptions {
@@ -106,7 +115,7 @@ fn window_options(cx: &App) -> WindowOptions {
             // 14 px buttons, so 36 px high with this margin: centred on the header's line.
             traffic_light_position: Some(point(px(14.), px(11.))),
         }),
-        window_min_size: Some(gpui_kit::size(px(520.), px(360.))),
+        window_min_size: Some(gpui_kit::size(px(title_bar::MIN_WINDOW_W), px(360.))),
         tabbing_identifier: Some("dostoevsky-document".into()),
         app_id: Some(APP_ID.into()),
         window_background: theme::window_background(Prefs::get(cx).background_opacity),

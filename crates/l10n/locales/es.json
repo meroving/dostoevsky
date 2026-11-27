@@ -312,7 +312,9 @@
   "Match macOS": "Igual que macOS",
   "Match Windows": "Igual que Windows",
   "Match the system": "Igual que el sistema",
+  "Maximize#window button": "Maximizar",
   "Minimize": "Minimizar",
+  "Minimize#window button": "Minimizar",
   "Mode": "Modo",
   "Editing mode": "Modo edición",
   "Review tab": "Pestaña Revisar",
@@ -487,6 +489,7 @@
     "{n} reemplazos"
   ],
   "Reset to {style}": "Volver a {style}",
+  "Restore#window button": "Restaurar",
   "Revert to Saved": "Volver a la versión guardada",
   "Review": "Revisar",
   "Review#pass menu": "Revisar",

@@ -31,7 +31,7 @@ fn header_is_one_line() {
     let dir = crate::ui_tests::TempDir::new("header");
     let path = dir.file("a-very-long-file-name-for-the-header-of-a-small-window.md", DOC);
 
-    for (w, h) in [(1180., 800.), (900., 600.), (680., 500.), (520., 360.)] {
+    for (w, h) in [(1180., 800.), (900., 600.), (680., 500.), (crate::title_bar::MIN_WINDOW_W, 360.)] {
         let mut ui = Ui::open_file_sized(&path, w, h);
         crate::ui_tests::ai::connect(&mut ui);
         ui.select_text("friction in writing");
@@ -55,15 +55,24 @@ fn header_is_one_line() {
                 assert!(pair[0].right() <= pair[1].left(), "in order and clear at {w}: {ids:?} {pair:?}");
             }
             assert!(boxes[boxes.len() - 1].right() <= px(w), "inside the window at {w}");
-            assert!(boxes[0].left() >= px(74.), "clear of the traffic lights at {w}");
+            if cfg!(target_os = "macos") {
+                assert!(boxes[0].left() >= px(74.), "clear of the traffic lights at {w}");
+            }
+            if ui.has_element("caption-buttons") {
+                let buttons = ui.element("caption-buttons").bounds();
+                assert!(boxes[boxes.len() - 1].right() <= buttons.left(), "clear of the window's buttons at {w}: {buttons:?}");
+                assert_eq!(buttons.right(), px(w), "the window's buttons end the header at {w}");
+            }
             assert!((boxes[2].center().x - px(w / 2.)).abs() < px(2.), "the middle stays centred at {w}");
         }
     }
 }
 
 /// WIN-3: the test window panics on a move, so button tests know a click stays with the button.
+/// On Windows the header's empty part is the window's caption: Windows moves the window
+/// itself, and the app asks nothing.
 #[test]
-#[should_panic(expected = "not implemented")]
+#[cfg_attr(not(target_os = "windows"), should_panic(expected = "not implemented"))]
 fn header_moves_the_window() {
     let mut ui = Ui::open(DOC);
     let (title, layer) = (ui.element("title").bounds(), ui.element("layer").bounds());
@@ -76,7 +85,13 @@ fn header_starts_at_the_edge_in_full_screen() {
     let beside_the_lights = ui.element("panel").bounds().left();
     ui.keys("ctrl-cmd-f");
     ui.draw();
-    assert!(ui.element("panel").bounds().left() < beside_the_lights);
+    if cfg!(target_os = "macos") {
+        assert!(ui.element("panel").bounds().left() < beside_the_lights);
+    } else {
+        // Off the Mac it starts there anyway; the window's buttons go with the title bar.
+        assert_eq!(ui.element("panel").bounds().left(), beside_the_lights);
+        assert!(!ui.has_element("caption-buttons"));
+    }
 }
 
 #[test]

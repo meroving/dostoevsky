@@ -62,7 +62,7 @@ The product spec and decision records are maintained separately and aren't publi
   replies to numbered sentences, keys in the Keychain (Secret Service / Credential Manager off the Mac; `DOSTOEVSKY_SECRETS=memory` in tests), OpenRouter PKCE.
 - `crates/app` (binary `dostoevsky`, gpui-kit 0.8): `view.rs` is the custom text element
   (`TextView` + `PageElement`) used for the page, Overflow notes and fields; `workspace.rs`
-  is the window; `panels.rs` (which side each panel tab lives on, dragging tabs between the headers, what a side shows), `sidebar.rs`, `overflow.rs` (the Drawer panel; `drawer.rs` keeps a project's drawer), `context_menu.rs`, `panel_foot.rs` (the left panel's foot: Open, Save, Finder, Settings; the Project tab with no project), `sheets.rs` (source view,
+  is the window; `title_bar.rs` is its title bar off the Mac (Windows' caption buttons, Linux's client-side frame, a first window inside the work area); `panels.rs` (which side each panel tab lives on, dragging tabs between the headers, what a side shows), `sidebar.rs`, `overflow.rs` (the Drawer panel; `drawer.rs` keeps a project's drawer), `context_menu.rs`, `panel_foot.rs` (the left panel's foot: Open, Save, Finder, Settings; the Project tab with no project), `sheets.rs` (source view,
   shortcuts, preferences, import, detached), `find.rs`, `external.rs` (FSEvents),
   `effects.rs`, `sound.rs`, `spell.rs` (NSSpellChecker; off the Mac `hunspell.rs`: Hunspell dictionaries via spellbook), `keymap.rs`, `memory.rs`,
   `sentence_keys.rs` (walk, grow and move by sentence and paragraph, ED-10…12; no UI),

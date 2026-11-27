@@ -312,7 +312,9 @@
   "Match macOS": "Come macOS",
   "Match Windows": "Come Windows",
   "Match the system": "Come il sistema",
+  "Maximize#window button": "Ingrandisci",
   "Minimize": "Contrai",
+  "Minimize#window button": "Riduci a icona",
   "Mode": "Modalità",
   "Editing mode": "Modalità revisione",
   "Review tab": "Scheda Rivedi",
@@ -487,6 +489,7 @@
     "{n} sostituzioni"
   ],
   "Reset to {style}": "Torna a {style}",
+  "Restore#window button": "Ripristina",
   "Revert to Saved": "Ripristina versione salvata",
   "Review": "Rivedi",
   "Review#pass menu": "Rivedi",
