@@ -9,6 +9,8 @@ mod editing;
 mod files;
 mod l10n;
 mod layout;
+#[cfg(not(target_os = "macos"))]
+mod menu_bar;
 mod ghosts;
 mod overflow;
 mod panel_foot;

@@ -55,6 +55,8 @@ pub struct Workspace {
     pub(crate) drawer: Option<crate::overflow::Drawer>,
     pub(crate) cuts_scope: crate::cuts_panel::Scope,
     pub(crate) context_menu: Option<crate::context_menu::ContextMenu>,
+    /// Off the Mac, the menus drawn in the header.
+    pub(crate) menu_bar: crate::menu_bar::MenuBar,
     pub(crate) count_open: bool,
     /// Since when text has been held over the closed Overflow's button (it springs open).
     pub(crate) spring: Option<std::time::Instant>,
@@ -120,6 +122,7 @@ impl Workspace {
                 crate::set_front_window(this.project_kind(), this.model.read(cx).layer, cx);
             } else {
                 this.autosave(window, cx);
+                this.menu_bar_close(true, window, cx);
             }
         }));
         // Off the Mac the window's close button and Alt+F4 ask the system to close it: an
@@ -161,6 +164,7 @@ impl Workspace {
             comment_found: None,
             comment_files: Default::default(),
             context_menu: None,
+            menu_bar: crate::menu_bar::MenuBar::new(cx),
             count_open: false,
             spring: None,
             saved_at: None,
@@ -1381,14 +1385,31 @@ pub struct HeaderEdges {
     pub left: f32,
     /// The window's buttons' width, 0 where there are none.
     pub buttons: f32,
+    /// Off the Mac the menus start the header: their names, or ≡ where the names would leave
+    /// the document's title too little room (dsky-fbso.9).
+    pub menus: Option<bool>,
 }
 
 impl HeaderEdges {
     pub fn of(window: &Window) -> HeaderEdges {
         let full_screen = window.is_fullscreen();
         let frame = crate::title_bar::frame(window);
-        let left = if frame == crate::title_bar::Frame::Mac && !full_screen { HEADER_LEFT } else { HEADER_LEFT_FULL_SCREEN };
-        HeaderEdges { left, buttons: crate::title_bar::buttons_width(frame, full_screen) }
+        let buttons = crate::title_bar::buttons_width(frame, full_screen);
+        if frame == crate::title_bar::Frame::Mac {
+            let left = if full_screen { HEADER_LEFT_FULL_SCREEN } else { HEADER_LEFT };
+            return HeaderEdges { left, buttons, menus: None };
+        }
+        use crate::menu_bar::{bar_width, BAR_LEFT, MIN_TITLE_ROOM};
+        let titles = crate::actions::menu_titles();
+        let left = |collapsed| BAR_LEFT + bar_width(&titles, collapsed) + PANEL_BUTTON_GAP;
+        let w = f32::from(window.viewport_size().width);
+        let collapsed = side_zone(w) - left(false) - ICON_BUTTON_W - PANEL_BUTTON_GAP - TITLE_DOT_W < MIN_TITLE_ROOM;
+        HeaderEdges { left: left(collapsed), buttons, menus: Some(collapsed) }
+    }
+
+    /// The menus fold into ≡.
+    pub fn menus_collapsed(&self) -> bool {
+        self.menus == Some(true)
     }
 
     /// Between the header's last button and the window's edge or its buttons.
@@ -1735,7 +1756,8 @@ impl Render for Workspace {
         use crate::panels::{PanelTab, Side};
         let scraps = self.button_count(Side::Right, cx);
         let left_scraps = self.button_count(Side::Left, cx);
-        let chrome_alpha = if self.typing { 0.15 } else { 1. };
+        // The menu bar with the keys on it doesn't fade.
+        let chrome_alpha = if self.typing && !self.menu_bar.active() { 0.15 } else { 1. };
         let drawer_open = self.side_open(Side::Right, cx);
         let find_open = self.find.is_some();
         let find_button = find_button_fits(window_w, edges);
@@ -1790,6 +1812,9 @@ impl Render for Workspace {
         let has_path = self.model.read(cx).path.is_some();
         let right_panel = self.render_side(Side::Right, window, cx).map(|e| slide(e, false, right, right_in));
         let menu = self.render_context_menu(window, cx);
+        let menu_bar = edges.menus.map(|collapsed| self.render_menu_bar(collapsed, window, cx));
+        let has_menu_bar = menu_bar.is_some();
+        let menu_panels = self.render_menu_panels(window, cx);
         let peek = self.render_peek(cx);
         let comment_field = self.render_comment_field(window, cx);
         let comment_peek = self.render_comment_peek(cx);
@@ -1861,6 +1886,9 @@ impl Render for Workspace {
             .on_action(cx.listener(Self::minimize))
             .on_action(cx.listener(Self::zoom))
             .on_action(cx.listener(Self::fullscreen))
+            .on_action(cx.listener(Self::show_menu_bar))
+            .on_modifiers_changed(cx.listener(|this, e: &ModifiersChangedEvent, _, cx| this.menu_bar_modifiers(e, cx)))
+            .capture_key_down(cx.listener(Self::menu_bar_key_down))
             .when(in_project, |d| {
                 d.on_action(cx.listener(Self::toggle_project))
                     .on_action(cx.listener(Self::previous_file))
@@ -1876,6 +1904,7 @@ impl Render for Workspace {
             .when(!in_project && has_path, |d| d.on_action(cx.listener(Self::open_enclosing_folder)))
             .on_drop(cx.listener(|this, _: &crate::project_ui::RowDrag, _, cx| this.clear_drop(cx)))
             .capture_any_mouse_down(cx.listener(|this, e: &MouseDownEvent, window, cx| {
+                this.menu_bar_mouse_down(e, window, cx);
                 // A click outside the Alternatives' panel saves a variant being edited there.
                 let side = crate::panels::side_of(PanelTab::Alternatives, cx);
                 let (x, window_w) = (f32::from(e.position.x), f32::from(window.viewport_size().width));
@@ -2034,6 +2063,7 @@ impl Render for Workspace {
             .children(comment_field)
             .children(comment_peek)
             .children(menu)
+            .children(menu_panels)
             .children(overlay)
             // Never wider than the room left of an open drawer, so a narrow window squeezes its
             // fields instead of pushing it off the left edge.
@@ -2060,12 +2090,14 @@ impl Render for Workspace {
                     .child(
                         div().flex_1().min_w(px(0.)).child(
                             div()
-                                .pl(px(header_left))
+                                // Off the Mac the menus come first, their own margin before them.
+                                .pl(px(if has_menu_bar { 0. } else { header_left }))
                                 .pr(px(HEADER_GAP))
                                 .flex()
                                 .items_center()
                                 .gap(px(PANEL_BUTTON_GAP))
                                 .opacity(chrome_alpha)
+                                .children(menu_bar)
                                 .child(
                                     icon_button(
                                         "panel",
