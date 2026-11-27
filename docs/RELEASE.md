@@ -1,20 +1,23 @@
-# Release checklist (v1, macOS)
+# Release checklist
 
 PRD §10 M5 and NFR-7. Run top to bottom; every box must be checked before a public release.
 
 ## Each version, start to finish
 
-Dostoevsky ships in three places from the same commit and the same version number:
+Dostoevsky ships in these places from the same commit and the same version number:
 
 | Channel | Built by | How writers update |
 |---|---|---|
 | GitHub Release (`.dmg`) | `scripts/bundle.sh`, or the release workflow run by hand | the app's update notice (opt-in), then Download |
+| GitHub Release (Linux `.AppImage`, Windows `.msi`) | the release workflow, on GitHub's Ubuntu 22.04 and Windows runners (`scripts/appimage.sh`, `scripts/msi.sh`) | the same notice, then Download |
 | Homebrew (`meroving/tap`) | `scripts/cask.sh` from that `.dmg` | `brew upgrade` (the notice says so) |
 | Mac App Store | the maintainers' sandboxed build, uploaded to App Store Connect | the App Store |
 
-**Only the `.dmg` checks for updates.** It's the `updates` cargo feature (TECH-NOTES §14), which
+**Only the GitHub Release's files check for updates.** It's the `updates` cargo feature (TECH-NOTES §14), which
 `scripts/bundle.sh` turns on for a build signed by the project's team (`UPDATES_TEAM`), so forks
-don't ask dostoevsky.app. The App Store build is made without it, so it has no update code at
+don't ask dostoevsky.app; the AppImage and the `.msi` get it from the release workflow
+(`UPDATES=1`), and a build of either by hand has none. All three read the same `version.json`, so
+a version is announced once its release has all three files. The App Store build is made without it, so it has no update code at
 all: App Review 2.4.5 forbids an app from updating itself or sending people elsewhere for new
 versions. Its build fails if the update URL turns up in the binary.
 
@@ -27,7 +30,10 @@ versions. Its build fails if the update URL turns up in the binary.
 3. **GitHub Release.** Tag `vX.Y.Z` on the same commit and push the tag, build the `.dmg` (§4), then
    `gh release create vX.Y.Z target/bundle/Dostoevsky-X.Y.Z.dmg --verify-tag --title "Dostoevsky X.Y.Z"`.
    Or run the release workflow on the tag (Actions → Release → Run workflow): it builds, signs,
-   notarizes and drafts the release; look it over and publish.
+   notarizes and drafts the release; look it over and publish. Either way the Linux AppImage and the
+   Windows `.msi` come from the workflow: after a `.dmg` by hand, run it with *Only Linux and
+   Windows*, and it adds them to the release that's there. The `.msi` isn't signed yet, so Windows
+   warns about an unknown publisher until there's a code-signing certificate.
 4. **Homebrew.** Update the tap's cask (§5).
 5. **The update notice, last.** Deploy the landing page (§5): its `version.json` is what tells
    `.dmg` writers about the new version, within a day. Until it's deployed nobody is told, so the

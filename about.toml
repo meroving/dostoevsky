@@ -1,6 +1,7 @@
-# cargo about generate (dsky-a8n.3): the license texts of every crate in the macOS app, shipped
-# in the bundle as THIRD-PARTY-LICENSES.txt (scripts/bundle.sh). Same allow list as deny.toml.
-targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+# cargo about generate (dsky-a8n.3): the license texts of every crate in the app, shipped as
+# THIRD-PARTY-LICENSES.txt in the Mac bundle, the AppImage and the Windows installer
+# (scripts/bundle.sh, appimage.sh, msi.sh): one file for every system's crates. Same allow list as deny.toml.
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu", "x86_64-pc-windows-msvc"]
 ignore-dev-dependencies = true
 ignore-build-dependencies = true
 accepted = [

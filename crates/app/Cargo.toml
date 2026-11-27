@@ -65,6 +65,10 @@ name = "imgdiff"
 path = "src/bin/imgdiff.rs"
 required-features = ["shots"]
 
+# The .exe's icon, name and version (build.rs).
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
+
 [features]
 # Scripted screenshots for development: DOSTOEVSKY_SCRIPT=steps.jsonl (see src/shots.rs).
 shots = ["gpui-kit/test-support", "image/png"]

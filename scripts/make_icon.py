@@ -3,6 +3,7 @@
 
     scripts/make_icon.py                 # packaging/icon.svg, icon-1024.png, Dostoevsky.icns,
                                          # crates/app/assets/icon.png (About), docs/icon.png (README, site),
+                                         # packaging/windows/dostoevsky.ico, packaging/linux/icon-{256,512}.png,
                                          # favicons and the touch icon in target/icon
     scripts/make_icon.py --look night    # the same axe in another look (see LOOKS); writes the same files
     scripts/make_icon.py --sheet         # also target/icon/sheet.png: every size, the small ones enlarged
@@ -14,6 +15,7 @@ Needs Chrome to turn SVG into PNG, and iconutil.
 The look in use is F7 of the icon-axe-4 mockup.
 """
 import pathlib
+import struct
 import subprocess
 import sys
 
@@ -111,6 +113,17 @@ def render(svg_path, png_path, px):
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
+def write_ico(path, images):
+    """An .ico of PNG entries (Windows Vista and later read them): [(pixels, png bytes)]."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    offset = 6 + 16 * len(images)
+    entries, data = b"", b""
+    for px, png in images:
+        entries += struct.pack("<BBBBHHII", px % 256, px % 256, 0, 0, 1, 32, len(png), offset + len(data))
+        data += png
+    path.write_bytes(struct.pack("<HHH", 0, 1, len(images)) + entries + data)
+
+
 def shoot(html, png, width, height):
     """A page of pictures → one PNG, for looking at."""
     page = OUT / "sheet.html"
@@ -167,6 +180,20 @@ def main():
     touch = OUT / "apple-touch-icon.svg"
     touch.write_text(icon(look, square=True))
     render(touch, OUT / "apple-touch-icon.png", 180)
+    # Windows (crates/app/build.rs puts it in the .exe, which the window, the taskbar and the
+    # installer show): the plate to the edge, as Windows' icons fill their square, each size from
+    # its nearest drawing.
+    ico = []
+    for px, size in ((16, "16"), (24, "16"), (32, "32"), (48, "64"), (64, "64"), (128, "big"), (256, "big")):
+        svg = OUT / f"windows-{px}.svg"
+        svg.write_text(icon(look, size, trim=True))
+        render(svg, OUT / f"windows-{px}.png", px)
+        ico.append((px, (OUT / f"windows-{px}.png").read_bytes()))
+    write_ico(ROOT / "packaging/windows/dostoevsky.ico", ico)
+    # Linux (scripts/appimage.sh): the Mac's, margin and all, as GNOME's and KDE's icons keep one.
+    (ROOT / "packaging/linux").mkdir(parents=True, exist_ok=True)
+    for px in (256, 512):
+        render(svgs["big"], ROOT / f"packaging/linux/icon-{px}.png", px)
     # The site's builder copies these favicons from target/icon/.
     if "--sheet" in sys.argv:
         cells = "".join(
@@ -177,7 +204,8 @@ def main():
             for n, px, z in (("favicon-32", 32, 6), ("favicon-16", 16, 12)))
         shoot(cells, OUT / "sheet.png", 1500, 1000)
     print(f"look: {look}. packaging/icon.svg, packaging/icon-1024.png, packaging/Dostoevsky.icns, "
-          "crates/app/assets/icon.png, docs/icon.png, target/icon/favicon{,-32,-16}.png, target/icon/apple-touch-icon.png")
+          "crates/app/assets/icon.png, docs/icon.png, packaging/windows/dostoevsky.ico, packaging/linux/icon-{256,512}.png, "
+          "target/icon/favicon{,-32,-16}.png, target/icon/apple-touch-icon.png")
 
 
 if __name__ == "__main__":

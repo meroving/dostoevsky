@@ -8,6 +8,11 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      packages:
+        description: 'Only build and try the AppImage and the .msi'
+        type: boolean
+        default: false
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -27,6 +32,7 @@ jobs:
   linux:
     # The app builds and its tests pass off the Mac (dsky-fbso); a test that needs what only
     # macOS has so far is ignored there, naming its bead.
+    if: ${{ !inputs.packages }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
@@ -60,6 +66,7 @@ jobs:
   windows:
     # The app on Windows (dsky-fbso.12): clippy and every test, as on Linux; a test that needs
     # what Windows lacks so far is ignored there, naming its bead.
+    if: ${{ !inputs.packages }}
     runs-on: windows-latest
     timeout-minutes: 60
     steps:
@@ -83,7 +90,115 @@ jobs:
       - name: Tests (unit, behaviour, property, headless app)
         run: cargo test --locked --workspace --no-fail-fast
 
+  appimage:
+    # The Linux AppImage (dsky-fbso.13), built on the oldest Ubuntu it should run on, then started
+    # under Xvfb with Mesa's software Vulkan: it must open and stay up. On main, and by hand.
+    if: ${{ github.event_name == 'push' || inputs.packages }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: GPUI's Linux libraries; Xvfb and software Vulkan to start the app
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libxkbcommon-x11-dev \
+            libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev \
+            libasound2-dev libzstd-dev xvfb xauth mesa-vulkan-drivers libvulkan1
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      - name: The AppImage
+        run: scripts/appimage.sh
+
+      - name: It starts and stays open
+        run: |
+          app="$(ls target/bundle/Dostoevsky-*-x86_64.AppImage)"
+          export APPIMAGE_EXTRACT_AND_RUN=1 DOSTOEVSKY_SUPPORT_DIR="$RUNNER_TEMP/support"
+          set +e
+          timeout 20 xvfb-run -a "$app" > "$RUNNER_TEMP/app.log" 2>&1
+          code=$?
+          set -e
+          tail -30 "$RUNNER_TEMP/app.log"
+          [ "$code" = 124 ] || { echo "::error::the AppImage exited ($code) instead of staying open"; exit 1; }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: target/bundle/*.AppImage
+
+  msi:
+    # The Windows installer (dsky-fbso.14): built, installed for this user, started, uninstalled.
+    # On main, and by hand.
+    if: ${{ github.event_name == 'push' || inputs.packages }}
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout as the repository has it (LF)
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v4
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: |
+          rustup toolchain install
+          rustc --version
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      - name: WiX
+        shell: bash
+        run: |
+          dotnet tool install --global wix --version 5.0.2
+          echo "$USERPROFILE/.dotnet/tools" >> "$GITHUB_PATH"
+
+      - name: The .msi
+        shell: bash
+        run: scripts/msi.sh
+
+      - name: It installs, starts, stays open and uninstalls
+        shell: pwsh
+        run: |
+          $msi = (Get-ChildItem target/bundle/Dostoevsky-*-x64.msi | Select-Object -First 1).FullName
+          $p = Start-Process msiexec -ArgumentList "/i `"$msi`" /qn /l*v `"$env:RUNNER_TEMP\install.log`"" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { Get-Content "$env:RUNNER_TEMP\install.log" -Tail 60; throw "install failed ($($p.ExitCode))" }
+          $exe = "$env:LOCALAPPDATA\Programs\Dostoevsky\dostoevsky.exe"
+          if (-not (Test-Path $exe)) { throw "nothing at $exe" }
+          if (-not (Test-Path "$env:LOCALAPPDATA\Programs\Dostoevsky\licenses\THIRD-PARTY-LICENSES.txt")) { throw "no licenses" }
+          $openWith = Get-ItemProperty "HKCU:\Software\Classes\.md\OpenWithProgids"
+          if (-not $openWith.'Dostoevsky.Markdown') { throw ".md doesn't list Dostoevsky in Open with" }
+          if (-not (Test-Path "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Dostoevsky.lnk")) { throw "no Start menu entry" }
+          $env:DOSTOEVSKY_SUPPORT_DIR = "$env:RUNNER_TEMP\support"
+          $app = Start-Process $exe -PassThru
+          Start-Sleep -Seconds 15
+          if ($app.HasExited) { throw "the app exited ($($app.ExitCode)) instead of staying open" }
+          Stop-Process -Id $app.Id -Force
+          Start-Sleep -Seconds 2
+          $p = Start-Process msiexec -ArgumentList "/x `"$msi`" /qn" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "uninstall failed ($($p.ExitCode))" }
+          if (Test-Path $exe) { throw "$exe is still there after uninstalling" }
+          if (Test-Path "HKCU:\Software\Classes\Dostoevsky.Markdown") { throw "the ProgID is still there after uninstalling" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: msi
+          path: target/bundle/*.msi
+
   macos:
+    if: ${{ !inputs.packages }}
     runs-on: macos-15
     timeout-minutes: 75
     steps:

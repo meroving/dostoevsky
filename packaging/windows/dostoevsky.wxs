@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Dostoevsky's Windows installer (dsky-fbso.14), built by scripts/msi.sh with WiX 5.
+
+  For the writer only, as VS Code's user installer: into %LOCALAPPDATA%\Programs\Dostoevsky with
+  no administrator prompt. A Start menu entry, and Dostoevsky in Open with for .md and .markdown
+  files; it doesn't make itself their default app (Windows asks the writer for that). A newer
+  version replaces the older one; uninstalling leaves the writer's settings and files alone.
+-->
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Dostoevsky" Manufacturer="Dostoevsky" Version="$(var.Version)" Scope="perUser"
+           UpgradeCode="4A3C40EA-E404-4711-B783-2E17F50C74D1" Compressed="yes">
+    <MajorUpgrade DowngradeErrorMessage="A newer version of Dostoevsky is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+
+    <Icon Id="dostoevsky.ico" SourceFile="$(var.Icon)" />
+    <Property Id="ARPPRODUCTICON" Value="dostoevsky.ico" />
+    <Property Id="ARPURLINFOABOUT" Value="https://dostoevsky.app" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="Dostoevsky">
+          <Directory Id="LicensesFolder" Name="licenses" />
+        </Directory>
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+
+    <!-- Per-user components keep their key in the registry, under the writer's own hive. -->
+    <ComponentGroup Id="App" Directory="INSTALLFOLDER">
+      <Component Id="Exe">
+        <File Id="DostoevskyExe" Name="dostoevsky.exe" Source="$(var.Exe)" />
+        <RegistryValue Root="HKCU" Key="Software\Dostoevsky\Installer" Name="App" Type="integer" Value="1" KeyPath="yes" />
+        <RemoveFolder Id="RemoveInstallFolder" On="uninstall" />
+      </Component>
+
+      <Component Id="StartMenu" Directory="ProgramMenuFolder">
+        <Shortcut Id="StartMenuShortcut" Name="Dostoevsky" Target="[#DostoevskyExe]" WorkingDirectory="INSTALLFOLDER" />
+        <RegistryValue Root="HKCU" Key="Software\Dostoevsky\Installer" Name="StartMenu" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+
+      <!-- Open with: a ProgID the .md and .markdown types list, and the app's supported types. -->
+      <Component Id="Markdown">
+        <RegistryValue Root="HKCU" Key="Software\Classes\Dostoevsky.Markdown" Type="string" Value="Markdown document" KeyPath="yes" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Dostoevsky.Markdown\DefaultIcon" Type="string" Value="&quot;[#DostoevskyExe]&quot;,0" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Dostoevsky.Markdown\shell\open\command" Type="string" Value="&quot;[#DostoevskyExe]&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\.md\OpenWithProgids" Name="Dostoevsky.Markdown" Type="string" Value="Dostoevsky" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\.markdown\OpenWithProgids" Name="Dostoevsky.Markdown" Type="string" Value="Dostoevsky" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\dostoevsky.exe" Name="FriendlyAppName" Type="string" Value="Dostoevsky" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\dostoevsky.exe\shell\open\command" Type="string" Value="&quot;[#DostoevskyExe]&quot; &quot;%1&quot;" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\dostoevsky.exe\SupportedTypes" Name=".md" Type="string" Value="Dostoevsky" />
+        <RegistryValue Root="HKCU" Key="Software\Classes\Applications\dostoevsky.exe\SupportedTypes" Name=".markdown" Type="string" Value="Dostoevsky" />
+      </Component>
+    </ComponentGroup>
+
+    <!-- LICENSE, NOTICE, the fonts' OFL texts and every crate's license (scripts/msi.sh gathers them). -->
+    <ComponentGroup Id="Licenses" Directory="LicensesFolder">
+      <Files Include="$(var.Licenses)\*" />
+    </ComponentGroup>
+
+    <Feature Id="Main">
+      <ComponentGroupRef Id="App" />
+      <ComponentGroupRef Id="Licenses" />
+    </Feature>
+  </Package>
+</Wix>
