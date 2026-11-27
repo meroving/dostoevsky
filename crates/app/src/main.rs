@@ -27,6 +27,7 @@ mod keymap;
 mod lab;
 mod list_panel;
 mod markdown;
+mod menu_bar;
 mod memory;
 mod model;
 mod os_text;
@@ -409,66 +410,81 @@ fn in_active_workspace(cx: &mut App, f: impl FnOnce(&mut Workspace, &mut Window,
     let _ = handle.update(cx, |_, window, cx| ws.update(cx, |ws, cx| f(ws, window, cx)));
 }
 
+thread_local! {
+    /// The actions the app runs wherever the keys are (`register_actions`).
+    static APP_ACTIONS: std::cell::RefCell<std::collections::HashSet<std::any::TypeId>> = Default::default();
+}
+
+/// An action the app runs with or without a window, which no menu greys out.
+fn app_action<A: Action>(cx: &mut App, f: impl Fn(&A, &mut App) + 'static) {
+    APP_ACTIONS.with(|a| a.borrow_mut().insert(std::any::TypeId::of::<A>()));
+    cx.on_action(f);
+}
+
+pub fn is_app_action(action: &dyn Action) -> bool {
+    APP_ACTIONS.with(|a| a.borrow().contains(&action.as_any().type_id()))
+}
+
 fn register_actions(cx: &mut App) {
-    cx.on_action(|_: &OpenKeymapFile, _| {
+    app_action(cx, |_: &OpenKeymapFile, _| {
         if let Some(p) = keymap::ensure_file() {
             platform::open_file(&p);
         }
     });
     // Runs only when nothing in a window has focus, so Settings… in the menu bar never greys out.
-    cx.on_action(|a: &ShowPreferences, cx| in_active_workspace(cx, |ws, window, cx| ws.show_preferences(a, window, cx)));
-    cx.on_action(|a: &CreateThemeSheet, cx| in_active_workspace(cx, |ws, window, cx| ws.create_theme_sheet(a, window, cx)));
-    cx.on_action(|_: &About, cx| about::show(cx));
-    cx.on_action(|_: &ShowWelcome, cx| welcome::open(cx));
-    cx.on_action(|_: &ShowSupport, cx| cx.open_url(about::SUPPORT));
+    app_action(cx, |a: &ShowPreferences, cx| in_active_workspace(cx, |ws, window, cx| ws.show_preferences(a, window, cx)));
+    app_action(cx, |a: &CreateThemeSheet, cx| in_active_workspace(cx, |ws, window, cx| ws.create_theme_sheet(a, window, cx)));
+    app_action(cx, |_: &About, cx| about::show(cx));
+    app_action(cx, |_: &ShowWelcome, cx| welcome::open(cx));
+    app_action(cx, |_: &ShowSupport, cx| cx.open_url(about::SUPPORT));
     #[cfg(feature = "updates")]
-    cx.on_action(|_: &CheckForUpdates, cx| updates::check_now(cx));
-    cx.on_action(|_: &Quit, cx| quit(cx));
-    cx.on_action(|_: &Hide, cx| cx.hide());
-    cx.on_action(|_: &HideOthers, cx| cx.hide_other_apps());
-    cx.on_action(|_: &ShowAll, cx| cx.unhide_other_apps());
-    cx.on_action(|_: &ToggleZenWriting, cx| crate::sheets::set_prefs(cx, |p| p.zen_writing = !p.zen_writing));
-    cx.on_action(|_: &ToggleTypewriter, cx| crate::sheets::set_prefs(cx, |p| p.typewriter = !p.typewriter));
-    cx.on_action(|_: &TogglePrivate, cx| crate::sheets::set_prefs(cx, |p| p.private_mode = !p.private_mode));
-    cx.on_action(|_: &AlignLeft, cx| crate::sheets::set_prefs(cx, |p| p.alignment = prefs::Alignment::Left));
-    cx.on_action(|_: &AlignJustified, cx| crate::sheets::set_prefs(cx, |p| p.alignment = prefs::Alignment::Justified));
-    cx.on_action(|_: &ToggleHyphenation, cx| crate::sheets::set_prefs(cx, |p| p.hyphenation = !p.hyphenation));
-    cx.on_action(|_: &ParagraphsSpaced, cx| crate::sheets::set_prefs(cx, |p| p.paragraphs = prefs::ParagraphLook::Spaced));
-    cx.on_action(|_: &ParagraphsIndented, cx| crate::sheets::set_prefs(cx, |p| p.paragraphs = prefs::ParagraphLook::Indented));
-    cx.on_action(|_: &AppearanceDark, cx| crate::sheets::set_prefs(cx, |p| p.appearance = prefs::Appearance::Dark));
-    cx.on_action(|_: &AppearanceLight, cx| crate::sheets::set_prefs(cx, |p| p.appearance = prefs::Appearance::Light));
-    cx.on_action(|_: &AppearanceSystem, cx| crate::sheets::set_prefs(cx, |p| p.appearance = prefs::Appearance::System));
-    cx.on_action(|_: &ToggleAppearance, cx| {
+    app_action(cx, |_: &CheckForUpdates, cx| updates::check_now(cx));
+    app_action(cx, |_: &Quit, cx| quit(cx));
+    app_action(cx, |_: &Hide, cx| cx.hide());
+    app_action(cx, |_: &HideOthers, cx| cx.hide_other_apps());
+    app_action(cx, |_: &ShowAll, cx| cx.unhide_other_apps());
+    app_action(cx, |_: &ToggleZenWriting, cx| crate::sheets::set_prefs(cx, |p| p.zen_writing = !p.zen_writing));
+    app_action(cx, |_: &ToggleTypewriter, cx| crate::sheets::set_prefs(cx, |p| p.typewriter = !p.typewriter));
+    app_action(cx, |_: &TogglePrivate, cx| crate::sheets::set_prefs(cx, |p| p.private_mode = !p.private_mode));
+    app_action(cx, |_: &AlignLeft, cx| crate::sheets::set_prefs(cx, |p| p.alignment = prefs::Alignment::Left));
+    app_action(cx, |_: &AlignJustified, cx| crate::sheets::set_prefs(cx, |p| p.alignment = prefs::Alignment::Justified));
+    app_action(cx, |_: &ToggleHyphenation, cx| crate::sheets::set_prefs(cx, |p| p.hyphenation = !p.hyphenation));
+    app_action(cx, |_: &ParagraphsSpaced, cx| crate::sheets::set_prefs(cx, |p| p.paragraphs = prefs::ParagraphLook::Spaced));
+    app_action(cx, |_: &ParagraphsIndented, cx| crate::sheets::set_prefs(cx, |p| p.paragraphs = prefs::ParagraphLook::Indented));
+    app_action(cx, |_: &AppearanceDark, cx| crate::sheets::set_prefs(cx, |p| p.appearance = prefs::Appearance::Dark));
+    app_action(cx, |_: &AppearanceLight, cx| crate::sheets::set_prefs(cx, |p| p.appearance = prefs::Appearance::Light));
+    app_action(cx, |_: &AppearanceSystem, cx| crate::sheets::set_prefs(cx, |p| p.appearance = prefs::Appearance::System));
+    app_action(cx, |_: &ToggleAppearance, cx| {
         let to = if theme::is_light() { prefs::Appearance::Dark } else { prefs::Appearance::Light };
         crate::sheets::set_prefs(cx, |p| p.appearance = to);
     });
     // The same four sizes Preferences → Page offers (dsky-nke1.1); ⌘0 is the default, 19.
-    cx.on_action(|_: &TextBigger, cx| crate::sheets::set_prefs(cx, |p| {
+    app_action(cx, |_: &TextBigger, cx| crate::sheets::set_prefs(cx, |p| {
         p.step_text_size(1);
     }));
-    cx.on_action(|_: &TextSmaller, cx| crate::sheets::set_prefs(cx, |p| {
+    app_action(cx, |_: &TextSmaller, cx| crate::sheets::set_prefs(cx, |p| {
         p.step_text_size(-1);
     }));
-    cx.on_action(|_: &TextDefaultSize, cx| crate::sheets::set_prefs(cx, |p| {
+    app_action(cx, |_: &TextDefaultSize, cx| crate::sheets::set_prefs(cx, |p| {
         p.font_size = Prefs::TEXT_SIZES[2];
     }));
-    cx.on_action(|_: &NewDocument, cx| {
+    app_action(cx, |_: &NewDocument, cx| {
         open_model(DocModel::new(doc_model::Document::new()), cx);
     });
     // In a project ⌘N adds to it (the window takes it first); this one's always a loose page.
-    cx.on_action(|_: &NewLooseDocument, cx| {
+    app_action(cx, |_: &NewLooseDocument, cx| {
         open_model(DocModel::new(doc_model::Document::new()), cx);
     });
     // A window takes it first; with none, New Project… opens one.
-    cx.on_action(|_: &NewProject, cx| {
+    app_action(cx, |_: &NewProject, cx| {
         let Some(handle) = open_model(DocModel::new(doc_model::Document::new()), cx) else { return };
         if let Some((_, ws)) = workspaces(cx).into_iter().find(|(w, _)| *w == handle) {
             let _ = handle.update(cx, |_, window, cx| ws.update(cx, |ws, cx| ws.new_project(&NewProject, window, cx)));
         }
     });
-    cx.on_action(|_: &Open, cx| open_dialog(cx));
-    cx.on_action(|a: &OpenPath, cx| open_path(PathBuf::from(&a.path), cx));
-    cx.on_action(|_: &OpenRecent, cx| open_most_recent(cx));
+    app_action(cx, |_: &Open, cx| open_dialog(cx));
+    app_action(cx, |a: &OpenPath, cx| open_path(PathBuf::from(&a.path), cx));
+    app_action(cx, |_: &OpenRecent, cx| open_most_recent(cx));
 }
 
 /// A journal goes only once its window has its own, so nothing is ever only in memory.

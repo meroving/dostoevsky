@@ -50,14 +50,17 @@ fn the_menu_bar_speaks_every_language() {
     let p = Prefs::default();
     let all = |menus: &[gpui_kit::Menu]| {
         let mut out = item_names(menus);
-        out.extend(titles(menus).into_iter().skip(1)); // the first is the app's name
+        // On the Mac the first is the app's name.
+        out.extend(titles(menus).into_iter().skip(usize::from(cfg!(target_os = "macos"))));
         out
     };
     let english = all(&crate::actions::menus(&[], &p, Some(crate::project::Kind::Book), false));
     for lang in Lang::ALL.into_iter().filter(|l| *l != Lang::En) {
         let _s = Speak::in_(lang);
         let menus = crate::actions::menus(&[], &p, Some(crate::project::Kind::Book), false);
-        assert!(titles(&menus).contains(&l10n::tr("Window").to_string()), "{lang:?}");
+        if cfg!(target_os = "macos") {
+            assert!(titles(&menus).contains(&l10n::tr("Window").to_string()), "{lang:?}");
+        }
         let names = all(&menus);
         assert_eq!(names.len(), english.len());
         // Theme names (View → Theme) are names, the same in every language.
@@ -77,7 +80,9 @@ fn the_menu_bar_speaks_every_language() {
 fn russian_menus_read_russian() {
     let _s = Speak::in_(Lang::Ru);
     let menus = crate::actions::menus(&[], &Prefs::default(), None, false);
-    assert_eq!(&titles(&menus)[1..3], ["Файл", "Правка"]);
+    // After the Mac's app menu.
+    let first = usize::from(cfg!(target_os = "macos"));
+    assert_eq!(&titles(&menus)[first..first + 2], ["Файл", "Правка"]);
     assert_eq!([1, 3, 25].map(|n| l10n::trn!("{n} word", "{n} words", n)), ["1 слово", "3 слова", "25 слов"]);
 }
 

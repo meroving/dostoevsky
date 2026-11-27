@@ -740,6 +740,8 @@ impl AssetSource for Assets {
             "chrome/comment.svg" => include_bytes!("../assets/chrome/comment.svg"),
             "chrome/axe.svg" => include_bytes!("../assets/chrome/axe.svg"),
             "chrome/spinner.svg" => include_bytes!("../assets/chrome/spinner.svg"),
+            "chrome/menu.svg" => include_bytes!("../assets/chrome/menu.svg"),
+            "chrome/check.svg" => include_bytes!("../assets/chrome/check.svg"),
             "chrome/window-minimize.svg" => include_bytes!("../assets/chrome/window-minimize.svg"),
             "chrome/window-maximize.svg" => include_bytes!("../assets/chrome/window-maximize.svg"),
             "chrome/window-restore.svg" => include_bytes!("../assets/chrome/window-restore.svg"),

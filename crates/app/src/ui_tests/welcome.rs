@@ -73,7 +73,10 @@ fn win_19_in_the_help_menu() {
             _ => None,
         })
         .collect();
-    assert_eq!(names, ["Welcome to Dostoevsky", "Keyboard Shortcuts", "Dostoevsky Support"]);
+    // Off the Mac About ends Help, as there's no app menu.
+    let about = (!cfg!(target_os = "macos")).then_some("About Dostoevsky");
+    let want: Vec<&str> = ["Welcome to Dostoevsky", "Keyboard Shortcuts", "Dostoevsky Support"].into_iter().chain(about).collect();
+    assert_eq!(names, want);
 }
 
 /// dsky-nke1.3: Help → Dostoevsky Support opens the support page.

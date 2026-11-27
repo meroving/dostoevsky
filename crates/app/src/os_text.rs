@@ -188,6 +188,16 @@ pub fn in_keyring() -> &'static str {
     }
 }
 
+/// The menu item that ends the app: Quit Dostoevsky in the Mac's app menu, Exit at the end of
+/// Windows' File menu, Quit in Linux's.
+pub fn quit() -> &'static str {
+    match os() {
+        Os::Mac => tr!("Quit Dostoevsky"),
+        Os::Windows => tr!("Exit"),
+        Os::Linux => tr!("Quit"),
+    }
+}
+
 /// The appearance option that follows the system: macOS, Windows, the system.
 pub fn match_system() -> &'static str {
     match os() {

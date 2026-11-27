@@ -183,6 +183,9 @@ actions!(project, [ListUp, ListDown, ListReturn, ListClose, ListTrash]);
 
 actions!(find, [ToggleMatchCase, ToggleWholeWords]);
 
+// The menu bar drawn in the window off the Mac (menu_bar.rs).
+actions!(menu_bar, [ShowMenuBar, MenuLeft, MenuRight, MenuUp, MenuDown, MenuConfirm, MenuClose]);
+
 /// Title and (label, action) rows.
 pub type ShortcutGroup = (&'static str, Vec<(&'static str, Box<dyn Action>)>);
 
@@ -197,10 +200,23 @@ pub fn default_bindings_spec() -> Vec<(String, Option<&'static str>, Box<dyn Act
 }
 
 /// The Mac's bindings translated, duplicates dropped (⌘← is Home, already bound), then what
-/// Windows and Linux add: Delete moves a project's file to the Trash.
+/// Windows and Linux add: Delete moves a project's file to the Trash; Alt or F10 alone puts the
+/// keys on the menu bar, which arrows, Enter and Esc then walk.
 fn bindings_off_mac() -> Vec<(String, Option<&'static str>, Box<dyn Action>)> {
     let mut out: Vec<(String, Option<&'static str>, Box<dyn Action>)> = Vec::new();
-    let extras = [("delete", Some("ProjectList"), Box::new(ListTrash) as Box<dyn Action>)];
+    let m = Some("MenuBar");
+    let extras = [
+        ("delete", Some("ProjectList"), Box::new(ListTrash) as Box<dyn Action>),
+        ("alt", None, Box::new(ShowMenuBar) as Box<dyn Action>),
+        ("f10", None, Box::new(ShowMenuBar) as Box<dyn Action>),
+        ("left", m, Box::new(MenuLeft) as Box<dyn Action>),
+        ("right", m, Box::new(MenuRight) as Box<dyn Action>),
+        ("up", m, Box::new(MenuUp) as Box<dyn Action>),
+        ("down", m, Box::new(MenuDown) as Box<dyn Action>),
+        ("enter", m, Box::new(MenuConfirm) as Box<dyn Action>),
+        ("space", m, Box::new(MenuConfirm) as Box<dyn Action>),
+        ("escape", m, Box::new(MenuClose) as Box<dyn Action>),
+    ];
     let translated = mac_bindings().into_iter().filter_map(|(k, c, a)| Some((off_mac(k)?, c, a)));
     for (k, c, a) in translated.chain(extras.into_iter().map(|(k, c, a)| (k.to_string(), c, a))) {
         if !out.iter().any(|(k2, c2, a2)| *k2 == k && *c2 == c && a2.name() == a.name()) {
@@ -747,25 +763,8 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
         MenuItem::action(tr!("Next Mark"), NextMark),
         MenuItem::action(tr!("Previous Mark"), PrevMark),
     ]);
-    let mut app_items = vec![MenuItem::action(tr!("About Dostoevsky"), About)];
-    #[cfg(feature = "updates")]
-    app_items.push(MenuItem::action(tr!("Check for Updates…"), CheckForUpdates));
-    app_items.push(MenuItem::separator());
-    vec![
-        Menu::new("Dostoevsky").items(app_items.into_iter().chain([
-            MenuItem::action(tr!("Preferences…"), ShowPreferences),
-            MenuItem::action(tr!("Open keymap.json"), OpenKeymapFile),
-            MenuItem::separator(),
-            MenuItem::os_submenu(tr!("Services"), SystemMenuType::Services),
-            MenuItem::separator(),
-            MenuItem::action(tr!("Hide Dostoevsky"), Hide),
-            MenuItem::action(tr!("Hide Others"), HideOthers),
-            MenuItem::action(tr!("Show All"), ShowAll),
-            MenuItem::separator(),
-            MenuItem::action(tr!("Quit Dostoevsky"), Quit),
-        ])),
-        Menu::new(tr!("File")).items(file_items),
-        Menu::new(tr!("Edit")).items([
+    let edit_items = {
+        let mut items = vec![
             MenuItem::os_action(tr!("Undo"), Undo, OsAction::Undo),
             MenuItem::os_action(tr!("Redo"), Redo, OsAction::Redo),
             MenuItem::separator(),
@@ -793,24 +792,83 @@ pub fn menus(recent: &[std::path::PathBuf], prefs: &Prefs, project: Option<crate
             MenuItem::separator(),
             MenuItem::action(tr!("Add Comment"), AddComment),
             MenuItem::action(tr!("Delete All Comments on This Page…"), DeleteAllComments),
+        ];
+        if cfg!(target_os = "macos") {
+            items.extend([MenuItem::separator(), MenuItem::action(tr!("Emoji & Symbols"), ShowCharacterPalette)]);
+        }
+        items
+    };
+    let help_items = vec![
+        MenuItem::action(tr!("Welcome to Dostoevsky"), ShowWelcome),
+        MenuItem::separator(),
+        MenuItem::action(tr!("Keyboard Shortcuts"), ShowShortcuts),
+        MenuItem::separator(),
+        MenuItem::action(tr!("Dostoevsky Support"), ShowSupport),
+    ];
+    let titles = menu_titles();
+    if !cfg!(target_os = "macos") {
+        // No app menu off the Mac: Settings and Exit end File, About ends Help; Services, Hide
+        // and the Window menu are the Mac's, as is the character palette (Win+. or the
+        // desktop's own).
+        let [file, edit, alternatives, view, help] = titles[..] else { unreachable!("five menus off the Mac") };
+        file_items.extend([
             MenuItem::separator(),
-            MenuItem::action(tr!("Emoji & Symbols"), ShowCharacterPalette),
-        ]),
-        Menu::new(tr!("Alternatives")).items(alternatives_items),
-        Menu::new(tr!("View")).items(view_items),
+            MenuItem::action(tr!("Preferences…"), ShowPreferences),
+            MenuItem::action(tr!("Open keymap.json"), OpenKeymapFile),
+            MenuItem::separator(),
+            MenuItem::action(crate::os_text::quit(), Quit),
+        ]);
+        let mut help_items = help_items;
+        help_items.push(MenuItem::separator());
+        #[cfg(feature = "updates")]
+        help_items.push(MenuItem::action(tr!("Check for Updates…"), CheckForUpdates));
+        help_items.push(MenuItem::action(tr!("About Dostoevsky"), About));
+        return vec![
+            Menu::new(file).items(file_items),
+            Menu::new(edit).items(edit_items),
+            Menu::new(alternatives).items(alternatives_items),
+            Menu::new(view).items(view_items),
+            Menu::new(help).items(help_items),
+        ];
+    }
+    let [app, file, edit, alternatives, view, window, help] = titles[..] else { unreachable!("seven menus on the Mac") };
+    let mut app_items = vec![MenuItem::action(tr!("About Dostoevsky"), About)];
+    #[cfg(feature = "updates")]
+    app_items.push(MenuItem::action(tr!("Check for Updates…"), CheckForUpdates));
+    app_items.push(MenuItem::separator());
+    vec![
+        Menu::new(app).items(app_items.into_iter().chain([
+            MenuItem::action(tr!("Preferences…"), ShowPreferences),
+            MenuItem::action(tr!("Open keymap.json"), OpenKeymapFile),
+            MenuItem::separator(),
+            MenuItem::os_submenu(tr!("Services"), SystemMenuType::Services),
+            MenuItem::separator(),
+            MenuItem::action(tr!("Hide Dostoevsky"), Hide),
+            MenuItem::action(tr!("Hide Others"), HideOthers),
+            MenuItem::action(tr!("Show All"), ShowAll),
+            MenuItem::separator(),
+            MenuItem::action(crate::os_text::quit(), Quit),
+        ])),
+        Menu::new(file).items(file_items),
+        Menu::new(edit).items(edit_items),
+        Menu::new(alternatives).items(alternatives_items),
+        Menu::new(view).items(view_items),
         // The vendored GPUI finds the Window menu by this title.
-        Menu::new(tr!("Window")).items([
+        Menu::new(window).items([
             MenuItem::action(tr!("Minimize"), Minimize),
             MenuItem::action(tr!("Zoom"), Zoom),
         ]),
-        Menu::new(tr!("Help")).items([
-            MenuItem::action(tr!("Welcome to Dostoevsky"), ShowWelcome),
-            MenuItem::separator(),
-            MenuItem::action(tr!("Keyboard Shortcuts"), ShowShortcuts),
-            MenuItem::separator(),
-            MenuItem::action(tr!("Dostoevsky Support"), ShowSupport),
-        ]),
+        Menu::new(help).items(help_items),
     ]
+}
+
+/// The menus' names, in the bar's order: the Mac's app menu and Window menu are its own.
+pub fn menu_titles() -> Vec<&'static str> {
+    if cfg!(target_os = "macos") {
+        vec!["Dostoevsky", tr!("File"), tr!("Edit"), tr!("Alternatives"), tr!("View"), tr!("Window"), tr!("Help")]
+    } else {
+        vec![tr!("File"), tr!("Edit"), tr!("Alternatives"), tr!("View"), tr!("Help")]
+    }
 }
 
 #[cfg(test)]
@@ -862,6 +920,14 @@ mod tests {
                 assert!(!(editor(*c) && editor(*c2)), "{k}: {} in {c:?}, {} in {c2:?}", a.name(), a2.name());
             }
         }
+    }
+
+    /// The bar off the Mac draws its names from `menu_titles`: the same as the menus'.
+    #[test]
+    fn menu_titles_name_the_menus() {
+        let menus = super::menus(&[], &crate::prefs::Prefs::default(), None, false);
+        let names: Vec<String> = menus.iter().map(|m| m.name.to_string()).collect();
+        assert_eq!(names, super::menu_titles());
     }
 
     /// The keys that have no counterpart off the Mac, so none is lost by accident.

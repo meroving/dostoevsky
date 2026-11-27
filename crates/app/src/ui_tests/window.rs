@@ -18,6 +18,9 @@ fn win_1_title_shows_name_and_edited() {
     assert_eq!(Ui::open(DOC).title(), "Untitled");
 }
 
+/// Wide enough for a long name and "— Edited", beside the menus off the Mac.
+const WIDE: f32 = if cfg!(target_os = "macos") { 1180. } else { 1600. };
+
 #[test]
 fn win_1_edited_gives_way_in_a_narrow_window() {
     const NAME: &str = "a-very-long-file-name-for-a-narrow-window.md";
@@ -30,7 +33,8 @@ fn win_1_edited_gives_way_in_a_narrow_window() {
         ui
     };
 
-    assert_eq!(edited(1180.).header_title(), format!("{NAME} — Edited"));
+    // Off the Mac the menus share the header's left side: a wider window fits it all.
+    assert_eq!(edited(WIDE).header_title(), format!("{NAME} — Edited"));
     let mut narrow = edited(520.);
     assert_eq!(narrow.header_title(), NAME);
     assert_eq!(narrow.title(), format!("{NAME} — Edited"));
@@ -275,7 +279,7 @@ fn win_7_unsaved_dot_when_narrow() {
     ui.type_text("X");
     ui.draw();
     assert!(ui.has_element("unsaved-dot"));
-    let mut wide = Ui::open_file_sized(&path, 1180., 800.);
+    let mut wide = Ui::open_file_sized(&path, WIDE, 800.);
     wide.caret_at(0);
     wide.type_text("X");
     wide.draw();
@@ -325,9 +329,8 @@ fn win_11_menus_cover_every_command() {
     // In a book, which is when the sheet's project commands apply.
     let menus = crate::actions::menus(&[], &crate::prefs::Prefs::default(), Some(crate::project::Kind::Book), false);
     let names: Vec<String> = menus.iter().map(|m| m.name.to_string()).collect();
-    for want in ["Dostoevsky", "File", "Edit", "Alternatives", "View", "Window", "Help"] {
-        assert!(names.iter().any(|n| n == want), "no {want} menu in {names:?}");
-    }
+    let want: &[&str] = if cfg!(target_os = "macos") { &["Dostoevsky", "File", "Edit", "Alternatives", "View", "Window", "Help"] } else { &["File", "Edit", "Alternatives", "View", "Help"] };
+    assert_eq!(names, want, "the menus, in order");
     fn actions(items: &[MenuItem], out: &mut Vec<Box<dyn gpui_kit::Action>>) {
         for it in items {
             match it {
