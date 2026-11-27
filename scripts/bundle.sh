@@ -78,6 +78,8 @@ done
 cp crates/app/assets/fonts/OFL-*.txt LICENSE NOTICE packaging/PrivacyInfo.xcprivacy "$APP/Contents/Resources/"
 # Apache/MIT/BSD ask for their notices to travel with the binary (dsky-a8n.3).
 if command -v cargo-about >/dev/null; then
+  # The license list covers every system's crates (about.toml), which a build for one doesn't download.
+  cargo fetch --locked --quiet
   cargo about generate --frozen packaging/about.hbs -o "$APP/Contents/Resources/THIRD-PARTY-LICENSES.txt"
 elif [ -n "${SIGN_IDENTITY:-}" ]; then
   echo "cargo-about is needed for a release build (brew install cargo-about)" >&2; exit 1
