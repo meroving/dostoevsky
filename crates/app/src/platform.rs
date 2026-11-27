@@ -8,13 +8,22 @@ pub fn reduce_motion() -> bool {
     NSWorkspace::sharedWorkspace().accessibilityDisplayShouldReduceMotion()
 }
 
-/// The desktop's own setting: GNOME's "Animations" off, or KDE's animation speed at instant.
-/// Read on a thread of its own every few seconds, so a change is seen without asking on every
-/// frame. Tests set motion through Prefs::effects; Windows' setting isn't read yet (dsky-fbso.7).
+/// The desktop's own setting: GNOME's "Animations" off, or KDE's animation speed at instant;
+/// on Windows, Animation effects off (Accessibility → Visual effects). Linux's is read on a
+/// thread of its own every few seconds, so a change is seen without asking on every frame;
+/// Windows' is one quick call. Tests set motion through Prefs::effects.
 #[cfg(not(target_os = "macos"))]
 pub fn reduce_motion() -> bool {
-    #[cfg(any(test, windows))]
+    #[cfg(test)]
     return false;
+    #[cfg(all(windows, not(test)))]
+    {
+        use windows::Win32::UI::WindowsAndMessaging::{SPI_GETCLIENTAREAANIMATION, SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS, SystemParametersInfoW};
+        let mut animate = windows::core::BOOL(1);
+        // SAFETY: SPI_GETCLIENTAREAANIMATION writes one BOOL where it's pointed.
+        let read = unsafe { SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION, 0, Some((&raw mut animate).cast()), SYSTEM_PARAMETERS_INFO_UPDATE_FLAGS(0)) };
+        read.is_ok() && !animate.as_bool()
+    }
     #[cfg(not(any(test, windows)))]
     {
         use std::sync::atomic::{AtomicBool, Ordering};
@@ -272,13 +281,39 @@ pub fn preferred_languages() -> Vec<String> {
 
 /// The locale's languages, as the Mac writes them (`ru-RU`): `LANGUAGE`'s list, then `LC_ALL`,
 /// `LC_MESSAGES`, `LANG`; not `C` or `POSIX`.
-#[cfg(not(target_os = "macos"))]
+#[cfg(all(not(target_os = "macos"), not(windows)))]
 pub fn preferred_languages() -> Vec<String> {
     let var = |name: &str| std::env::var(name).unwrap_or_default();
     locale_languages(&var("LANGUAGE"), &[var("LC_ALL"), var("LC_MESSAGES"), var("LANG")])
 }
 
-#[cfg(any(not(target_os = "macos"), test))]
+/// Windows' display languages in the writer's order (Settings → Time & language), as the Mac
+/// writes them: `ru-RU`, `en-US`.
+#[cfg(windows)]
+pub fn preferred_languages() -> Vec<String> {
+    use windows::Win32::Globalization::{GetUserPreferredUILanguages, MUI_LANGUAGE_NAME};
+    let (mut count, mut len) = (0u32, 0u32);
+    // SAFETY: first the length the list needs, then the list into a buffer that long.
+    let list = unsafe {
+        if GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, None, &mut len).is_err() || len == 0 {
+            return Vec::new();
+        }
+        let mut buf = vec![0u16; len as usize];
+        if GetUserPreferredUILanguages(MUI_LANGUAGE_NAME, &mut count, Some(windows::core::PWSTR(buf.as_mut_ptr())), &mut len).is_err() {
+            return Vec::new();
+        }
+        buf
+    };
+    ui_language_list(&list)
+}
+
+/// A double-null-terminated list of names, UTF-16.
+#[cfg(any(windows, test))]
+fn ui_language_list(list: &[u16]) -> Vec<String> {
+    list.split(|c| *c == 0).filter(|s| !s.is_empty()).map(String::from_utf16_lossy).collect()
+}
+
+#[cfg(any(all(not(target_os = "macos"), not(windows)), test))]
 fn locale_languages(language: &str, locales: &[String]) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     for locale in language.split(':').chain(locales.iter().map(String::as_str)) {
@@ -376,6 +411,21 @@ mod tests {
         assert_eq!(locale_languages("", &locales), ["ru-RU"]);
         assert_eq!(locale_languages("de_AT:de:en", &locales), ["de-AT", "de", "en", "ru-RU"]);
         assert_eq!(locale_languages("", &["C.UTF-8".into(), "POSIX".into(), "sr_RS@latin".into()]), ["sr-RS"]);
+    }
+
+    #[test]
+    fn windows_lists_its_languages_between_nulls() {
+        let list: Vec<u16> = "ru-RU\0en-US\0\0".encode_utf16().collect();
+        assert_eq!(super::ui_language_list(&list), ["ru-RU", "en-US"]);
+        assert!(super::ui_language_list(&[0, 0]).is_empty());
+    }
+
+    /// The real list: never empty, every name a language tag.
+    #[cfg(windows)]
+    #[test]
+    fn windows_has_display_languages() {
+        let langs = super::preferred_languages();
+        assert!(!langs.is_empty() && langs.iter().all(|l| l.len() >= 2 && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')), "{langs:?}");
     }
 
     #[test]
