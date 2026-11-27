@@ -15,7 +15,7 @@ pub fn is_passive(tokens: &[Token], lang: Lang) -> bool {
     }
 }
 
-const EN_IRREGULAR: &[&str] = &[
+pub(crate) const EN_IRREGULAR: &[&str] = &[
     "arisen", "awoken", "beaten", "become", "begun", "bent", "bitten", "blown", "born", "borne", "bought", "bound", "bred", "broken", "brought", "built", "burnt", "caught", "chosen", "come", "cut", "dealt", "done",
     "drawn", "driven", "dug", "eaten", "fallen", "fed", "felt", "fled", "flown", "forbidden", "forgiven", "forgotten", "fought", "found", "frozen", "given", "ground", "grown", "heard", "held", "hidden", "hit", "hung", "hurt",
     "kept", "known", "laid", "led", "left", "lent", "lit", "lost", "made", "meant", "met", "mistaken", "paid", "put", "read", "ridden", "risen", "run", "said", "seen", "sent", "set", "shaken", "shot", "shown", "shut", "sold",
@@ -78,7 +78,7 @@ fn german(tokens: &[Token]) -> bool {
     })
 }
 
-const ES_IRREGULAR: &[&str] = &["abierto", "cubierto", "descubierto", "dicho", "escrito", "frito", "hecho", "impreso", "muerto", "puesto", "resuelto", "roto", "visto", "vuelto"];
+pub(crate) const ES_IRREGULAR: &[&str] = &["abierto", "cubierto", "descubierto", "dicho", "escrito", "frito", "hecho", "impreso", "muerto", "puesto", "resuelto", "roto", "visto", "vuelto"];
 
 fn spanish(tokens: &[Token]) -> bool {
     for (i, aux) in tokens.iter().enumerate() {

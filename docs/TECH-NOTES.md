@@ -284,6 +284,17 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   capitals, nor web and mail addresses. Learn writes `Spelling/learned.txt`; Ignore lasts the
   session. No dictionary found: nothing is underlined. Windows ships none, so a writer adds
   them to `Dictionaries/` until its own checker (ISpellChecker) is wired.
+- **Word classes off the Mac** (`prose::tag`, dsky-fbso.18): Review's passive marks and echoes
+  read words through NaturalLanguage's `NLTagger` (lexical class, lemma) on the Mac. Elsewhere
+  there's no model: each language's closed-class words (pronouns, articles, prepositions, the
+  forms of *be* / *быть* / *werden* / *ser* and the modals) are looked up, and an open-class word
+  is a noun unless its ending and the words before it say participle (English -ed and the
+  irregulars, German ge-…-t with separable and inseparable prefixes, Spanish -ado/-ido, Russian
+  short participles: a verb prefix and -ан/-ен/-т, after *быть* or in a long neuter or plural
+  form) or adverb. Base words are Snowball stems (`rust-stemmers`), so “keep” and “keeping”
+  echo; a German participle's base is its infinitive's stem. Words split as `NLTagger` splits
+  them (`ca` + `n’t`, `l’` + `écriture`), so an echo's “N words after” counts the same. The
+  commonest adverbs are particles there, so they never echo.
 - **Dates come from macOS** (`dates.rs`): NSDateFormatter with a template (`EEEEdMMMMy`,
   `LLLL`…) in the UI's language and the Mac's region, so English on a Mac set to Russia writes
   "23 November", and no catalog holds a month or weekday. Reading a journal day's heading back

@@ -1054,13 +1054,12 @@ fn lab_mistakes_survive_typing() {
 }
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "no word tagger: dsky-fbso.18")]
 fn com_10_keep_as_comment() {
     let doc = "# Keep Them\n\nMost of the friction in writing comes from choosing too early. You pick a word, the sentence moves on, and the other candidates quietly disappear. A week later you can’t remember those words, only that one of them was better.\n";
     let mut ui = Ui::open(doc);
     ui.keys("alt-cmd-l");
     ui.keys("3");
-    assert_eq!(marks(&ui), ["words"], "the echo, found on the Mac");
+    assert_eq!(marks(&ui), ["words"], "the echo, found with no model");
     let note = ui.read(|ws, _| ws.lab.marks.as_ref().unwrap().items[0].note.clone());
     ui.click_id("row-comment");
     let kept = ui.read(|ws, cx| {
@@ -1332,7 +1331,6 @@ fn the_ai_switch_turns_ai_off() {
 
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "no word tagger: dsky-fbso.18")]
 fn lab_hard_to_read_marks_passive_sentences() {
     let doc = "# Editors\n\nEditors have always known this. Your sentence isn’t erased by a good editor. They write a suggestion in the margin and let you decide, and the page holds both versions until you are ready.\n";
     let f = fake_slow(vec![json_reply(serde_json::json!({"marks": []}))], 300);
@@ -1361,7 +1359,6 @@ fn lab_hard_to_read_marks_passive_sentences() {
 
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "no word tagger: dsky-fbso.18")]
 fn lab_word_choice_marks_echoes() {
     assert_eq!(ai::lab::Pass::Tone.menu_label(), "Word choice");
     let doc = "# Keep Them\n\nMost of the friction in writing comes from choosing too early. You pick a word, the sentence moves on, and the other candidates quietly disappear. A week later you can’t remember those words, only that one of them was better. At the end of the day you keep them, and keep them close.\n";
@@ -1384,7 +1381,6 @@ fn lab_word_choice_marks_echoes() {
 }
 
 #[test]
-#[cfg_attr(not(target_os = "macos"), ignore = "no word tagger: dsky-fbso.18")]
 fn an_echos_versions_leave_no_echo() {
     let doc = "# Keep Them\n\nMost of the friction in writing comes from choosing too early. You pick a word, the sentence moves on, and the other candidates quietly disappear. A week later you can’t remember those words, only that one of them was better.\n";
     let versions = json_reply(serde_json::json!({"versions": [

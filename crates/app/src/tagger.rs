@@ -1,6 +1,7 @@
 use prose::{Lang, Token};
 
-/// Char ranges into `text`; empty when the tagger can't read `lang`.
+/// Char ranges into `text`; empty when the tagger can't read `lang`. NaturalLanguage on the Mac;
+/// elsewhere `prose::tag`, word lists and endings.
 pub fn tokens(text: &str, lang: Lang) -> Vec<Token> {
     if text.trim().is_empty() {
         return Vec::new();
@@ -11,13 +12,12 @@ pub fn tokens(text: &str, lang: Lang) -> Vec<Token> {
     }
     #[cfg(not(target_os = "macos"))]
     {
-        let _ = lang;
-        Vec::new()
+        prose::tag(text, lang)
     }
 }
 
-/// Whether this Mac's NaturalLanguage tags words of `lang` at all: macOS 15 (the CI runners)
-/// tags every Russian word `Other`, macOS 26 reads it.
+/// Whether the tagger reads `lang` at all: macOS 15's NaturalLanguage (the CI runners) tags
+/// every Russian word `Other`, macOS 26 reads it; `prose::tag` reads every language.
 #[cfg(test)]
 pub fn reads(lang: Lang, sample: &str) -> bool {
     tokens(sample, lang).iter().any(|t| t.class != prose::Class::Other)
