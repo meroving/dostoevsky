@@ -120,6 +120,8 @@ impl Workspace {
         subs.push(cx.observe_window_activation(window, |this, window, cx| {
             if window.is_window_active() {
                 crate::set_front_window(this.project_kind(), this.model.read(cx).layer, cx);
+                #[cfg(not(target_os = "macos"))]
+                crate::note_front_window(window.window_handle(), cx);
             } else {
                 this.autosave(window, cx);
                 this.menu_bar_close(true, window, cx);

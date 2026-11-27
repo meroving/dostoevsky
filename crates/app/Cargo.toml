@@ -62,10 +62,10 @@ writeable = "0.6"
 arboard = { version = "3", default-features = false }
 
 # Windows' own spell checker (win_spell.rs, dsky-fbso.17), Recycle Bin, animation setting and
-# UI languages (recycle_bin.rs, platform.rs; dsky-fbso.7); the version GPUI's Windows platform
-# already links.
+# UI languages (recycle_bin.rs, platform.rs; dsky-fbso.7) and the pipe other launches hand their
+# files to (instance.rs, dsky-fbso.20); the version GPUI's Windows platform already links.
 [target.'cfg(windows)'.dependencies]
-windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Globalization", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
+windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_IO", "Win32_System_Pipes", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
 # Its #[implement] macro names windows_core: the Recycle Bin's progress sink (recycle_bin.rs).
 windows-core = "0.62"
 
