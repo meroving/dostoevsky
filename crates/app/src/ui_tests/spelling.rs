@@ -70,6 +70,11 @@ fn ctx_1_learn_spelling_and_no_guesses() {
 fn ctx_1_look_up() {
     let mut ui = ui("Most of the friction in writing.\n");
     ui.right_click_text("friction");
+    if !crate::platform::HAS_LOOK_UP {
+        // Windows and Linux have no dictionary panel: the menu doesn't offer one.
+        assert!(!ui.menu_labels().iter().any(|l| l.starts_with("Look Up")), "{:?}", ui.menu_labels());
+        return;
+    }
     ui.menu("Look Up “friction”");
     assert_eq!(ui.looked_up(), ["friction"]);
 

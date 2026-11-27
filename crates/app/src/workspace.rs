@@ -285,7 +285,7 @@ impl Workspace {
                     word: text.clone(),
                     guesses: crate::spell::Spelling::guesses(cx, &text),
                 });
-                let look_up = Some(text.trim().to_string()).filter(|t| !t.is_empty() && t.chars().count() <= 200 && !t.contains('\n'));
+                let look_up = Some(text.trim().to_string()).filter(|t| crate::platform::HAS_LOOK_UP && !t.is_empty() && t.chars().count() <= 200 && !t.contains('\n'));
                 // A right-click inside a group offers that group, not a new one inside it.
                 let group = page
                     .groups()
