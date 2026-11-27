@@ -284,7 +284,8 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   (Windows' HTML Format, which Word and browsers paste formatted; X11's `text/html`, which
   Wayland desktops pass on through XWayland) with the Markdown as the text, falling back to
   GPUI's text alone; one `arboard::Clipboard` lives as long as the app, since on X11 the app
-  serves what it copied. Not yet: Look Up.
+  serves what it copied. Look Up (the Mac's dictionary panel) has no counterpart on Windows or
+  Linux, so off the Mac the page's menu leaves it out (`platform::HAS_LOOK_UP`).
 - **Spelling off the Mac** (`hunspell.rs`, dsky-fbso.4): the Mac's `NSSpellChecker` checks a
   word in any of the writer's languages, so off the Mac a word is right when any of its
   dictionaries knows it: one Hunspell dictionary per language the writer reads (the UI's, the

@@ -6,6 +6,11 @@ fn item(label: &str, shortcut: Option<&str>) -> MenuItem {
     MenuItem { label: label.into(), enabled: true, badge: None, shortcut: shortcut.map(crate::ui_tests::key_label) }
 }
 
+/// The page menu's last item on the Mac; Windows and Linux have no Look Up.
+fn look_up(word: &str) -> Vec<MenuItem> {
+    if crate::platform::HAS_LOOK_UP { vec![item(&format!("Look Up “{word}”"), None)] } else { Vec::new() }
+}
+
 #[test]
 fn ctx_1_word_menu() {
     let mut ui = Ui::open_editing(DOC);
@@ -21,8 +26,10 @@ fn ctx_1_word_menu() {
             item("Cut Without a Trace", Some("⇧⌘X")),
             item("Copy", Some("⌘C")),
             item("Paste", Some("⌘V")),
-            item("Look Up “friction”", None),
         ]
+        .into_iter()
+        .chain(look_up("friction"))
+        .collect::<Vec<_>>()
     );
 }
 
@@ -38,8 +45,10 @@ fn ctx_1_writing_menu() {
             item("Cut", Some("⌘X")),
             item("Copy", Some("⌘C")),
             item("Paste", Some("⌘V")),
-            item("Look Up “friction”", None),
         ]
+        .into_iter()
+        .chain(look_up("friction"))
+        .collect::<Vec<_>>()
     );
     ui.menu("Alternatives for “friction”");
     assert!(ui.read(|ws, cx| ws.model.read(cx).layer), "the item went to editing");
@@ -54,7 +63,8 @@ fn ctx_1_writing_menu_inside_a_group() {
     let g = ui.make_group("friction", &["tension"]);
     ui.keys("cmd-d");
     ui.right_click_text("tension");
-    assert_eq!(ui.menu_labels(), ["Open alternatives for “tension”", "Cut", "Copy", "Paste", "Look Up “tension”"]);
+    let want: Vec<String> = ["Open alternatives for “tension”", "Cut", "Copy", "Paste"].into_iter().map(String::from).chain(look_up("tension").into_iter().map(|i| i.label)).collect();
+    assert_eq!(ui.menu_labels(), want);
     ui.menu("Open alternatives for “tension”");
     assert!(ui.read(|ws, cx| ws.model.read(cx).layer));
     assert_eq!(ui.sidebar(), Some(g));

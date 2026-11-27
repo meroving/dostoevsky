@@ -79,6 +79,10 @@ fn kde_reduces_motion(kdeglobals: &str) -> Option<bool> {
     None
 }
 
+/// Look Up (the Mac's dictionary panel) has no counterpart on Windows or Linux, so off the Mac the
+/// page's menu leaves it out.
+pub const HAS_LOOK_UP: bool = cfg!(target_os = "macos");
+
 #[cfg(test)]
 thread_local! {
     /// (text, window point) of each Look Up, for the UI tests.
