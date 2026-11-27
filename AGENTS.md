@@ -38,8 +38,9 @@ The product spec and decision records are maintained separately and aren't publi
 
 - `crates/english`: word characters, word counts.
 - `crates/prose`: reading prose without a UI: the text's language (from its commonest words),
-  reading ease (one Flesch-family formula per language) for Statistics, and the one sentence
-  finder (REVIEW, ⇧⌘A's scope, the sentence keys).
+  reading ease (one Flesch-family formula per language) for Statistics, the one sentence
+  finder (REVIEW, ⇧⌘A's scope, the sentence keys), passive and echo rules, and the word tagger
+  for systems with no NLTagger (word lists, endings, Snowball stems).
 - `crates/l10n`: the UI's languages (TECH-NOTES §12): `tr!("English")`, `trn!` plurals, `trc!`
   contexts; catalogs in `locales/<lang>.json`, checked against the source by `tests/catalogs.rs`.
 - `crates/doc-model`: the document tree (ADR-001): groups own their variants, display-offset
