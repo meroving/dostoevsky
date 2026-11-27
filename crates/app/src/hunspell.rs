@@ -147,7 +147,7 @@ impl Speller for Hunspell {
 /// The words to check, with their char ranges: letters, with an apostrophe inside (UAX #29). Not
 /// a word with a digit or an underscore, one in capitals (an acronym), nor anything in a web or
 /// mail address.
-fn words(text: &str) -> Vec<(Range<usize>, &str)> {
+pub(crate) fn words(text: &str) -> Vec<(Range<usize>, &str)> {
     // Whitespace-separated stretches that are addresses, in bytes.
     let mut addresses: Vec<Range<usize>> = Vec::new();
     let mut from = None;
@@ -208,7 +208,7 @@ fn available(dirs: &[PathBuf]) -> Vec<(String, PathBuf)> {
 
 /// One dictionary for each language: the same name (`en_GB`), else the language's own country
 /// (`de_DE`, `en_US` for English), else the first of that language.
-fn pick(found: &[(String, PathBuf)], languages: &[String]) -> Vec<(String, PathBuf)> {
+pub(crate) fn pick(found: &[(String, PathBuf)], languages: &[String]) -> Vec<(String, PathBuf)> {
     let primary = |name: &str| name.split(['_', '-']).next().unwrap_or("").to_lowercase();
     let mut out: Vec<(String, PathBuf)> = Vec::new();
     for tag in languages {

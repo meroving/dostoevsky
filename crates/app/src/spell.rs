@@ -34,13 +34,31 @@ impl Spelling {
         #[cfg(target_os = "macos")]
         Spelling::set(cx, Box::new(mac::MacSpeller::new()));
         // Off the Mac, Hunspell's dictionaries are read off the main thread (a big one takes a
-        // moment); with none installed nothing is underlined.
+        // moment); with none installed nothing is underlined. On Windows, which ships no Hunspell
+        // dictionaries, its own checker spells, made on the main thread (COM's objects stay on
+        // their thread); a writer's own .aff and .dic in Dictionaries/ join it.
         #[cfg(not(target_os = "macos"))]
         {
             let (dirs, languages) = (crate::hunspell::dictionary_dirs(), crate::hunspell::wanted_languages());
             let learned = crate::files::support_dir().map(|d| d.join("Spelling").join("learned.txt"));
+            #[cfg(windows)]
+            let wanted = languages.clone();
             cx.spawn(async move |cx| {
                 let speller = cx.background_executor().spawn(async move { crate::hunspell::Hunspell::load(&dirs, &languages, learned) }).await;
+                #[cfg(windows)]
+                cx.update(|cx| {
+                    let windows = crate::win_spell::WinSpeller::new(&wanted);
+                    let both: Option<Box<dyn Speller>> = match (windows, speller) {
+                        (Some(w), Some(h)) => Some(Box::new(Together(Box::new(w), Box::new(h)))),
+                        (Some(w), None) => Some(Box::new(w)),
+                        (None, Some(h)) => Some(Box::new(h)),
+                        (None, None) => None,
+                    };
+                    if let Some(s) = both {
+                        Spelling::set(cx, s);
+                    }
+                });
+                #[cfg(not(windows))]
                 if let Some(speller) = speller {
                     cx.update(|cx| Spelling::set(cx, Box::new(speller)));
                 }
@@ -87,9 +105,41 @@ impl Spelling {
     }
 }
 
-/// Char offset of each UTF-16 offset in `text` (macOS reports ranges in UTF-16).
-#[cfg(any(target_os = "macos", test))]
-fn utf16_to_char(text: &str) -> Vec<usize> {
+/// Two spellers as one: a word is wrong only when both find it wrong; guesses are the first's,
+/// else the second's; Learn and Ignore go to both. Windows' checker and a writer's own Hunspell
+/// dictionaries.
+#[cfg_attr(not(windows), allow(dead_code))]
+pub struct Together(pub Box<dyn Speller>, pub Box<dyn Speller>);
+
+impl Speller for Together {
+    fn misspelled(&self, text: &str) -> Vec<Range<usize>> {
+        let first = self.0.misspelled(text);
+        if first.is_empty() {
+            return first;
+        }
+        let second = self.1.misspelled(text);
+        first.into_iter().filter(|r| second.iter().any(|s| s.start < r.end && r.start < s.end)).collect()
+    }
+
+    fn guesses(&self, word: &str) -> Vec<String> {
+        let first = self.0.guesses(word);
+        if first.is_empty() { self.1.guesses(word) } else { first }
+    }
+
+    fn learn(&self, word: &str) {
+        self.0.learn(word);
+        self.1.learn(word);
+    }
+
+    fn ignore(&self, word: &str) {
+        self.0.ignore(word);
+        self.1.ignore(word);
+    }
+}
+
+/// Char offset of each UTF-16 offset in `text` (macOS and Windows report ranges in UTF-16).
+#[cfg(any(target_os = "macos", windows, test))]
+pub(crate) fn utf16_to_char(text: &str) -> Vec<usize> {
     let mut map = Vec::with_capacity(text.len() + 1);
     for (i, ch) in text.chars().enumerate() {
         for _ in 0..ch.len_utf16() {
@@ -265,6 +315,22 @@ mod tests {
     fn utf16_offsets_map_to_chars() {
         // "é" is one UTF-16 unit; "😀" is two.
         assert_eq!(utf16_to_char("é😀a"), vec![0, 1, 1, 2, 3]);
+    }
+
+    #[test]
+    fn together_a_word_is_wrong_only_when_both_say_so() {
+        use super::{Speller, Together, WordList};
+        let both = Together(Box::new(WordList::new("most of the friction")), Box::new(WordList::new("the trenie friction")));
+        let text = "Most of the frction trenie";
+        let chars: Vec<char> = text.chars().collect();
+        let wrong = |s: &Together| s.misspelled(text).into_iter().map(|r| chars[r].iter().collect::<String>()).collect::<Vec<_>>();
+        assert_eq!(wrong(&both), ["frction"], "the first knows Most, the second trenie");
+        assert_eq!(both.guesses("frction"), ["friction"]);
+        let second_only = Together(Box::new(WordList::new("")), Box::new(WordList::new("trenie")));
+        assert_eq!(second_only.guesses("trenei"), Vec::<String>::new());
+        assert_eq!(second_only.guesses("treni"), ["trenie"], "the second's when the first has none");
+        both.learn("frction");
+        assert!(wrong(&both).is_empty());
     }
 
     #[cfg(target_os = "macos")]

@@ -45,6 +45,8 @@ mod review_text;
 mod sound;
 mod spell;
 mod tagger;
+#[cfg(windows)]
+mod win_spell;
 #[cfg(unix)]
 mod trash;
 mod text;

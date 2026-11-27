@@ -1647,6 +1647,7 @@ dependencies = [
  "spellbook",
  "unicode-segmentation",
  "ureq",
+ "windows 0.62.2",
  "winresource",
  "writeable",
 ]
