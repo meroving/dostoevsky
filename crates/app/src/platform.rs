@@ -228,16 +228,31 @@ pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
         .ok_or_else(|| std::io::Error::other(l10n::tr!("the Trash didn't say where the file went")))
 }
 
-/// Tests use a folder next to the test's data, not the real Trash.
 /// Linux and the other Unixes: the freedesktop.org Trash the file managers share.
 #[cfg(all(unix, not(target_os = "macos"), not(test)))]
 pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
     crate::trash::trash(path)
 }
 
-/// Tests, and Windows until its Recycle Bin is wired (dsky-fbso.7): a Trash folder of the app's own.
-#[cfg(any(test, windows))]
+/// Windows: the Recycle Bin, as Explorer's Delete. A file it can't take (a drive without one, a
+/// file too big for it, which Windows would delete for good) goes to the app's own folder.
+#[cfg(all(windows, not(test)))]
 pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    match crate::recycle_bin::recycle(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::Unsupported => own_trash(path),
+        other => other,
+    }
+}
+
+/// Tests: a Trash folder of the app's own.
+#[cfg(test)]
+pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
+    own_trash(path)
+}
+
+/// A Trash folder of the app's own, in its support folder.
+#[cfg(any(test, windows))]
+fn own_trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
     let base = crate::files::support_dir().ok_or_else(|| std::io::Error::other("no support folder"))?;
     let bin = base.join("Trash");
     std::fs::create_dir_all(&bin)?;
@@ -250,8 +265,8 @@ pub fn trash(path: &std::path::Path) -> std::io::Result<std::path::PathBuf> {
 pub fn untrash(to: &std::path::Path, from: &std::path::Path) -> std::io::Result<()> {
     #[cfg(unix)]
     return crate::trash::restore(to, from);
-    #[cfg(not(unix))]
-    return std::fs::rename(to, from);
+    #[cfg(windows)]
+    return crate::recycle_bin::restore(to, from);
 }
 
 /// Turns off macOS font smoothing, with which GPUI thickens light text on dark. GPUI reads it

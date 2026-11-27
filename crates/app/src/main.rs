@@ -40,6 +40,8 @@ mod prefs;
 mod project;
 mod project_sheets;
 mod project_ui;
+#[cfg(windows)]
+mod recycle_bin;
 mod review;
 mod review_text;
 mod sound;

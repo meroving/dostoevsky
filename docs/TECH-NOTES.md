@@ -273,8 +273,14 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   (`kdeglobals`), read every few seconds on a thread of its own. On Windows reduce motion is
   Animation effects off (`SPI_GETCLIENTAREAANIMATION`), which Preferences names as Windows
   does, and the UI's language comes from Windows' display languages
-  (`GetUserPreferredUILanguages`), not `LANG`. Not yet: the Recycle Bin, rich text on the
-  clipboard (GPUI writes plain text only off the Mac), Look Up.
+  (`GetUserPreferredUILanguages`), not `LANG`. A file goes to the Recycle Bin through the
+  shell's own `IFileOperation` (recycle on delete, no dialogs; `recycle_bin.rs`), whose progress
+  sink says where it landed (`C:\$Recycle.Bin\<user>\$R….md`); ⌘Z moves that back and deletes
+  its `$I` record, so the Recycle Bin forgets it, and won't replace a file that has since taken
+  its place. A file the Recycle Bin can't take (no bin on that drive, too big: Windows would
+  delete it for good) is refused there and kept in the app's own `Trash/` folder. The shell
+  parses ordinary paths only, so a canonicalised `\\?\C:\…` is written `C:\…` for it. Not yet:
+  rich text on the clipboard (GPUI writes plain text only off the Mac), Look Up.
 - **Spelling off the Mac** (`hunspell.rs`, dsky-fbso.4): the Mac's `NSSpellChecker` checks a
   word in any of the writer's languages, so off the Mac a word is right when any of its
   dictionaries knows it: one Hunspell dictionary per language the writer reads (the UI's, the
