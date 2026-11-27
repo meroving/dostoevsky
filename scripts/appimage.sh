@@ -63,6 +63,8 @@ done
 cp LICENSE NOTICE crates/app/assets/fonts/OFL-*.txt "$APPDIR/usr/share/doc/dostoevsky/"
 # Apache/MIT/BSD ask for their notices to travel with the binary (dsky-a8n.3).
 if command -v cargo-about >/dev/null; then
+  # The license list covers every system's crates (about.toml), which a build for one doesn't download.
+  cargo fetch --locked --quiet
   cargo about generate --frozen packaging/about.hbs -o "$APPDIR/usr/share/doc/dostoevsky/THIRD-PARTY-LICENSES.txt"
 else
   echo "cargo-about is needed for a release build (cargo install cargo-about)" >&2; exit 1

@@ -27,6 +27,8 @@ rm -rf "$WORK"
 mkdir -p "$WORK/licenses" "$OUT"
 cp LICENSE NOTICE crates/app/assets/fonts/OFL-*.txt "$WORK/licenses/"
 # Apache/MIT/BSD ask for their notices to travel with the binary (dsky-a8n.3).
+# The license list covers every system's crates (about.toml), which a build for one doesn't download.
+cargo fetch --locked --quiet
 cargo about generate --frozen packaging/about.hbs -o "$WORK/licenses/THIRD-PARTY-LICENSES.txt"
 
 rm -f "$MSI"
