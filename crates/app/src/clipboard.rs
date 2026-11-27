@@ -104,14 +104,36 @@ pub fn write_rich(markdown: &str, html: &str, cx: &mut App) {
         let _ = cx;
         rich_mac(markdown, html);
     }
-    #[cfg(any(not(target_os = "macos"), test))]
+    #[cfg(all(not(target_os = "macos"), not(test)))]
+    if let Err(e) = rich_elsewhere(markdown, html) {
+        // The text at least, as GPUI writes it.
+        eprintln!("dostoevsky: couldn't put formatted text on the clipboard: {e}");
+        cx.write_to_clipboard(ClipboardItem::new_string(markdown.to_string()));
+    }
+    #[cfg(test)]
     {
         cx.write_to_clipboard(ClipboardItem::new_string(markdown.to_string()));
-        #[cfg(test)]
         RICH_HTML.with(|r| *r.borrow_mut() = Some(html.to_string()));
-        #[cfg(not(test))]
-        let _ = html;
     }
+}
+
+/// Off the Mac GPUI writes plain text only: arboard puts the HTML beside the Markdown, as
+/// Windows' HTML Format (what Word and WordPad paste formatted) or X11's text/html, and the
+/// Markdown as the text. One clipboard for the app's life: on X11 the app serves what it copied
+/// for as long as it runs.
+#[cfg(all(not(target_os = "macos"), not(test)))]
+fn rich_elsewhere(markdown: &str, html: &str) -> Result<(), arboard::Error> {
+    thread_local! {
+        static CLIPBOARD: std::cell::RefCell<Option<arboard::Clipboard>> = const { std::cell::RefCell::new(None) };
+    }
+    CLIPBOARD.with(|c| {
+        let mut c = c.borrow_mut();
+        if c.is_none() {
+            *c = Some(arboard::Clipboard::new()?);
+        }
+        let clipboard = c.as_mut().expect("made above");
+        clipboard.set_html(html, Some(markdown))
+    })
 }
 
 #[cfg(all(target_os = "macos", not(test)))]
