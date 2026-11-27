@@ -270,9 +270,11 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   Trash the file managers share (`trash.rs`: `files/` and a `.trashinfo` saying where it came
   from; another disk's `.Trash-<uid>`), and ⌘Z moves it back and drops the record. Reduce
   motion follows GNOME's Animations switch (`gsettings`) or KDE's animation speed
-  (`kdeglobals`), read every few seconds on a thread of its own. Not yet: the Recycle Bin and
-  Windows' motion setting, rich text on the clipboard (GPUI writes plain text only off the
-  Mac), Look Up.
+  (`kdeglobals`), read every few seconds on a thread of its own. On Windows reduce motion is
+  Animation effects off (`SPI_GETCLIENTAREAANIMATION`), which Preferences names as Windows
+  does, and the UI's language comes from Windows' display languages
+  (`GetUserPreferredUILanguages`), not `LANG`. Not yet: the Recycle Bin, rich text on the
+  clipboard (GPUI writes plain text only off the Mac), Look Up.
 - **Spelling off the Mac** (`hunspell.rs`, dsky-fbso.4): the Mac's `NSSpellChecker` checks a
   word in any of the writer's languages, so off the Mac a word is right when any of its
   dictionaries knows it: one Hunspell dictionary per language the writer reads (the UI's, the

@@ -127,6 +127,14 @@ pub fn brought_back_from_trash() -> &'static str {
     }
 }
 
+/// Under Effects when the system turns motion down: its own setting, named as it names it.
+pub fn reduce_motion_is_on() -> &'static str {
+    match os() {
+        Os::Windows => tr!("Animation effects are off"),
+        _ => tr!("Reduce Motion is on"),
+    }
+}
+
 /// The AI privacy lines: "this Mac" on the Mac, "this computer" elsewhere.
 pub fn ai_off_privacy() -> &'static str {
     match os() {

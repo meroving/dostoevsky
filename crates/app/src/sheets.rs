@@ -889,7 +889,7 @@ impl Workspace {
                         p.effects,
                         |p, v| p.effects = v,
                     )))
-                    .when(reduce_motion, |d| d.child(div().text_color(c(theme::muted())).text_size(px(11.)).child(tr!("Reduce Motion is on")))),
+                    .when(reduce_motion, |d| d.child(div().text_color(c(theme::muted())).text_size(px(11.)).child(crate::os_text::reduce_motion_is_on()))),
             )
             .into_any_element(),
             heading(tr!("FILES")),
