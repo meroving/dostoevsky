@@ -25,9 +25,8 @@ jobs:
       - uses: EmbarkStudios/cargo-deny-action@v2
 
   linux:
-    # The app builds and its tests pass off the Mac (dsky-fbso); tests that need what only
-    # macOS has so far (hyphenation, the word tagger) are
-    # ignored there, each naming its bead.
+    # The app builds and its tests pass off the Mac (dsky-fbso); a test that needs what only
+    # macOS has so far is ignored there, naming its bead.
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     steps:
