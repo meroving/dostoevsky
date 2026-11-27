@@ -31,11 +31,13 @@ cp LICENSE NOTICE crates/app/assets/fonts/OFL-*.txt "$WORK/licenses/"
 cargo fetch --locked --quiet
 cargo about generate --frozen packaging/about.hbs -o "$WORK/licenses/THIRD-PARTY-LICENSES.txt"
 
+# WiX reads a harvest path from the .wxs's folder: give it a whole one (Windows' form in Git Bash).
+licenses="$(cd "$WORK/licenses" && { pwd -W 2>/dev/null || pwd; })"
 rm -f "$MSI"
 wix build packaging/windows/dostoevsky.wxs -arch x64 \
   -d Version="$VERSION" \
   -d Exe=target/release/dostoevsky.exe \
   -d Icon=packaging/windows/dostoevsky.ico \
-  -d Licenses="$WORK/licenses" \
+  -d Licenses="$licenses" \
   -o "$MSI"
 echo "$MSI"
