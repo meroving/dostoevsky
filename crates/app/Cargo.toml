@@ -58,6 +58,8 @@ icu_datetime = "2.4"
 icu_calendar = "2.4"
 icu_locale_core = "2.4"
 writeable = "0.6"
+# Formatted text on the clipboard off the Mac: Windows' HTML Format, X11's text/html (clipboard.rs).
+arboard = { version = "3", default-features = false }
 
 # Windows' own spell checker (win_spell.rs, dsky-fbso.17), Recycle Bin, animation setting and
 # UI languages (recycle_bin.rs, platform.rs; dsky-fbso.7); the version GPUI's Windows platform
