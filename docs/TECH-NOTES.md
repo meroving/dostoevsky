@@ -384,6 +384,11 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   dostoevsky.app; a fork with its own feed changes `URL` in `updates.rs` and `UPDATES_TEAM`. The App Store build is made without it and has no update code at
   all (App Review 2.4.5); its build script fails if the binary names `version.json`. Plain
   `cargo run` builds don't check either.
+- **Linux and Windows** (dsky-fbso.13, .14): the AppImage (`scripts/appimage.sh`) and the `.msi`
+  (`scripts/msi.sh`, `packaging/windows/dostoevsky.wxs`) have it when the release workflow builds
+  them (`UPDATES=1`; nothing to sign them by, so the workflow is what makes a build the project's).
+  The same `version.json` and the same line; there's no macOS to compare `min_macos` with, so it
+  doesn't hold them back, and Download opens the same release page, which has all three files.
 - **Opt-in:** the second launch asks once, with a quiet line at the foot of the window ("Check for
   new versions once a day? Yes · No"); Preferences → General → *Check for updates* changes the
   answer, and Dostoevsky → *Check for Updates…* works whatever it is.

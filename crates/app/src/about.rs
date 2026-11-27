@@ -72,6 +72,7 @@ pub fn show(cx: &mut App) {
         }),
         is_resizable: false,
         is_minimizable: false,
+        app_id: Some(crate::APP_ID.into()),
         ..Default::default()
     };
     match gpui_kit::open_window(options, cx, |window, cx| cx.new(|cx| About::new(window, cx))) {

@@ -1,0 +1,14 @@
+[Desktop Entry]
+Type=Application
+Name=Dostoevsky
+GenericName=Writing App
+Comment=Find the right word
+Comment[ru]=Найти нужное слово
+Exec=dostoevsky %F
+Icon=app.dostoevsky.Dostoevsky
+Terminal=false
+Categories=Office;WordProcessor;
+MimeType=text/markdown;text/x-markdown;
+Keywords=writing;markdown;prose;editor;drafts;
+StartupNotify=true
+StartupWMClass=app.dostoevsky.Dostoevsky

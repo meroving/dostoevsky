@@ -24,6 +24,9 @@ scripts/e2e_bundle.sh                        # bundled .app via LaunchServices: 
 scripts/check_private_api.sh target/release/dostoevsky   # no private Apple API in the binary (vendor/gpui-pre-macos)
 DOSTOEVSKY_PERF=1 cargo run --release -p dostoevsky big.md                 # per-keystroke timings
 scripts/bundle.sh                            # universal Dostoevsky.app + .dmg (see docs/RELEASE.md)
+scripts/appimage.sh                          # Linux: target/bundle/Dostoevsky-X.Y.Z-x86_64.AppImage (on Linux; CI's appimage job)
+scripts/msi.sh                               # Windows: target/bundle/Dostoevsky-X.Y.Z-x64.msi (Git Bash, WiX 5; CI's msi job)
+gh workflow run ci.yml --ref <branch> -f packages=true   # build and try both packages on GitHub's runners
 scripts/cask.sh --release vX.Y.Z > target/dostoevsky.rb   # Homebrew cask for a release .dmg (docs/RELEASE.md §5)
 cargo deny check                             # licenses, advisories, crate sources (deny.toml; CI runs it)
 scripts/shoot_readme.sh [shot…]              # README screenshots from the real app → docs/screens (AI via a local stub)

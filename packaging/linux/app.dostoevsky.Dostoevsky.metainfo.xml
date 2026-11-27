@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata (dsky-fbso.13): what software centres and the AppImage show. scripts/appimage.sh fills in the release. -->
+<component type="desktop-application">
+  <id>app.dostoevsky.Dostoevsky</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>Dostoevsky</name>
+  <summary>Find the right word</summary>
+  <developer id="app.dostoevsky">
+    <name>Dmitry Eibozhenko</name>
+  </developer>
+  <description>
+    <p>
+      A writing app. While you write, it's a quiet page: no marks, the rest of the draft dimmed.
+      When you edit, it keeps every version of a word, sentence or paragraph where it belongs:
+      read the next version in place, and choose later, with the real sentence around it.
+    </p>
+    <ul>
+      <li>Alternatives: any span can hold several versions</li>
+      <li>Cuts: what you cut is kept, with its place</li>
+      <li>Comments in the margin, never in the final text</li>
+      <li>Zen writing, private mode, themes and typewriter scrolling</li>
+    </ul>
+    <p>
+      Everything is saved in one Markdown file that any other editor can still open. AI is
+      optional, and it never rewrites your text.
+    </p>
+  </description>
+  <launchable type="desktop-id">app.dostoevsky.Dostoevsky.desktop</launchable>
+  <url type="homepage">https://dostoevsky.app</url>
+  <provides>
+    <binary>dostoevsky</binary>
+    <mediatype>text/markdown</mediatype>
+  </provides>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="__VERSION__" date="__DATE__"/>
+  </releases>
+</component>

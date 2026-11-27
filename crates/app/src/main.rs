@@ -79,6 +79,10 @@ pub struct OpenPath {
     pub path: String,
 }
 
+/// The Mac's bundle identifier; on Linux the windows' app id (Wayland) and class (X11), which
+/// the desktop matches to `app.dostoevsky.Dostoevsky.desktop` for the name and icon.
+pub const APP_ID: &str = "app.dostoevsky.Dostoevsky";
+
 fn window_options(cx: &App) -> WindowOptions {
     let size = size(px(1180.), px(860.));
     #[cfg(feature = "shots")]
@@ -104,6 +108,7 @@ fn window_options(cx: &App) -> WindowOptions {
         }),
         window_min_size: Some(gpui_kit::size(px(520.), px(360.))),
         tabbing_identifier: Some("dostoevsky-document".into()),
+        app_id: Some(APP_ID.into()),
         window_background: theme::window_background(Prefs::get(cx).background_opacity),
         // A scripted run stays in the background so typing elsewhere can't reach it.
         focus: !scripted(),
