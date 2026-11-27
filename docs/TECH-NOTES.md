@@ -286,6 +286,24 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   GPUI's text alone; one `arboard::Clipboard` lives as long as the app, since on X11 the app
   serves what it copied. Look Up (the Mac's dictionary panel) has no counterpart on Windows or
   Linux, so off the Mac the page's menu leaves it out (`platform::HAS_LOOK_UP`).
+- **One app process off the Mac** (`instance.rs`, dsky-fbso.20): LaunchServices hands the Mac's
+  app a second file; on Windows and Linux every launch is a process. Before GPUI starts, a launch
+  tries the running app's endpoint: a named pipe `\\.\pipe\app.dostoevsky.Dostoevsky-<key>` on
+  Windows (the default security admits only this user; `FILE_FLAG_FIRST_PIPE_INSTANCE` settles two
+  launches at once, and the next instance is made before one is handed out, so the name never
+  lapses), a Unix socket `app.dostoevsky.Dostoevsky-<key>.sock` in `XDG_RUNTIME_DIR` on Linux (else
+  a 0700 `dostoevsky-<uid>` folder in /tmp; connect and bind under a lock file, a socket nobody
+  answers on is a dead app's and is replaced). The key is an FNV-1a of the support folder, so a run
+  with its own `DOSTOEVSKY_SUPPORT_DIR` is its own app; a scripted run (`--features shots`) neither
+  hands off nor listens, and the tests never run `main`. The message is the launch's paths, made
+  whole against its working folder (UTF-16 units on Windows, bytes on Linux, each length-prefixed),
+  and a deadline 5 s ahead: the app opens them as the command line's (a missing file opens empty, to
+  be saved there), brings the last one's window (or the last window in front) forward and replies;
+  no paths brings the app forward, with a window if none is open. A launch whose app doesn't reply
+  by then opens them itself, and an app that wakes after the deadline leaves them alone. On Windows
+  the launch gives the app the foreground right (`AllowSetForegroundWindow` with the pipe server's
+  pid), and GPUI's `activate_window` restores a minimized window. A killed app's pipe goes with its
+  handles. Linux passes no activation token, so a Wayland compositor may only mark the window.
 - **Spelling off the Mac** (`hunspell.rs`, dsky-fbso.4): the Mac's `NSSpellChecker` checks a
   word in any of the writer's languages, so off the Mac a word is right when any of its
   dictionaries knows it: one Hunspell dictionary per language the writer reads (the UI's, the

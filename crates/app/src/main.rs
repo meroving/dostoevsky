@@ -23,6 +23,8 @@ mod format;
 mod hunspell;
 mod hyphen;
 mod ideas;
+#[cfg(not(target_os = "macos"))]
+mod instance;
 mod keymap;
 mod lab;
 mod list_panel;
@@ -335,6 +337,59 @@ pub fn open_path(path: PathBuf, cx: &mut App) {
     }
 }
 
+/// A path from the command line: a file that isn't there yet opens empty, to be saved there.
+fn open_launch_path(p: PathBuf, cx: &mut App) {
+    if p.exists() {
+        open_path(p, cx);
+    } else {
+        let mut m = DocModel::new(doc_model::Document::new());
+        m.path = Some(p);
+        open_model(m, cx);
+    }
+}
+
+/// The window last in front, which another launch brings forward (off the Mac nothing says
+/// which window is front while another app is).
+#[cfg(not(target_os = "macos"))]
+struct LastFront(AnyWindowHandle);
+
+#[cfg(not(target_os = "macos"))]
+impl Global for LastFront {}
+
+#[cfg(not(target_os = "macos"))]
+pub fn note_front_window(window: AnyWindowHandle, cx: &mut App) {
+    cx.set_global(LastFront(window));
+}
+
+/// Another launch's paths (dsky-fbso.20), opened as the command line's are; with none the app
+/// comes forward, with a window if none is open.
+#[cfg(not(target_os = "macos"))]
+fn open_handed(paths: &[PathBuf], cx: &mut App) {
+    for p in paths {
+        open_launch_path(p.clone(), cx);
+    }
+    let all = workspaces(cx);
+    if all.is_empty() {
+        open_last_or_blank(cx);
+        return;
+    }
+    let last = paths.last().map(|p| p.canonicalize().unwrap_or_else(|_| p.clone()));
+    let showing = |ws: &Entity<Workspace>, cx: &App| {
+        last.as_deref().is_some_and(|p| ws.read(cx).model.read(cx).path.as_deref() == Some(p) || ws.read(cx).project_root() == Some(p))
+    };
+    let front = cx.try_global::<LastFront>().map(|f| f.0);
+    let window = all
+        .iter()
+        .rev()
+        .find(|(_, ws)| showing(ws, cx))
+        .or_else(|| all.iter().find(|(h, _)| Some(*h) == front))
+        .or(all.last())
+        .map(|(h, _)| *h);
+    if let Some(window) = window {
+        let _ = window.update(cx, |_, window, _| window.activate_window());
+    }
+}
+
 fn open_dialog(cx: &mut App) {
     let rx = cx.prompt_for_paths(PathPromptOptions {
         files: true,
@@ -549,6 +604,18 @@ fn quit(cx: &mut App) {
 }
 
 fn main() {
+    // Off the Mac every launch is a process: a later one hands its paths to the first and goes
+    // (dsky-fbso.20). A scripted run is always its own.
+    #[cfg(not(target_os = "macos"))]
+    let handed = if scripted() {
+        None
+    } else {
+        match instance::claim(&instance::launch_paths(std::env::args_os().skip(1))) {
+            instance::Claim::Handed => return,
+            instance::Claim::Owner(listener) => Some(instance::serve(listener)),
+            instance::Claim::Alone => None,
+        }
+    };
     platform::thin_glyphs();
     let app = gpui_kit::application().with_assets(theme::Assets);
     let (url_tx, url_rx) = smol::channel::unbounded::<Vec<String>>();
@@ -610,6 +677,19 @@ fn main() {
             }
         })
         .detach();
+        // Other launches' paths, after this one's own.
+        #[cfg(not(target_os = "macos"))]
+        if let Some(rx) = handed {
+            cx.spawn(async move |cx| {
+                while let Ok(h) = rx.recv().await {
+                    if h.take() {
+                        cx.update(|cx| open_handed(&h.paths, cx));
+                        h.done();
+                    }
+                }
+            })
+            .detach();
+        }
         let recovered = restore_recoveries(cx);
 
         let args: Vec<PathBuf> = std::env::args().skip(1).filter(|a| !a.starts_with('-')).map(PathBuf::from).collect();
@@ -620,13 +700,7 @@ fn main() {
             open_last_or_blank(cx);
         } else {
             for p in args {
-                if p.exists() {
-                    open_path(p, cx);
-                } else {
-                    let mut m = DocModel::new(doc_model::Document::new());
-                    m.path = Some(p);
-                    open_model(m, cx);
-                }
+                open_launch_path(p, cx);
             }
         }
         if !scripted() {
