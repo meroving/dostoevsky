@@ -321,7 +321,9 @@
   "Match macOS": "Как в macOS",
   "Match Windows": "Как в Windows",
   "Match the system": "Как в системе",
+  "Maximize#window button": "Развернуть",
   "Minimize": "Убрать в Dock",
+  "Minimize#window button": "Свернуть",
   "Mode": "Режим",
   "Editing mode": "Режим редактуры",
   "Review tab": "Вкладка «Разбор»",
@@ -500,6 +502,7 @@
     "Заменено: {n}"
   ],
   "Reset to {style}": "Вернуть: {style}",
+  "Restore#window button": "Восстановить",
   "Revert to Saved": "Вернуть к сохранённому",
   "Review": "Посмотреть",
   "Review#pass menu": "Разбор",

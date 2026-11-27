@@ -106,7 +106,7 @@ impl Workspace {
         let in_project = self.project.is_some();
         let heads = cols.len() > 1;
         let w = f32::from(window.viewport_size().width);
-        let right = w - crate::workspace::count_right(w);
+        let right = w - crate::workspace::count_right(w, crate::workspace::HeaderEdges::of(window));
 
         let cell = |text: String, dim: bool| {
             div().w(px(70.)).flex_none().text_right().text_color(if dim { c(theme::muted()) } else { c(theme::text()) }).child(text)

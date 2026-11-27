@@ -941,13 +941,13 @@ impl Ui {
 
     pub fn header_counter(&mut self) -> String {
         self.win.update(|ws, window, cx| {
-            ws.counter(crate::workspace::counter_room(window.viewport_size().width.into()), cx)
+            ws.counter(crate::workspace::counter_room(window.viewport_size().width.into(), crate::workspace::HeaderEdges::of(window)), cx)
         })
     }
 
     pub fn header_title(&mut self) -> String {
         self.win.update(|ws, window, cx| {
-            let room = crate::workspace::title_room(window.viewport_size().width.into(), window.is_fullscreen());
+            let room = crate::workspace::title_room(window.viewport_size().width.into(), crate::workspace::HeaderEdges::of(window));
             crate::workspace::header_title(ws.model.read(cx), room)
         })
     }

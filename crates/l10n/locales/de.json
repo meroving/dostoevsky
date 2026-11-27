@@ -312,7 +312,9 @@
   "Match macOS": "Wie macOS",
   "Match Windows": "Wie Windows",
   "Match the system": "Wie das System",
+  "Maximize#window button": "Maximieren",
   "Minimize": "Im Dock ablegen",
+  "Minimize#window button": "Minimieren",
   "Mode": "Modus",
   "Editing mode": "Bearbeitungsmodus",
   "Review tab": "Tab „Prüfen“",
@@ -487,6 +489,7 @@
     "{n} ersetzt"
   ],
   "Reset to {style}": "Zurück zu {style}",
+  "Restore#window button": "Wiederherstellen",
   "Revert to Saved": "Auf gesicherte Version zurücksetzen",
   "Review": "Prüfen",
   "Review#pass menu": "Prüfen",

@@ -122,6 +122,12 @@ impl Workspace {
                 this.autosave(window, cx);
             }
         }));
+        // Off the Mac the window's close button and Alt+F4 ask the system to close it: an
+        // unsaved document gets its say first, as with Ctrl+W.
+        if !cfg!(target_os = "macos") {
+            let this = cx.weak_entity();
+            window.on_window_should_close(cx, move |window, cx| this.update(cx, |ws, cx| ws.confirm_close(window, cx)).unwrap_or(true));
+        }
         let focus = page.read(cx).focus.clone();
         window.focus(&focus, cx);
         let mut ws = Workspace {
@@ -1342,6 +1348,8 @@ pub const UNDER_HEADER: f32 = HEADER_H + 8.;
 const HEADER_LEFT: f32 = 82.;
 const HEADER_LEFT_FULL_SCREEN: f32 = 14.;
 const HEADER_RIGHT: f32 = 14.;
+/// Beside the window's buttons off the Mac, which keep their own room.
+const HEADER_RIGHT_BY_BUTTONS: f32 = 6.;
 const HEADER_GAP: f32 = 12.;
 const PANEL_BUTTON_GAP: f32 = 8.;
 const RIGHT_GAP: f32 = 6.;
@@ -1364,38 +1372,64 @@ pub fn side_zone(w: f32) -> f32 {
     (w - HEADER_MIDDLE_W) / 2. - HEADER_GAP
 }
 
-pub fn header_left(full_screen: bool) -> f32 {
-    if full_screen { HEADER_LEFT_FULL_SCREEN } else { HEADER_LEFT }
+/// The room the window's own chrome takes at the header's two ends: on the left the Mac's
+/// traffic lights (none in full screen), on the right the caption buttons Windows and Linux's
+/// client-side decorations need (dsky-fbso.10).
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct HeaderEdges {
+    /// Where the left panel's button starts.
+    pub left: f32,
+    /// The window's buttons' width, 0 where there are none.
+    pub buttons: f32,
 }
 
-pub fn title_left(full_screen: bool) -> f32 {
-    header_left(full_screen) + ICON_BUTTON_W + PANEL_BUTTON_GAP
+impl HeaderEdges {
+    pub fn of(window: &Window) -> HeaderEdges {
+        let full_screen = window.is_fullscreen();
+        let frame = crate::title_bar::frame(window);
+        let left = if frame == crate::title_bar::Frame::Mac && !full_screen { HEADER_LEFT } else { HEADER_LEFT_FULL_SCREEN };
+        HeaderEdges { left, buttons: crate::title_bar::buttons_width(frame, full_screen) }
+    }
+
+    /// Between the header's last button and the window's edge or its buttons.
+    fn right_pad(&self) -> f32 {
+        if self.buttons > 0. { HEADER_RIGHT_BY_BUTTONS } else { HEADER_RIGHT }
+    }
+
+    /// Where the header's right part ends, short of the window's buttons.
+    fn right(&self) -> f32 {
+        self.right_pad() + self.buttons
+    }
+}
+
+pub fn title_left(edges: HeaderEdges) -> f32 {
+    edges.left + ICON_BUTTON_W + PANEL_BUTTON_GAP
 }
 
 /// Keeps room for the unsaved dot.
-pub fn title_room(w: f32, full_screen: bool) -> f32 {
-    side_zone(w) - title_left(full_screen) - TITLE_DOT_W
+pub fn title_room(w: f32, edges: HeaderEdges) -> f32 {
+    side_zone(w) - title_left(edges) - TITLE_DOT_W
 }
 
-pub fn counter_room(w: f32) -> f32 {
-    room_before_find(w) - if find_button_fits(w) { FIND_BUTTON } else { 0. }
+pub fn counter_room(w: f32, edges: HeaderEdges) -> f32 {
+    room_before_find(w, edges) - if find_button_fits(w, edges) { FIND_BUTTON } else { 0. }
 }
 
-fn room_before_find(w: f32) -> f32 {
-    side_zone(w) - HEADER_RIGHT - OVERFLOW_BUTTON_W - COUNTER_GAP
+fn room_before_find(w: f32, edges: HeaderEdges) -> f32 {
+    side_zone(w) - edges.right() - OVERFLOW_BUTTON_W - COUNTER_GAP
 }
 
 /// In a narrow window the find button gives way, so the counter keeps at least "12,345 words".
-pub fn find_button_fits(w: f32) -> bool {
-    room_before_find(w) - FIND_BUTTON >= 12. * COUNTER_SIZE * 0.6
+pub fn find_button_fits(w: f32, edges: HeaderEdges) -> bool {
+    room_before_find(w, edges) - FIND_BUTTON >= 12. * COUNTER_SIZE * 0.6
 }
 
 const FIND_W: f32 = 520.;
 
 const FIND_BUTTON: f32 = ICON_BUTTON_W + RIGHT_GAP;
 
-pub fn count_right(w: f32) -> f32 {
-    HEADER_RIGHT + OVERFLOW_BUTTON_W + COUNTER_GAP - 12. + if find_button_fits(w) { FIND_BUTTON } else { 0. }
+pub fn count_right(w: f32, edges: HeaderEdges) -> f32 {
+    edges.right() + OVERFLOW_BUTTON_W + COUNTER_GAP - 12. + if find_button_fits(w, edges) { FIND_BUTTON } else { 0. }
 }
 
 const HEADER_FADE: f32 = 78.;
@@ -1689,9 +1723,9 @@ impl Render for Workspace {
         let layer = m.layer;
         let dirty = m.dirty();
         let window_w = f32::from(window.viewport_size().width);
-        let full_screen = window.is_fullscreen();
-        let header_left = header_left(full_screen);
-        let title_room = title_room(window_w, full_screen);
+        let edges = HeaderEdges::of(window);
+        let header_left = edges.left;
+        let title_room = title_room(window_w, edges);
         let (folder, title) = match self.project_name() {
             Some(name) => header_path(&name, m, title_room),
             None => (None, header_title(m, title_room)),
@@ -1704,7 +1738,7 @@ impl Render for Workspace {
         let chrome_alpha = if self.typing { 0.15 } else { 1. };
         let drawer_open = self.side_open(Side::Right, cx);
         let find_open = self.find.is_some();
-        let find_button = find_button_fits(window_w);
+        let find_button = find_button_fits(window_w, edges);
         let left_open = self.side_open(Side::Left, cx);
         let (left_label, left_key) = self.side_button_label(Side::Left, cx);
         let (right_label, right_key) = self.side_button_label(Side::Right, cx);
@@ -1714,7 +1748,9 @@ impl Render for Workspace {
         let springing = self.spring.is_some() && cx.has_active_drag();
         let menu_open = self.context_menu.as_ref().is_some_and(|m| m.heading.is_some());
         let selecting = !self.page.read(cx).selection().is_empty();
-        let counter = self.counter(counter_room(window_w), cx);
+        let counter = self.counter(counter_room(window_w, edges), cx);
+        let caption_buttons = crate::title_bar::buttons(window, HEADER_H);
+        let resize_edges = crate::title_bar::resize_edges(window);
         let status = self.status.as_ref().map(|(s, _)| s.clone());
         let reveal = self.status_reveal.clone();
         // The update check's line: in the status line's place, never over a status or while typing.
@@ -2019,13 +2055,8 @@ impl Render for Workspace {
                     .flex()
                     .items_center()
                     .window_control_area(WindowControlArea::Drag)
-                    .on_mouse_down(MouseButton::Left, |e, window, _| {
-                        if e.click_count == 2 {
-                            window.zoom_window();
-                        } else {
-                            window.start_window_move();
-                        }
-                    })
+                    .on_mouse_down(MouseButton::Left, |e, window, _| crate::title_bar::header_mouse_down(e, window))
+                    .on_mouse_down(MouseButton::Right, |e, window, _| crate::title_bar::header_mouse_down(e, window))
                     .child(
                         div().flex_1().min_w(px(0.)).child(
                             div()
@@ -2141,15 +2172,19 @@ impl Render for Workspace {
                                 )
                             }),
                     )
+                    // The window's buttons end the right side, so both sides stay equal and the
+                    // mode switch centred.
                     .child(
-                        div().flex_1().min_w(px(0.)).child(
+                        div().flex_1().min_w(px(0.)).flex().items_center().child(
                             div()
+                                .flex_1()
+                                .min_w(px(0.))
                                 .flex()
                                 .items_center()
                                 .justify_end()
                                 .gap(px(RIGHT_GAP))
                                 .pl(px(HEADER_GAP))
-                                .pr(px(HEADER_RIGHT))
+                                .pr(px(edges.right_pad()))
                                 .opacity(chrome_alpha)
                                 .child(
                                     div()
@@ -2217,7 +2252,8 @@ impl Render for Workspace {
                                     })
                                     .test_support(),
                                 ),
-                        ),
+                        )
+                        .children(caption_buttons),
                     ),
             )
             .children(status.map(|s| {
@@ -2258,6 +2294,7 @@ impl Render for Workspace {
                     .text_color(c(theme::muted()))
                     .child(line)
             }))
+            .children(resize_edges)
     }
 }
 
