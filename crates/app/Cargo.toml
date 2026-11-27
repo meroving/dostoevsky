@@ -59,6 +59,11 @@ icu_calendar = "2.4"
 icu_locale_core = "2.4"
 writeable = "0.6"
 
+# Windows' own spell checker (win_spell.rs, dsky-fbso.17); the version GPUI's Windows platform
+# already links.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_Globalization", "Win32_System_Com"] }
+
 # Screenshot comparison for scripts/run_flows.sh (visual regression, dsky-65y.19).
 [[bin]]
 name = "imgdiff"

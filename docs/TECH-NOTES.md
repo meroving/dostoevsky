@@ -283,8 +283,18 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   thread. Guesses come from the dictionary whose `TRY` letters the word is written in. Words are
   UAX #29 words, a curly apostrophe read as a straight one; not words with digits, acronyms in
   capitals, nor web and mail addresses. Learn writes `Spelling/learned.txt`; Ignore lasts the
-  session. No dictionary found: nothing is underlined. Windows ships none, so a writer adds
-  them to `Dictionaries/` until its own checker (ISpellChecker) is wired.
+  session. No dictionary found: nothing is underlined.
+- **Spelling on Windows** (`win_spell.rs`, dsky-fbso.17): Windows ships no Hunspell
+  dictionaries, so its own checker spells (`ISpellCheckerFactory`, the one Word and Edge share):
+  one `ISpellChecker` for each language the writer reads, picked as the dictionaries are, then
+  one for each other language Windows spells in. A word is wrong only where every checker says
+  so (not repeated words, which the Mac's spelling doesn't mark either), and only a word the
+  Hunspell rules check (no acronyms, digits or addresses). Guesses come from the checker whose
+  guesses are written in the word's letters. Learn is `ISpellChecker::Add`, which Windows keeps
+  in its user dictionary (`%APPDATA%\Microsoft\Spelling\neutral\default.dic`) for every language
+  and every app; Ignore lasts the session. COM objects belong to their thread, so the checkers
+  are made and used on the main thread (GPUI's, already initialised for COM). A writer's own
+  `.aff` / `.dic` in `Dictionaries/` joins it (`spell::Together`: wrong only when both say so).
 - **Word classes off the Mac** (`prose::tag`, dsky-fbso.18): Review's passive marks and echoes
   read words through NaturalLanguage's `NLTagger` (lexical class, lemma) on the Mac. Elsewhere
   there's no model: each language's closed-class words (pronouns, articles, prepositions, the
