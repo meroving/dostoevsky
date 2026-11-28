@@ -302,7 +302,11 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   no paths brings the app forward, with a window if none is open. A launch whose app doesn't reply
   by then opens them itself, and an app that wakes after the deadline leaves them alone. On Windows
   the launch gives the app the foreground right (`AllowSetForegroundWindow` with the pipe server's
-  pid), and GPUI's `activate_window` restores a minimized window. A killed app's pipe goes with its
+  pid), and the app restores a minimized window and calls `SetForegroundWindow` itself
+  (`platform::bring_to_front`): GPUI's `activate_window` presses Alt to be allowed to, and the
+  window, once in front, took that Alt for its menu bar's, which showed its keys and swallowed the
+  next one. Without the right (a launch from a background process) Windows flashes the taskbar
+  button instead. A killed app's pipe goes with its
   handles. Linux passes no activation token, so a Wayland compositor may only mark the window.
 - **Spelling off the Mac** (`hunspell.rs`, dsky-fbso.4): the Mac's `NSSpellChecker` checks a
   word in any of the writer's languages, so off the Mac a word is right when any of its
