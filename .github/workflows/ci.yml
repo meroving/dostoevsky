@@ -90,6 +90,9 @@ jobs:
       - name: Tests (unit, behaviour, property, headless app)
         run: cargo test --locked --workspace --no-fail-fast
 
+      - name: Right-to-left text in the patched DirectWrite layout (vendor/gpui-pre-windows)
+        run: cargo test --locked -p gpui-pre-windows right_to_left
+
   appimage:
     # The Linux AppImage (dsky-fbso.13), built on the oldest Ubuntu it should run on, then started
     # under Xvfb with Mesa's software Vulkan: it must open and stay up. On main, and by hand.
