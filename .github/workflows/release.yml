@@ -1,10 +1,10 @@
 # Manual only: Actions → Release → Run workflow, with a vX.Y.Z tag that's already pushed → a
 # universal .dmg signed with the Developer ID, notarized and stapled, attached to a draft GitHub
-# Release (dsky-a8n.10, docs/RELEASE.md §4 and §5), and beside it the Linux AppImage and the
-# Windows .msi (dsky-fbso.13, .14), both with the update check. Look the draft over, then publish
-# it; the Homebrew cask for that .dmg is in the run's summary. The .dmg is usually built locally
-# (docs/RELEASE.md §4): then run this with "Only Linux and Windows" once the release exists, and
-# it adds their files to it. Pushing a tag runs nothing.
+# Release (dsky-a8n.10, docs/RELEASE.md §4 and §5), and beside it the Windows .msi (dsky-fbso.14),
+# with the update check. Look the draft over, then publish it; the Homebrew cask for that .dmg is
+# in the run's summary. The .dmg is usually built locally (docs/RELEASE.md §4): then run this with
+# "Only Windows" once the release exists, and it adds the .msi to it. Pushing a tag runs nothing.
+# The Linux AppImage (scripts/appimage.sh) isn't released yet: ci.yml builds and tries it until it is.
 #
 # Repository secrets (NEEDS OWNER):
 #   DEVELOPER_ID_P12           base64 of a .p12 with the "Developer ID Application" certificate and its key
@@ -19,8 +19,8 @@ on:
       tag:
         description: 'The release tag, already pushed (vX.Y.Z)'
         required: true
-      linux_windows_only:
-        description: 'Only Linux and Windows: the release and its .dmg already exist'
+      windows_only:
+        description: 'Only Windows: the release and its .dmg already exist'
         type: boolean
         default: false
 
@@ -36,7 +36,7 @@ env:
 
 jobs:
   dmg:
-    if: ${{ !inputs.linux_windows_only }}
+    if: ${{ !inputs.windows_only }}
     runs-on: macos-15
     timeout-minutes: 75
     steps:
@@ -120,45 +120,6 @@ jobs:
         run: |
           security delete-keychain "$PWD/target/secrets/release.keychain-db" 2>/dev/null || true
           rm -rf "$PWD/target/secrets"
-
-  appimage:
-    needs: dmg
-    if: ${{ always() && (needs.dmg.result == 'success' || needs.dmg.result == 'skipped') }}
-    runs-on: ubuntu-22.04   # the oldest glibc it runs with: build on the oldest system
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: refs/tags/${{ inputs.tag }}
-
-      - name: The tag matches Cargo.toml
-        run: |
-          v="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
-          [ "v$v" = "$TAG" ] || { echo "::error::tag $TAG, Cargo.toml says $v"; exit 1; }
-
-      - name: GPUI's Linux libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libxkbcommon-dev libxkbcommon-x11-dev \
-            libwayland-dev libvulkan-dev libfontconfig-dev libfreetype-dev libx11-xcb-dev libxcb1-dev \
-            libasound2-dev libzstd-dev
-
-      - name: Rust toolchain (rust-toolchain.toml)
-        run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@v2
-
-      - uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-about
-
-      - name: The AppImage, with the update check
-        run: UPDATES=1 scripts/appimage.sh
-
-      - name: Attach it to the draft release
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$TAG" target/bundle/Dostoevsky-*-x86_64.AppImage --clobber
 
   msi:
     needs: dmg
