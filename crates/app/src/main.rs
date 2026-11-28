@@ -231,6 +231,14 @@ pub fn read_model_as(path: &Path, chapter: Option<(&str, &[doc_format::ExternalC
     Ok(m)
 }
 
+/// On Windows without GPUI's pressed Alt, which the window would take for its menu bar's.
+fn bring_forward(window: &mut Window) {
+    #[cfg(windows)]
+    platform::bring_to_front(window);
+    #[cfg(not(windows))]
+    window.activate_window();
+}
+
 fn workspaces(cx: &App) -> Vec<(AnyWindowHandle, Entity<Workspace>)> {
     let open = cx.windows();
     cx.try_global::<Windows>()
@@ -257,7 +265,7 @@ fn reuse_empty_window(cx: &mut App) {
 pub(crate) fn open_project(root: PathBuf, cx: &mut App) {
     for (w, ws) in workspaces(cx) {
         if ws.read(cx).project_root() == Some(root.as_path()) {
-            let _ = w.update(cx, |_, window, _| window.activate_window());
+            let _ = w.update(cx, |_, window, _| bring_forward(window));
             return;
         }
     }
@@ -279,7 +287,7 @@ pub(crate) fn open_project(root: PathBuf, cx: &mut App) {
 pub fn bring_forward_other_window(path: &Path, me: EntityId, cx: &mut App) -> bool {
     for (w, ws) in workspaces(cx) {
         if ws.entity_id() != me && ws.read(cx).model.read(cx).path.as_deref() == Some(path) {
-            let _ = w.update(cx, |_, window, _| window.activate_window());
+            let _ = w.update(cx, |_, window, _| bring_forward(window));
             return true;
         }
     }
@@ -311,14 +319,14 @@ pub fn open_path(path: PathBuf, cx: &mut App) {
     }
     for (w, ws) in workspaces(cx) {
         if ws.read(cx).model.read(cx).path.as_deref() == Some(path.as_path()) {
-            let _ = w.update(cx, |_, window, _| window.activate_window());
+            let _ = w.update(cx, |_, window, _| bring_forward(window));
             return;
         }
     }
     for (w, ws) in workspaces(cx) {
         if ws.read(cx).holds(&path) {
             let _ = w.update(cx, |_, window, cx| {
-                window.activate_window();
+                bring_forward(window);
                 ws.update(cx, |ws, cx| ws.switch_to(&path, window, cx));
             });
             return;
@@ -386,7 +394,7 @@ fn open_handed(paths: &[PathBuf], cx: &mut App) {
         .or(all.last())
         .map(|(h, _)| *h);
     if let Some(window) = window {
-        let _ = window.update(cx, |_, window, _| window.activate_window());
+        let _ = window.update(cx, |_, window, _| bring_forward(window));
     }
 }
 

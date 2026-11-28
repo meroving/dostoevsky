@@ -68,6 +68,8 @@ arboard = { version = "3", default-features = false }
 windows = { version = "0.62", features = ["Win32_Foundation", "Win32_Globalization", "Win32_Security", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_System_IO", "Win32_System_Pipes", "Win32_UI_Shell", "Win32_UI_Shell_Common", "Win32_UI_WindowsAndMessaging"] }
 # Its #[implement] macro names windows_core: the Recycle Bin's progress sink (recycle_bin.rs).
 windows-core = "0.62"
+# A window's HWND, to bring it to the front without GPUI's pressed Alt (platform.rs).
+raw-window-handle = "0.6"
 
 # Screenshot comparison for scripts/run_flows.sh (visual regression, dsky-65y.19).
 [[bin]]

@@ -326,6 +326,29 @@ pub fn preferred_languages() -> Vec<String> {
     ui_language_list(&list)
 }
 
+/// Brings the window to the front, restored if minimized. GPUI's `activate_window` presses Alt
+/// to be allowed to, and the window, once in front, takes that Alt as its own: the menu bar shows
+/// its keys and swallows the next one. This asks Windows directly, which works when the app is in
+/// front or was given the right (a later launch gives it, `instance.rs`); otherwise Windows
+/// flashes its taskbar button.
+#[cfg(windows)]
+pub fn bring_to_front(window: &gpui_kit::Window) {
+    use raw_window_handle::{HasWindowHandle, RawWindowHandle};
+    use windows::Win32::Foundation::HWND;
+    use windows::Win32::UI::WindowsAndMessaging::{IsIconic, SW_RESTORE, SetForegroundWindow, ShowWindow};
+
+    let Ok(handle) = HasWindowHandle::window_handle(window) else { return };
+    let RawWindowHandle::Win32(h) = handle.as_raw() else { return };
+    let hwnd = HWND(h.hwnd.get() as *mut _);
+    // SAFETY: the window's own handle, alive while it is; on its thread.
+    unsafe {
+        if IsIconic(hwnd).as_bool() {
+            let _ = ShowWindow(hwnd, SW_RESTORE);
+        }
+        let _ = SetForegroundWindow(hwnd);
+    }
+}
+
 /// A double-null-terminated list of names, UTF-16.
 #[cfg(any(windows, test))]
 fn ui_language_list(list: &[u16]) -> Vec<String> {
