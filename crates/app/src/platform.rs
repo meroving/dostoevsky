@@ -287,6 +287,42 @@ pub fn thin_glyphs() {
 #[cfg(not(target_os = "macos"))]
 pub fn thin_glyphs() {}
 
+/// The Windows .exe is a GUI program, so a start from Explorer opens no console window
+/// (dsky-fbso.21); started from a terminal it has none of its own either. Its lines (keymap
+/// errors, `DOSTOEVSKY_PERF`, the shots runner's) go to the terminal it was started from, unless
+/// they're already going somewhere: a file or a pipe (`2>log`, a script, cargo) stays as it is.
+#[cfg(windows)]
+pub fn attach_console() {
+    use windows::Win32::Foundation::{GENERIC_READ, GENERIC_WRITE, HANDLE};
+    use windows::Win32::Storage::FileSystem::{CreateFileW, FILE_SHARE_READ, FILE_SHARE_WRITE, OPEN_EXISTING, FILE_FLAGS_AND_ATTRIBUTES};
+    use windows::Win32::System::Console::{AttachConsole, GetStdHandle, SetStdHandle, ATTACH_PARENT_PROCESS, STD_ERROR_HANDLE, STD_HANDLE, STD_OUTPUT_HANDLE};
+    // SAFETY: plain Win32 calls on this process's own standard handles.
+    unsafe {
+        let has = |which: STD_HANDLE| GetStdHandle(which).is_ok_and(|h| !h.is_invalid() && !h.0.is_null());
+        let wanting: Vec<STD_HANDLE> = [STD_OUTPUT_HANDLE, STD_ERROR_HANDLE].into_iter().filter(|&w| !has(w)).collect();
+        if wanting.is_empty() || AttachConsole(ATTACH_PARENT_PROCESS).is_err() {
+            return;
+        }
+        let Ok(out) = CreateFileW(
+            windows::core::w!("CONOUT$"),
+            (GENERIC_READ | GENERIC_WRITE).0,
+            FILE_SHARE_READ | FILE_SHARE_WRITE,
+            None,
+            OPEN_EXISTING,
+            FILE_FLAGS_AND_ATTRIBUTES(0),
+            Some(HANDLE::default()),
+        ) else {
+            return;
+        };
+        for w in wanting {
+            let _ = SetStdHandle(w, out);
+        }
+    }
+}
+
+#[cfg(not(windows))]
+pub fn attach_console() {}
+
 /// System or per-app (`AppleLanguages`) order, e.g. `ru-RU`, `en-US`.
 #[cfg(target_os = "macos")]
 pub fn preferred_languages() -> Vec<String> {

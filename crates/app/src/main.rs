@@ -1,4 +1,7 @@
 //! Dostoevsky, a writing app that keeps every version of a word, sentence or paragraph in place.
+// On Windows a GUI program: a start from Explorer, the Start menu or Open with gets no console
+// window; one from a terminal writes its lines there (platform::attach_console, dsky-fbso.21).
+#![cfg_attr(all(windows, not(test)), windows_subsystem = "windows")]
 
 mod about;
 mod actions;
@@ -612,6 +615,7 @@ fn quit(cx: &mut App) {
 }
 
 fn main() {
+    platform::attach_console();
     // Off the Mac every launch is a process: a later one hands its paths to the first and goes
     // (dsky-fbso.20). A scripted run is always its own.
     #[cfg(not(target_os = "macos"))]
