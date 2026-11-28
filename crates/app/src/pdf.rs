@@ -1,8 +1,8 @@
 //! The final text as pages: a PDF, the Export sheet's preview bitmaps, printing. On the Mac
 //! TextKit sets the `pdf` crate's page composition and PDFKit prints (runs off the main thread:
 //! TextKit objects owned by one thread are fine); elsewhere the crate's own engine sets and draws
-//! the pages (dsky-fbso.3), hyphenated by `hyphen.rs`'s patterns, and printing waits for its
-//! own bead.
+//! the pages (dsky-fbso.3), hyphenated by `hyphen.rs`'s patterns, and Print hands the PDF to the
+//! system: Windows' print verb or the PDF's viewer, Linux's print portal or `lp` (dsky-fbso.16).
 
 #[cfg(not(target_os = "macos"))]
 use std::sync::Arc;
@@ -25,7 +25,7 @@ pub struct Pdf {
 pub use mac::{print, rasterize, render};
 
 #[cfg(not(target_os = "macos"))]
-pub use engine::{print, rasterize, render};
+pub use engine::{Printed, print, rasterize, render};
 
 #[cfg(not(target_os = "macos"))]
 mod engine {
@@ -57,9 +57,189 @@ mod engine {
         ::pdf::raster::rasterize(pdf.laid.as_ref()?, index, width)
     }
 
-    /// No print dialog off the Mac yet: false, as when the Mac's panel couldn't open.
-    pub fn print(_: &[u8], _: &str, _: &gpui_kit::Window) -> bool {
-        false
+    /// How Print went off the Mac (dsky-fbso.16).
+    #[derive(Debug, PartialEq)]
+    pub enum Printed {
+        /// To the printer, or the system's print dialog took it.
+        Sent,
+        /// Nothing prints a PDF here, so it opened in its viewer to be printed from there.
+        Opened,
+        /// The writer closed the print dialog.
+        #[cfg_attr(windows, allow(dead_code))]
+        Cancelled,
+    }
+
+    /// Prints on a thread of its own (the print dialog, or the PDF's app starting, takes a while):
+    /// Windows' print verb on a PDF file, else the PDF in its viewer; Linux's print portal, else
+    /// `lp`, else the viewer.
+    pub fn print(pdf: Vec<u8>, title: String) -> smol::channel::Receiver<Result<Printed, String>> {
+        let (tx, rx) = smol::channel::bounded(1);
+        std::thread::spawn(move || {
+            let _ = tx.send_blocking(print_now(&pdf, &title));
+        });
+        rx
+    }
+
+    #[cfg(windows)]
+    fn print_now(pdf: &[u8], title: &str) -> Result<Printed, String> {
+        let path = jobs::write(&jobs::folder(), pdf, title, jobs::now_ms()).map_err(|e| e.to_string())?;
+        // The file stays for the app that prints or shows it; a later Print clears it away.
+        match shell("print", &path) {
+            Ok(()) => Ok(Printed::Sent),
+            // Most PDF viewers (Edge among them) register no print verb.
+            Err(_) => shell("open", &path).map(|()| Printed::Opened).map_err(|e| e.message()),
+        }
+    }
+
+    /// `verb` as Explorer would run it on `path`, waiting until the app has it.
+    #[cfg(windows)]
+    fn shell(verb: &str, path: &std::path::Path) -> windows::core::Result<()> {
+        use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, COINIT_DISABLE_OLE1DDE, CoInitializeEx, CoUninitialize};
+        use windows::Win32::UI::Shell::{SEE_MASK_FLAG_NO_UI, SEE_MASK_NOASYNC, SHELLEXECUTEINFOW, ShellExecuteExW};
+        use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+        use windows::core::{HSTRING, PCWSTR};
+
+        // SAFETY: this thread's own COM, undone below.
+        let com = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED | COINIT_DISABLE_OLE1DDE) }.is_ok();
+        let verb_w = HSTRING::from(verb);
+        let file = HSTRING::from(path.as_os_str());
+        let mut info = SHELLEXECUTEINFOW {
+            cbSize: std::mem::size_of::<SHELLEXECUTEINFOW>() as u32,
+            // No "How do you want to open this?" for a missing print verb; for open it lets the
+            // writer pick a viewer.
+            fMask: SEE_MASK_NOASYNC | if verb == "print" { SEE_MASK_FLAG_NO_UI } else { 0 },
+            lpVerb: PCWSTR(verb_w.as_ptr()),
+            lpFile: PCWSTR(file.as_ptr()),
+            nShow: SW_SHOWNORMAL.0,
+            ..Default::default()
+        };
+        // SAFETY: the strings outlive the call.
+        let r = unsafe { ShellExecuteExW(&mut info) };
+        if com {
+            // SAFETY: pairs the CoInitializeEx above.
+            unsafe { CoUninitialize() };
+        }
+        r
+    }
+
+    #[cfg(not(windows))]
+    fn print_now(pdf: &[u8], title: &str) -> Result<Printed, String> {
+        let path = jobs::write(&jobs::folder(), pdf, title, jobs::now_ms()).map_err(|e| e.to_string())?;
+        let job = path.parent().map(std::path::Path::to_path_buf);
+        #[cfg(target_os = "linux")]
+        let portal = smol::block_on(portal(&path, title));
+        #[cfg(not(target_os = "linux"))]
+        let portal: Result<bool, String> = Err("no print portal".into());
+        let r = match portal {
+            Ok(true) => Ok(Printed::Sent),
+            Ok(false) => Ok(Printed::Cancelled),
+            // No portal (or none that prints): CUPS' own command, to the default printer.
+            Err(_) => match lp(&path, title) {
+                Ok(()) => Ok(Printed::Sent),
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    // No CUPS either: the viewer, which keeps the file until a later Print.
+                    crate::platform::open_file(&path);
+                    return Ok(Printed::Opened);
+                }
+                Err(e) => Err(e.to_string()),
+            },
+        };
+        // The portal holds its own descriptor of the file, and lp has copied it to the spool.
+        if let Some(job) = job {
+            let _ = std::fs::remove_dir_all(job);
+        }
+        r
+    }
+
+    /// The print portal's dialog, then the file to it: true when it printed, false when the
+    /// writer cancelled.
+    #[cfg(target_os = "linux")]
+    async fn portal(path: &std::path::Path, title: &str) -> ashpd::Result<bool> {
+        use ashpd::desktop::ResponseError;
+        use ashpd::desktop::print::{PageSetup, PreparePrintOptions, PrintOptions, PrintProxy, Settings};
+
+        let cancelled = |e: &ashpd::Error| matches!(e, ashpd::Error::Response(ResponseError::Cancelled));
+        let proxy = PrintProxy::new().await?;
+        let prepared = match proxy.prepare_print(None, title, Settings::default(), PageSetup::default(), PreparePrintOptions::default().set_modal(true)).await?.response() {
+            Ok(p) => p,
+            Err(e) if cancelled(&e) => return Ok(false),
+            Err(e) => return Err(e),
+        };
+        let file = std::fs::File::open(path)?;
+        match proxy.print(None, title, &file, PrintOptions::default().set_token(prepared.token).set_modal(true)).await?.response() {
+            Ok(()) => Ok(true),
+            Err(e) if cancelled(&e) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    #[cfg(not(windows))]
+    fn lp(path: &std::path::Path, title: &str) -> std::io::Result<()> {
+        let out = std::process::Command::new("lp").arg("-t").arg(title).arg("--").arg(path).output()?;
+        if out.status.success() {
+            return Ok(());
+        }
+        let said = String::from_utf8_lossy(&out.stderr).trim().to_string();
+        Err(std::io::Error::other(if said.is_empty() { format!("lp: {}", out.status) } else { said }))
+    }
+
+    /// The PDFs Print leaves for another app to read: each in a folder named by when it was
+    /// made, so the viewer shows the book's title and an old one can go.
+    pub(super) mod jobs {
+        use std::path::{Path, PathBuf};
+        use std::time::Duration;
+
+        /// A viewer has read its file well before then; one still open is tried again later.
+        pub const KEPT: Duration = Duration::from_secs(60 * 60);
+
+        pub fn folder() -> PathBuf {
+            std::env::temp_dir().join("Dostoevsky Print")
+        }
+
+        pub fn now_ms() -> u64 {
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_millis() as u64).unwrap_or(0)
+        }
+
+        /// Clears jobs older than `KEPT` away first.
+        pub fn write(folder: &Path, pdf: &[u8], title: &str, now: u64) -> std::io::Result<PathBuf> {
+            sweep(folder, now);
+            // Apart from the job's own folder: a file in the way says AlreadyExists too.
+            std::fs::create_dir_all(folder)?;
+            let mut stamp = now;
+            let job = loop {
+                let job = folder.join(stamp.to_string());
+                match std::fs::create_dir(&job) {
+                    Ok(()) => break job,
+                    Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists && stamp < now + 1000 => stamp += 1,
+                    Err(e) => return Err(e),
+                }
+            };
+            let path = job.join(format!("{}.pdf", file_name(title)));
+            std::fs::write(&path, pdf)?;
+            Ok(path)
+        }
+
+        pub fn sweep(folder: &Path, now: u64) {
+            let Ok(entries) = std::fs::read_dir(folder) else { return };
+            for e in entries.flatten() {
+                let made = e.file_name().to_str().and_then(|n| n.parse::<u64>().ok());
+                if made.is_some_and(|t| now.saturating_sub(t) > KEPT.as_millis() as u64) {
+                    let _ = std::fs::remove_dir_all(e.path());
+                }
+            }
+        }
+
+        /// The title as a file name every system takes.
+        pub fn file_name(title: &str) -> String {
+            let clean: String = title.chars().map(|c| if c.is_control() || r#"<>:"/\|?*"#.contains(c) { ' ' } else { c }).collect();
+            let words: Vec<&str> = clean.split_whitespace().collect();
+            let mut name: String = words.join(" ").chars().take(80).collect();
+            // Windows drops a trailing dot or space.
+            while name.ends_with(['.', ' ']) {
+                name.pop();
+            }
+            if name.is_empty() { l10n::tr!("Untitled").to_string() } else { name }
+        }
     }
 }
 
@@ -500,5 +680,58 @@ mod samples {
                 std::fs::write(dir.join(format!("{name}-{i}-{}x{}.bgra", b.width, b.height)), &b.bgra).unwrap();
             }
         }
+    }
+}
+
+#[cfg(all(test, not(target_os = "macos")))]
+mod print_tests {
+    use super::engine::jobs::{KEPT, file_name, sweep, write};
+
+    #[test]
+    fn a_title_becomes_a_file_name_every_system_takes() {
+        assert_eq!(file_name("Notes from Underground"), "Notes from Underground");
+        assert_eq!(file_name("Crime / Punishment: a draft?"), "Crime Punishment a draft");
+        assert_eq!(file_name("  Записки\tиз подполья \n"), "Записки из подполья");
+        assert_eq!(file_name("The End..."), "The End");
+        assert_eq!(file_name(&"x".repeat(200)).chars().count(), 80);
+        assert_eq!(file_name(" ?* "), l10n::tr!("Untitled"));
+    }
+
+    #[test]
+    fn each_print_has_its_own_file_and_old_ones_go() {
+        let folder = std::env::temp_dir().join(format!("dostoevsky-print-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&folder);
+        let t = 1_764_000_000_000;
+        let a = write(&folder, b"%PDF-a", "Book", t).unwrap();
+        // The same moment twice still gives two files.
+        let b = write(&folder, b"%PDF-b", "Book", t).unwrap();
+        assert_ne!(a, b);
+        assert_eq!(a.file_name().unwrap(), "Book.pdf");
+        assert_eq!(std::fs::read(&b).unwrap(), b"%PDF-b");
+        let later = t + KEPT.as_millis() as u64;
+        let c = write(&folder, b"%PDF-c", "Book", later).unwrap();
+        assert!(a.exists() && b.exists(), "an hour's jobs stay");
+        sweep(&folder, later + 2);
+        assert!(!a.exists() && !b.exists() && c.exists());
+        // Anything else in the folder is left alone.
+        std::fs::write(folder.join("notes.txt"), "x").unwrap();
+        sweep(&folder, u64::MAX);
+        assert!(folder.join("notes.txt").exists() && !c.exists());
+        std::fs::remove_dir_all(&folder).unwrap();
+    }
+}
+
+#[cfg(all(test, not(target_os = "macos")))]
+mod print_folder_tests {
+    use super::engine::jobs::write;
+
+    /// A file where the print folder should be: an error to show, not a loop.
+    #[test]
+    fn a_file_in_the_way_is_an_error() {
+        let file = std::env::temp_dir().join(format!("dostoevsky-print-in-the-way-{}", std::process::id()));
+        std::fs::write(&file, "x").unwrap();
+        assert!(write(&file.join("Dostoevsky Print"), b"%PDF", "Book", 1).is_err());
+        assert!(write(&file, b"%PDF", "Book", 1).is_err());
+        std::fs::remove_file(&file).unwrap();
     }
 }
