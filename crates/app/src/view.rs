@@ -8,6 +8,7 @@ use std::time::{Duration, Instant};
 use doc_model::{CommentId, CommentInfo, GroupId, Place, Scope, VisibleGroup};
 use gpui_kit::*;
 use l10n::tr;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::actions::*;
 use crate::markdown::{self, BlockKind, LineStyle, Span};
@@ -651,12 +652,16 @@ fn x_at(ul: &LineLayout, text: &str, byte: usize) -> Pixels {
     if x <= x0 || !text.is_char_boundary(start) || !text.is_char_boundary(end) {
         return x;
     }
-    let (before, all) = (text[start..byte].chars().count(), text[start..end].chars().count());
-    x0 + (x - x0) * (before as f32 / all.max(1) as f32)
+    let (before, all) = (text[start..byte].graphemes(true).count(), text[start..end].graphemes(true).count());
+    if all < 2 {
+        // One letter with its marks (e and a combining acute): no place inside it.
+        return x;
+    }
+    x0 + (x - x0) * (before as f32 / all as f32)
 }
 
-/// The character boundary of `text` nearest window-relative `x` in its shaped line: GPUI's,
-/// or one inside a ligature when that's nearer (see `x_at`).
+/// The place in `text` nearest window-relative `x` in its shaped line: GPUI's, or one between
+/// the letters of a ligature when that's nearer (see `x_at`); never inside a letter and its marks.
 fn index_near(ul: &LineLayout, text: &str, x: Pixels) -> usize {
     let b = ul.closest_index_for_x(x);
     let glyphs = || ul.runs.iter().flat_map(|r| r.glyphs.iter());
@@ -665,7 +670,7 @@ fn index_near(ul: &LineLayout, text: &str, x: Pixels) -> usize {
     let Some(span) = text.get(lo..hi) else { return b };
     let far = |at: Pixels| (f32::from(at) - f32::from(x)).abs();
     let mut best = (b, far(ul.x_for_index(b)));
-    for i in span.char_indices().map(|(i, _)| lo + i).filter(|&i| i != b) {
+    for i in span.grapheme_indices(true).map(|(i, _)| lo + i).filter(|&i| i != b) {
         let at = x_at(ul, text, i);
         // Only a place `x_at` moved into a ligature: elsewhere GPUI's choice stands.
         if at != ul.x_for_index(i) && far(at) < best.1 {

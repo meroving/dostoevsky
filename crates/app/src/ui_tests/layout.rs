@@ -420,3 +420,21 @@ fn places_inside_a_ligature() {
         assert_eq!(ui.selection(), c..c, "a click at place {c}");
     }
 }
+
+/// A letter and its combining mark are one place, however they're drawn: no click in “café”
+/// (an e and a combining acute) puts the caret between them (dsky-fbso.11).
+#[test]
+fn no_place_inside_a_letter_and_its_mark() {
+    let text = "Cafe\u{301} society.\n";
+    let mut ui = Ui::open(text);
+    ui.set_prefs(|p| p.font_family = crate::theme::LITERATA.into());
+    let mark = text.chars().position(|c| c == '\u{301}').expect("the mark");
+    let (from, to) = (ui.point_for(0).x, ui.point_for(mark + 3).x);
+    let y = ui.point_for(0).y;
+    let mut x = from;
+    while x < to {
+        ui.click(gpui_kit::point(x, y), gpui_kit::MouseButton::Left);
+        assert_ne!(ui.selection(), mark..mark, "a click at {x:?} split the é");
+        x += px(1.);
+    }
+}
