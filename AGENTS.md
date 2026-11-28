@@ -67,7 +67,7 @@ The product spec and decision records are maintained separately and aren't publi
   `effects.rs`, `sound.rs`, `spell.rs` (NSSpellChecker; off the Mac `hunspell.rs`: Hunspell dictionaries via spellbook; on Windows `win_spell.rs`: its own ISpellChecker), `keymap.rs`, `memory.rs`,
   `sentence_keys.rs` (walk, grow and move by sentence and paragraph, ED-10…12; no UI),
   `export_ui.rs` (Copy Final Text, the Export sheet, Print), `pdf.rs` (TextKit pages into a PDF, the
-  preview's bitmaps, PDFKit printing; off the Mac `crates/pdf` does the pages),
+  preview's bitmaps, PDFKit printing; off the Mac `crates/pdf` does the pages and Print goes to the system: Windows' print verb or the PDF viewer, Linux's print portal or `lp`),
   `bookmarks.rs` (security-scoped bookmarks: the sandboxed build reopens files after a relaunch); `project.rs`
   reads a folder from its file names and plans renames (no UI), `project_ui.rs` is a window on a
   project (the list, parked documents; TECH-NOTES "Projects"); `welcome.rs` builds the welcome page (WIN-19) from `assets/welcome/<lang>.md`; `shots.rs` is a dev-only script runner

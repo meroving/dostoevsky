@@ -483,7 +483,7 @@ impl Workspace {
         if let Some(Sheet::Export(f)) = &self.sheet {
             if let Some(pdf) = f.preview.pdf.clone().filter(|_| f.format == Format::Pdf) {
                 let title = f.title.read(cx).field_text().to_string();
-                crate::pdf::print(&pdf.bytes, &title, window);
+                self.print_pdf(pdf.bytes.clone(), title, window, cx);
                 return;
             }
         }
@@ -500,9 +500,32 @@ impl Workspace {
         o.title_page = false;
         o.page_numbers = memory.page_numbers.unwrap_or(true);
         let title = book.title.clone();
-        cx.spawn_in(window, async move |_, cx| {
+        cx.spawn_in(window, async move |this, cx| {
             let pdf = cx.background_spawn(async move { crate::pdf::render(&book, &o) }).await;
-            let _ = cx.update(|window, _| crate::pdf::print(&pdf.bytes, &title, window));
+            let _ = this.update_in(cx, |this, window, cx| this.print_pdf(pdf.bytes, title, window, cx));
+        })
+        .detach();
+    }
+
+    /// The Mac's print panel on the window.
+    #[cfg(target_os = "macos")]
+    fn print_pdf(&mut self, pdf: Vec<u8>, title: String, window: &mut Window, _: &mut Context<Self>) {
+        crate::pdf::print(&pdf, &title, window);
+    }
+
+    /// Off the Mac the system prints the PDF, or its viewer opens it (dsky-fbso.16); the status
+    /// line says which, or why nothing could.
+    #[cfg(not(target_os = "macos"))]
+    fn print_pdf(&mut self, pdf: Vec<u8>, title: String, window: &mut Window, cx: &mut Context<Self>) {
+        let rx = crate::pdf::print(pdf, title);
+        cx.spawn_in(window, async move |this, cx| {
+            let Ok(r) = rx.recv().await else { return };
+            let _ = this.update(cx, |this, cx| match r {
+                Ok(crate::pdf::Printed::Sent) => this.flash_status(tr!("Sent to the printer"), cx),
+                Ok(crate::pdf::Printed::Opened) => this.flash_status(tr!("Opened the PDF: print it from there"), cx),
+                Ok(crate::pdf::Printed::Cancelled) => {}
+                Err(e) => this.flash_status(tr!("Couldn't print: {error}", error = e), cx),
+            });
         })
         .detach();
     }

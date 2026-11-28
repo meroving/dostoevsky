@@ -410,8 +410,17 @@ Latin and Cyrillic, left to right, so the text engine needed nothing.
   bytes. `raster.rs` draws the preview from the laid-out glyphs' outlines with tiny-skia instead
   of reading the PDF back (`Pdf` keeps the layout). Its tests read the files back with a small
   reader of their own (`tests/common/read.rs`); `cargo run -p pdf --example pdf_sample` writes each
-  style's PDF and first pages as .bmp to `target/pdf-sample/`. Print off the Mac is not there
-  yet: `print` returns false.
+  style's PDF and first pages as .bmp to `target/pdf-sample/`.
+- **Print off the Mac** (`pdf.rs`, dsky-fbso.16): the PDF goes to a file of its own,
+  `<temp>/Dostoevsky Print/<ms>/<title>.pdf` (the title, so a viewer and the print queue show it;
+  a job folder older than an hour goes at the next Print, as a viewer has read it by then), on a
+  thread of its own. Windows runs the shell's `print` verb on it (`ShellExecuteExW`, no UI); most
+  PDF viewers (Edge, browsers) register none, so then the `open` verb shows it in the default
+  viewer to be printed from there. Linux asks the print portal (`org.freedesktop.portal.Print`
+  through ashpd: PreparePrint's dialog, then Print with the file's descriptor; a cancelled dialog
+  is the end of it), else `lp` to the default printer, else the viewer (`xdg-open`); the job
+  folder goes once the portal or lp has it. The status line says "Sent to the printer", "Opened
+  the PDF: print it from there" or "Couldn't print: …"; the Mac's PDFKit panel is unchanged.
 - **Copy Final Text** writes one pasteboard item with `public.html`, `public.rtf` (AppKit's HTML
   reader, then RTF) and the Markdown as `public.utf8-plain-text`; apps take the richest they read.
 - **The sheet (`app/src/export_ui.rs`)**: state in `Sheet::Export(ExportForm)`; every change bumps
