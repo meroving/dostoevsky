@@ -22,6 +22,7 @@ OPENROUTER_API_KEY=… cargo run -p ai --example word_versions               # W
 scripts/run_flows.sh [flow…]                 # PRD §7 flows against the real app → target/flows/*.png
 scripts/e2e_bundle.sh                        # bundled .app via LaunchServices: save, recent, folder, kill -9, FSEvents
 scripts/check_private_api.sh target/release/dostoevsky   # no private Apple API in the binary (vendor/gpui-pre-macos)
+cargo test -p gpui-pre-windows right_to_left # Windows: Hebrew and Arabic not mirrored (vendor/gpui-pre-windows, PATCHES.md)
 DOSTOEVSKY_PERF=1 cargo run --release -p dostoevsky big.md                 # per-keystroke timings
 scripts/bundle.sh                            # universal Dostoevsky.app + .dmg (see docs/RELEASE.md)
 scripts/appimage.sh                          # Linux: target/bundle/Dostoevsky-X.Y.Z-x86_64.AppImage (on Linux; CI's appimage job)

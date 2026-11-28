@@ -24,3 +24,6 @@ debug = "line-tables-only"
 # binary finds none (dsky-a8n.19). What changed and why: vendor/gpui-pre-macos/PATCHES.md.
 [patch.crates-io]
 gpui-pre-macos = { path = "vendor/gpui-pre-macos" }
+# gpui-pre-windows 0.3.9 with DirectWrite's glyph runs placed where DirectWrite puts them, so
+# right-to-left text isn't mirrored (dsky-fbso.11). What changed: vendor/gpui-pre-windows/PATCHES.md.
+gpui-pre-windows = { path = "vendor/gpui-pre-windows" }
