@@ -593,7 +593,9 @@ mod tests {
         let rx = serve(listener);
         let started = std::time::Instant::now();
         assert!(matches!(claim_at(&k, &[PathBuf::from("/x.md")]), Claim::Alone));
-        assert!(started.elapsed() >= super::WAIT);
+        // The deadline travels as whole milliseconds of the wall clock, so the wait is WAIT less a
+        // millisecond or so of rounding; this clock is another.
+        assert!(started.elapsed() >= super::WAIT - std::time::Duration::from_millis(100));
         let h = smol::block_on(rx.recv()).unwrap();
         assert!(!h.take());
         forget(&k);
