@@ -402,3 +402,21 @@ by poverty, but the anxieties of his position had of late ceased to weigh upon h
         }
     }
 }
+
+/// A ligature is one glyph for several letters (Literata's “ffi” in “Office”): a caret inside it
+/// stands between them, a selection inside it covers its own letters, and a click there lands
+/// there (dsky-fbso.11).
+#[test]
+fn places_inside_a_ligature() {
+    let mut ui = Ui::open("Office hours.\n");
+    ui.set_prefs(|p| p.font_family = crate::theme::LITERATA.into());
+    let x = |ui: &Ui, c: usize| ui.read(|ws, cx| ws.page.read(cx).layout.clone().expect("laid out").point_for(c).expect("on the page").x);
+    let xs: Vec<_> = (0..=6).map(|c| x(&ui, c)).collect();
+    assert!(xs.windows(2).all(|w| w[0] < w[1]), "each place in “Office” is its own: {xs:?}");
+    let fi = ui.text_bounds(2..4);
+    assert!(fi.len() == 1 && fi[0].left() == xs[2] && fi[0].right() == xs[4], "“fi” is selected as itself: {fi:?} {xs:?}");
+    for c in 1..6 {
+        ui.click(ui.point_for(c), gpui_kit::MouseButton::Left);
+        assert_eq!(ui.selection(), c..c, "a click at place {c}");
+    }
+}
