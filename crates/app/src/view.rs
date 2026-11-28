@@ -370,7 +370,7 @@ impl Layout {
         let byte = idx.byte_in_line(line, c);
         let r = Self::row_of(&b.shaped, byte);
         let row = b.shaped.rows[r];
-        let x = b.shaped.wrapped.unwrapped_layout.x_for_index(byte) - row.x0;
+        let x = x_at(&b.shaped.wrapped.unwrapped_layout, idx.line_str(line), byte) - row.x0;
         Some(point(
             self.origin.x + b.shift(r) + x,
             self.origin.y + b.y + self.line_height * r as f32,
@@ -405,7 +405,7 @@ impl Layout {
         let row = rows[r];
         let x = p.x - self.origin.x - b.shift(r) + row.x0;
         let ul = &b.shaped.wrapped.unwrapped_layout;
-        let mut byte = ul.closest_index_for_x(x).clamp(row.start, row.end);
+        let mut byte = index_near(ul, idx.line_str(b.line), x).clamp(row.start, row.end);
         let s = idx.line_str(b.line);
         if r + 1 < rows.len() && byte == row.end && byte > row.start && !row.hyphen {
             // Past a wrapped row's end: before the wrap (past a hyphen, where the word broke).
@@ -453,8 +453,8 @@ impl Layout {
                 if rs > re || (rs == re && !(full_rows && passes_end)) {
                     continue;
                 }
-                let x0 = ul.x_for_index(rs) - row.x0;
-                let mut x1 = ul.x_for_index(re) - row.x0;
+                let x0 = x_at(ul, text, rs) - row.x0;
+                let mut x1 = x_at(ul, text, re) - row.x0;
                 if !ink && rs < re && re == row.end {
                     // A word broken here: its hyphen, drawn past the row's last char, goes with it.
                     if let Some((_, x, h)) = b.shaped.hyphens.iter().find(|(r, ..)| *r == ri) {
@@ -633,6 +633,46 @@ impl Layout {
         }
         out
     }
+}
+
+/// x of byte `byte` of `text` in its shaped line. A ligature (Literata's “ffi”) is one glyph for
+/// several characters, and GPUI puts every character inside it at the glyph's end; here they
+/// share the glyph's width, so a caret after “Of” in “Office” stands between the two f's. Right
+/// to left, and wherever a character has its own glyph, it's GPUI's x.
+fn x_at(ul: &LineLayout, text: &str, byte: usize) -> Pixels {
+    let x = ul.x_for_index(byte);
+    let glyphs = || ul.runs.iter().flat_map(|r| r.glyphs.iter());
+    if byte == 0 || byte >= ul.len || !text.is_char_boundary(byte) || glyphs().any(|g| g.index == byte) {
+        return x;
+    }
+    let Some(start) = glyphs().map(|g| g.index).filter(|&i| i < byte).max() else { return x };
+    let Some(x0) = glyphs().filter(|g| g.index == start).map(|g| g.position.x).reduce(Pixels::min) else { return x };
+    let end = glyphs().map(|g| g.index).filter(|&i| i > byte).min().unwrap_or(ul.len).min(text.len());
+    if x <= x0 || !text.is_char_boundary(start) || !text.is_char_boundary(end) {
+        return x;
+    }
+    let (before, all) = (text[start..byte].chars().count(), text[start..end].chars().count());
+    x0 + (x - x0) * (before as f32 / all.max(1) as f32)
+}
+
+/// The character boundary of `text` nearest window-relative `x` in its shaped line: GPUI's,
+/// or one inside a ligature when that's nearer (see `x_at`).
+fn index_near(ul: &LineLayout, text: &str, x: Pixels) -> usize {
+    let b = ul.closest_index_for_x(x);
+    let glyphs = || ul.runs.iter().flat_map(|r| r.glyphs.iter());
+    let lo = glyphs().map(|g| g.index).filter(|&i| i < b).max().unwrap_or(0);
+    let hi = glyphs().map(|g| g.index).filter(|&i| i > b).min().unwrap_or(ul.len).min(text.len());
+    let Some(span) = text.get(lo..hi) else { return b };
+    let far = |at: Pixels| (f32::from(at) - f32::from(x)).abs();
+    let mut best = (b, far(ul.x_for_index(b)));
+    for i in span.char_indices().map(|(i, _)| lo + i).filter(|&i| i != b) {
+        let at = x_at(ul, text, i);
+        // Only a place `x_at` moved into a ligature: elsewhere GPUI's choice stands.
+        if at != ul.x_for_index(i) && far(at) < best.1 {
+            best = (i, far(at));
+        }
+    }
+    best.0
 }
 
 /// A line's text as laid out: rows after the first start at the column when the first is shifted.
